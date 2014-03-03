@@ -7,12 +7,13 @@ set history=500
 " auto read files when changed from other programs
 set autoread
 
-" Enable filetype plugins
-"filetype plugin on
-"filetype indent on
+" Use 4 spaces instead of tabs
+set expandtab
+set tabstop=4
+set shiftwidth=4
 
-" Execute pathogen infect's function
-"execute pathogen#infect()
+filetype plugin indent on
+syntax on
 
 " =============
 " Vundle Setup
@@ -28,17 +29,40 @@ call vundle#rc()
 " Required!
 Bundle 'gmarik/vundle'
 
-" My bundes
+" ====================
+" My bundes (plug-ins)
+" ====================
 
 " original repos on GitHub
 Bundle 'tpope/vim-fugitive'
 Bundle 'joequery/Stupid-EasyMotion'  
 Bundle 'rstacruz/sparkup', {'rtp': 'vim/'}
-Bundle 'Valloric/YouCompleteMe'
 Bundle 'flazz/vim-colorschemes'
 Bundle 'ervandew/supertab'
-Bundle 'msanders/snipmate.vim'
 Bundle 'scrooloose/nerdtree'
+Bundle 'scrooloose/syntastic'
+Bundle 'msanders/snipmate.vim'
+
+" ===================
+" Config for plug-ins
+" ===================
+
+" Nerd Tree
+let g:NERDShutUp=1
+
+map <C-e> :NERDTreeToggle<CR>:NERDTreeMirror<CR>
+map <leader>e :NERDTreeFind<CR>
+nmap <leader>nt :NERDTreeFind<CR>
+
+let NERDTreeShowBookmarks=1
+let NERDTreeIgnore=['\.pyc', '\~$', '\.swo$', '\.swp$', '\.git', '\.hg', '\.svn', '\.bzr']
+let NERDTreeChDirMode=0
+let NERDTreeQuitOnOpen=1
+let NERDTreeMouseMode=2
+let NERDTreeShowHidden=1
+let NERDTreeKeepTreeInNewTab=1
+let g:nerdtree_tabs_open_on_gui_startup=0
+
 
 " ======
 "   UI
@@ -209,3 +233,4 @@ set viminfo^=%
 
 " Always show the status line
 set laststatus=2
+
