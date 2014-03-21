@@ -3,7 +3,7 @@
 " =======
 
 " http://superuser.com/questions/356970/smooth-scrolling-for-vim-in-mac-terminal-iterm
-set mouse=niv #or set mouse=a
+set mouse=niv "or set mouse=a
 set clipboard=unnamed
 
 set history=500
