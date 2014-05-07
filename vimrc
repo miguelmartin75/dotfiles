@@ -16,6 +16,9 @@ set expandtab
 set tabstop=4
 set shiftwidth=4
 
+" for go syntax highlighting
+set rtp+=$GOROOT/misc/vim
+
 filetype plugin indent on
 syntax on
 
@@ -29,29 +32,55 @@ filetype off
 set rtp+=~/.vim/bundle/vundle
 call vundle#rc()
 
-" Let Vundle manag Vundle
-" Required!
+" Let Vundle manage Vundle, required!
 Bundle 'gmarik/vundle'
 
 " ====================
 " My bundes (plug-ins)
 " ====================
 
-" original repos on GitHub
-Bundle 'tpope/vim-fugitive'
-Bundle 'joequery/Stupid-EasyMotion'  
-Bundle 'rstacruz/sparkup', {'rtp': 'vim/'}
-Bundle 'flazz/vim-colorschemes'
-Bundle 'ervandew/supertab'
+" for my colour scheme addiction
+Bundle 'flazz/vim-colorschemes'                
+
+" the snippet engine I am using 
+Bundle 'SirVer/ultisnips'
+
+" for the actual snippets
+Bundle 'honza/vim-snippets'
+ 
+" for file browsing
 Bundle 'scrooloose/nerdtree'
-Bundle 'scrooloose/syntastic'
-Bundle 'msanders/snipmate.vim'
+
+" for surrounding text with {}, (), "", <tag></tag>, etc.
+Bundle 'tpope/vim-surround'
+
+" for using '.' with remaps (specifically for vim-surround)
+Bundle 'tpope/vim-repeat'
+
+Bundle 'wting/rust.vim'
+
+" for auto-completion
+"Bundle 'Valloric/YouCompleteMe'
+
+" for easy git commands in Vim
+"Bundle 'tpope/vim-fugitive'
+
+" fast motion within a line 
+"Bundle 'joequery/Stupid-EasyMotion'            
+
+" for easy HTML writing
+"Bundle 'rstacruz/sparkup', {'rtp': 'vim/'}     
+
+"Bundle 'ervandew/supertab'
+
+" for syntax checking
+"Bundle 'scrooloose/syntastic'                  
 
 " ===================
 " Config for plug-ins
 " ===================
 
-" Nerd Tree
+" NerdTree
 let g:NERDShutUp=1
 
 map <C-e> :NERDTreeToggle<CR>:NERDTreeMirror<CR>
@@ -67,13 +96,12 @@ let NERDTreeShowHidden=1
 let NERDTreeKeepTreeInNewTab=1
 let g:nerdtree_tabs_open_on_gui_startup=0
 
-
 " ======
 "   UI
 " ======
 
-" Set line numbers
-set nu
+" Set (relative) line numbers
+set relativenumber
 
 " move the file along when moving using j/k
 set so=7
@@ -150,6 +178,8 @@ set nobackup
 set nowb
 set noswapfile
 
+" Change directory to the current buffer when opening files.
+set autochdir
 
 " =====================
 " Text/editing-related
@@ -171,7 +201,7 @@ set tw=500
 
 " Set auto-indentation/smart-indentation
 set autoindent
-set smartindent
+"set smartindent
 
 " Wrap lines
 set wrap
@@ -237,4 +267,3 @@ set viminfo^=%
 
 " Always show the status line
 set laststatus=2
-
