@@ -17,13 +17,13 @@ sh ./install_prereq.sh
 
 # Installation
 
-Now that you have prerequsites install, the installation of the dotfiles are quite simple! The `tilda` directory mimmics `~`. So you can just copy `tilda` to `~`, or alternatively just use the `./install.sh` script, like so: 
+Now that you have prerequsites install, the installation of the dotfiles are quite simple! The `tilda` directory mimmics `~`. So you can just copy the contents of `tilda` to `~`, or alternatively just use the `./install.sh` script, like so: 
 
 ```bash
 sh ./install.sh
 ```
 
-This will copy the directory `tilda` to `~` (i.e. perform cp -r tilda ~). 
+This will copy the directory `tilda` to `~`.
 
 Alternatively, you can choose what dotfiles to install, by running the script:
 

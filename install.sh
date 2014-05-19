@@ -1,5 +1,15 @@
-to=~ 
-from=tilda
-echo "copying" $from "to" $to "..."
+for file in $(find ./tilda -name "*")
+do
+    # if we hit an actual directory
+    if [ -d $file ]; then
+        continue # then continue
+    fi
 
-cp -r $from $to 
+    readablePath=${file#"./tilda/"}
+    to=~/$readablePath
+    from=$file
+
+    echo "Installing" $readablePath
+
+    cp $from $to 
+done
