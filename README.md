@@ -2,9 +2,9 @@
 
 All my personal dot files.
 
-# Prerequesites
+# Prerequisites
 
-Some of my *rc files require some pre-reqs. Here are the prerequsites:
+Some of my *rc files require some pre-reqs. Here are the prerequisites:
 
 - Vundle
 	- Vundle is required to be installed for my vimrc. Please note that you must type `:BundleInstall`, after you have install Vundle.
@@ -17,15 +17,13 @@ sh ./install_prereq.sh
 
 # Installation
 
-Now that you have prerequsites install, the installation of the dotfiles are quite simple! The `tilda` directory mimmics `~`. So you can copy 
-
-Installation is quite simple and easy. Just type:
+Now that you have prerequsites install, the installation of the dotfiles are quite simple! The `tilda` directory mimmics `~`. So you can just copy `tilda` to `~`, or alternatively just use the `./install.sh` script, like so: 
 
 ```bash
 sh ./install.sh
 ```
 
-This will copy the directory `tilda` to `~`. 
+This will copy the directory `tilda` to `~` (i.e. perform cp -r tilda ~). 
 
 Alternatively, you can choose what dotfiles to install, by running the script:
 
