@@ -1,54 +1,48 @@
-# vimrc
+# dotfiles
 
-These are my vimrc files.
+All my personal dot files.
+
+# Prerequesites
+
+Some of my *rc files require some pre-reqs. Here are the prerequsites:
+
+- Vundle
+	- Vundle is required to be installed for my vimrc. Please note that you must type `:BundleInstall`, after you have install Vundle.
+
+To automagically install all of the prerequisites, simply type:
+
+```bash
+sh ./install_prereq.sh
+```
 
 # Installation
 
-Installation is quite simple and easy.
+Now that you have prerequsites install, the installation of the dotfiles are quite simple! The `tilda` directory mimmics `~`. So you can copy 
 
-If you don't have vundle installed, then:
-
-```bash
-bash ./install.sh
-```
-
-If you do, then:
+Installation is quite simple and easy. Just type:
 
 ```bash
-bash ./install_vimrc.sh
+sh ./install.sh
 ```
 
-or
+This will copy the directory `tilda` to `~`. 
+
+Alternatively, you can choose what dotfiles to install, by running the script:
 
 ```bash
-cp ./vimrc ~/.vimrc
+sh ./install_choose.sh
 ```
 
-Now you have to install the bundles with Vundle, which you can do by opening vim and typing:
+# Updating Self
 
-```
-:BundleInstall
-```
-
-That should automagically install all the appropriate bundles for you.
-
-# Bundles that require compliation
-
-There are some bundles that require compilation, which are:
-
-## YouCompleteMe
-
-On Mac, you install by going:
+To update this repository, for your current dotfiles on your local machine. Simply run the script:
 
 ```bash
-cd ~/.vim/bundles/YouCompleteMe
-./install.sh --clang-completer
+sh ./self_update.sh
 ```
-
-Please see the readme of YouCompleteMe to learn how to install on your OS.
 
 # License
-Copyright (C) 2013 Miguel Martin (miguel.martin7.5@hotmail.com)
+Copyright (C) 2014 Miguel Martin (miguel@miguel-martin.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

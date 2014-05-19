@@ -5,7 +5,9 @@ do
         continue # then continue
     fi
 
-    fileToRemove=~/${file#"./tilda/"} 
-    echo "removing" $fileToRemove
-    rm $fileToRemove
+    from=~/${file#"./tilda/"} 
+    to=$file
+    echo "copying" $from "to" $to "..."
+
+    cp $from $to 
 done

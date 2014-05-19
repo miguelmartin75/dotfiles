@@ -1,9 +1,5 @@
-#!/bin/bash
+to=~ 
+from=tilda
+echo "copying" $from "to" $to "..."
 
-echo 'installing Vundle'
-
-# install Vundle
-git clone https://github.com/gmarik/vundle.git ~/.vim/bundle/vundle
-
-# install the vimrc file
-bash ./install_vimrc.sh
+cp -r $from $to 
