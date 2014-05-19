@@ -47,7 +47,7 @@ Bundle 'flazz/vim-colorschemes'
 Bundle 'SirVer/ultisnips'
 
 " for the actual snippets
-Bundle 'honza/vim-snippets'
+Bundle "miguelmartin75/vim-snippets'
  
 " for file browsing
 Bundle 'scrooloose/nerdtree'
