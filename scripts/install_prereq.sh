@@ -1,4 +1,3 @@
-
 echo 'installing Vundle'
 
 # install Vundle
