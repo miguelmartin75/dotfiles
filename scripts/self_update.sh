@@ -1,4 +1,4 @@
-for file in $(find ../tilda -name "*")
+for file in $(find ./tilda -name "*")
 do
     # if we hit an actual directory
     if [ -d $file ]; then
@@ -7,6 +7,7 @@ do
 
     from=~/${file#"./tilda/"} 
     to=$file
+
     echo "copying" $from "to" $to "..."
 
     cp $from $to 

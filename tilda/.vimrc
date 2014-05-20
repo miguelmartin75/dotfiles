@@ -258,6 +258,18 @@ try
 catch
 endtry
 
+
+" =============
+" Status Line
+" ============
+
+" Always show the status line
+set laststatus=2
+
+" ==============
+" Auto-commands
+" ==============
+
 " Return to last edit position when opening files (You want this!)
     autocmd BufReadPost *
           \ if line("'\"") > 0 && line("'\"") <= line("$") |
@@ -266,9 +278,11 @@ endtry
 " Remember info about open buffers on close
 set viminfo^=%
 
-" =============
-" Status Line
-" ============
+" these autocmds are the autocmds that 
+" cannot be implemented elsewhere
+" e.g. in ftpplugin
 
-" Always show the status line
-set laststatus=2
+augroup cpp
+    autocmd BufNewFile *\(hpp\|h\) exe 'normal ionce	'
+    autocmd BufNewFile main.\(cpp\|c\) exe 'normal omain	'
+augroup END
