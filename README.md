@@ -21,6 +21,14 @@ Alternatively, you can choose what dotfiles to install, by running the script `i
 
 To update this repository, for your current dotfiles on your local machine. Simply run the script `self_update.sh`.
 
+# NOTE
+
+All scripts should be run from the root repository directory. e.g.
+
+```bash
+sh scripts/self_update.sh
+```
+
 # License
 Copyright (C) 2014 Miguel Martin (miguel@miguel-martin.com)
 
