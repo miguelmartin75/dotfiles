@@ -64,20 +64,20 @@ Bundle 'wting/rust.vim'
 " for easy insertion completetion
 Bundle 'ervandew/supertab'
 
-" for auto-completion
-"Bundle 'Valloric/YouCompleteMe'
+" for syntax checking
+Bundle 'scrooloose/syntastic'                  
 
-" for easy git commands in Vim
-"Bundle 'tpope/vim-fugitive'
+" for auto-completion
+Bundle 'Valloric/YouCompleteMe'
+
+" because I'm cool like that 
+"Bundle 'bling/vim-airline'
 
 " fast motion within a line 
 "Bundle 'joequery/Stupid-EasyMotion'            
 
 " for easy HTML writing
 "Bundle 'rstacruz/sparkup', {'rtp': 'vim/'}     
-
-" for syntax checking
-"Bundle 'scrooloose/syntastic'                  
 
 " ===================
 " Config for plug-ins
@@ -282,7 +282,8 @@ set viminfo^=%
 " cannot be implemented elsewhere
 " e.g. in ftpplugin
 
-augroup cpp
-    autocmd BufNewFile *\(hpp\|h\) exe 'normal ionce	'
+augroup cpp:
+    autocmd BufNewFile *\(hpp\|h\) exe 'normal ionce		' | exe ':4'
     autocmd BufNewFile main.\(cpp\|c\) exe 'normal omain	'
 augroup END
+

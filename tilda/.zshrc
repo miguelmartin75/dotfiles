@@ -42,3 +42,7 @@ alias e=vim
 # gcc
 alias gcc="gcc-4.9"
 alias g++="g++-4.9"
+alias clang="/usr/local/opt/llvm/bin/clang"
+alias clang++="/usr/local/opt/llvm/bin/clang++"
+alias aclang="/usr/bin/clang"
+alias aclang++="/usr/bin/clang++"
