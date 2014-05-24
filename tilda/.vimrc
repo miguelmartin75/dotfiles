@@ -68,7 +68,7 @@ Bundle 'ervandew/supertab'
 Bundle 'scrooloose/syntastic'                  
 
 " for auto-completion
-Bundle 'Valloric/YouCompleteMe'
+"Bundle 'Valloric/YouCompleteMe'
 
 " because I'm cool like that 
 "Bundle 'bling/vim-airline'
@@ -286,4 +286,3 @@ augroup cpp:
     autocmd BufNewFile *\(hpp\|h\) exe 'normal ionce		' | exe ':4'
     autocmd BufNewFile main.\(cpp\|c\) exe 'normal omain	'
 augroup END
-
