@@ -67,6 +67,9 @@ Bundle 'ervandew/supertab'
 " for syntax checking
 Bundle 'scrooloose/syntastic'                  
 
+" fuzzy searching files nigga
+Bundle 'kien/ctrlp.vim'
+
 " for auto-completion
 "Bundle 'Valloric/YouCompleteMe'
 
