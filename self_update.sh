@@ -1,3 +1,4 @@
+#!/bin/bash
 for file in $(find ./tilda -name "*")
 do
     # if we hit an actual directory

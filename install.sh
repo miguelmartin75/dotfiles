@@ -1,3 +1,4 @@
+#!/bin/bash
 if [ -d ~/.vim/bundle ]; then
     echo 'installing Vundle'
 

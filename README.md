@@ -4,7 +4,7 @@ All my personal dot files.
 
 # Prerequisites
 
-Some of my *rc files require some pre-reqs. Here are the prerequisites:
+Some of my `*rc` files require some pre-reqs. Here are the prerequisites:
 
 - Vundle
 	- Vundle is required to be installed for my vimrc. Please note that you must type `:BundleInstall`, after you have install Vundle.
@@ -26,7 +26,7 @@ To update this repository, for your current dotfiles on your local machine. Simp
 All scripts should be run from the root repository directory. e.g.
 
 ```bash
-sh scripts/self_update.sh
+./self_update.sh
 ```
 
 # License
