@@ -74,7 +74,10 @@ Plugin 'scrooloose/syntastic'
 Plugin 'kien/ctrlp.vim'
 
 " fast motion within a line 
-Plugin 'joequery/Stupid-EasyMotion'            
+Plugin 'joequery/Stupid-EasyMotion'
+
+" for viewing functions/classes etc.
+Plugin 'majutsushi/tagbar'
 
 call vundle#end()
 
