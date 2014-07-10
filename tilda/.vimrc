@@ -31,56 +31,52 @@ set nocompatible
 filetype off
 
 set rtp+=~/.vim/bundle/vundle
-call vundle#rc()
+call vundle#begin()
 
 " Let Vundle manage Vundle, required!
-Bundle 'gmarik/vundle'
+Plugin 'gmarik/vundle'
 
 " ====================
 " My bundes (plug-ins)
 " ====================
 
 " for my colour scheme addiction
-Bundle 'flazz/vim-colorschemes'                
+Plugin 'flazz/vim-colorschemes'                
 
 " the snippet engine I am using 
-Bundle 'SirVer/ultisnips'
+Plugin 'SirVer/ultisnips'
 
 " for the actual snippets
-Bundle 'miguelmartin75/vim-snippets'
+Plugin 'miguelmartin75/vim-snippets'
  
 " for file browsing
-Bundle 'scrooloose/nerdtree'
+Plugin 'scrooloose/nerdtree'
 
 " for surrounding text with {}, (), "", <tag></tag>, etc.
-Bundle 'tpope/vim-surround'
+Plugin 'tpope/vim-surround'
 
 " for using '.' with remaps (specifically for vim-surround)
-Bundle 'tpope/vim-repeat'
+Plugin 'tpope/vim-repeat'
 
 " for rust syntax supoprt
-Bundle 'wting/rust.vim'
+Plugin 'wting/rust.vim'
 
 " for easy insertion completetion
-Bundle 'ervandew/supertab'
+Plugin 'ervandew/supertab'
+
+" for auto completion
+Plugin 'Valloric/YouCompleteMe'
 
 " for syntax checking
-Bundle 'scrooloose/syntastic'                  
+Plugin 'scrooloose/syntastic'                  
 
 " fuzzy searching files nigga
-Bundle 'kien/ctrlp.vim'
-
-" for auto-completion
-"Bundle 'Valloric/YouCompleteMe'
-
-" because I'm cool like that 
-"Bundle 'bling/vim-airline'
+Plugin 'kien/ctrlp.vim'
 
 " fast motion within a line 
-"Bundle 'joequery/Stupid-EasyMotion'            
+Plugin 'joequery/Stupid-EasyMotion'            
 
-" for easy HTML writing
-"Bundle 'rstacruz/sparkup', {'rtp': 'vim/'}     
+call vundle#end()
 
 " ===================
 " Config for plug-ins
@@ -90,17 +86,30 @@ Bundle 'kien/ctrlp.vim'
 let g:NERDShutUp=1
 
 map <C-e> :NERDTreeToggle<CR>:NERDTreeMirror<CR>
-map <leader>e :NERDTreeFind<CR>
-nmap <leader>nt :NERDTreeFind<CR>
 
 let NERDTreeShowBookmarks=1
-let NERDTreeIgnore=['\.pyc', '\~$', '\.swo$', '\.swp$', '\.git', '\.hg', '\.svn', '\.bzr']
+let NERDTreeIgnore=['\.DS_Store', '\.pyc', '\~$', '\.swo$', '\.swp$', '\.git', '\.hg', '\.svn', '\.bzr']
 let NERDTreeChDirMode=0
 let NERDTreeQuitOnOpen=1
 let NERDTreeMouseMode=2
 let NERDTreeShowHidden=1
 let NERDTreeKeepTreeInNewTab=1
 let g:nerdtree_tabs_open_on_gui_startup=0
+
+" Stupid-EasyMotion
+map <C-o> <Leader><Leader>w
+map <C-i> <Leader><Leader>W
+
+" http://stackoverflow.com/a/18685821
+" make YCM compatible with UltiSnips (using supertab)
+let g:ycm_key_list_select_completion = ['<C-n>', '<Down>']
+let g:ycm_key_list_previous_completion = ['<C-p>', '<Up>']
+let g:SuperTabDefaultCompletionType = '<C-n>'
+
+" better key bindings for UltiSnipsExpandTrigger
+let g:UltiSnipsExpandTrigger = "<tab>"
+let g:UltiSnipsJumpForwardTrigger = "<tab>"
+let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
 
 " ======
 "   UI
@@ -286,6 +295,6 @@ set viminfo^=%
 " e.g. in ftpplugin
 
 augroup cpp:
-    autocmd BufNewFile *\(hpp\|h\) exe 'normal ionce		' | exe ':4'
-    autocmd BufNewFile main.\(cpp\|c\) exe 'normal omain	'
+    autocmd BufNewFile *.{hpp,h,hxx,hh} exe 'normal ionce		' | exe ':4'
+    autocmd BufNewFile main.{cpp,c,cxx,cc} exe 'normal omain	'
 augroup END

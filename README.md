@@ -24,11 +24,7 @@ To update this repository, for your current dotfiles on your local machine. Simp
 All scripts should be run from the root repository directory. e.g.
 
 ```bash
-<<<<<<< HEAD
 ./self_update.sh
-=======
-sh ./self_update.sh
->>>>>>> 229c67af5dfe325cda578c6b2f1646dadc1c1fc7
 ```
 
 # License
