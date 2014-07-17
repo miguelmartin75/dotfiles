@@ -23,19 +23,21 @@ source $ZSH/oh-my-zsh.sh
 # -------------------------
 # aliases
 
-# vim
-alias vim="/usr/local/bin/vim"
-alias v=vim
-alias vi=vim
-alias e=vim
+# if we're on Mac...
+if [ "$(uname)" == "Darwin" ]; then
+    alias vim="/usr/local/bin/vim"
+    alias v=vim
+    alias vi=vim
+    alias e=vim
 
-# gcc
-alias gcc="gcc-4.9"
-alias g++="g++-4.9"
-alias clang="/usr/local/opt/llvm/bin/clang"
-alias clang++="/usr/local/opt/llvm/bin/clang++"
-alias aclang="/usr/bin/clang"
-alias aclang++="/usr/bin/clang++"
+    # gcc
+    alias gcc="gcc-4.9"
+    alias g++="g++-4.9"
+    alias clang="/usr/local/opt/llvm/bin/clang"
+    alias clang++="/usr/local/opt/llvm/bin/clang++"
+    alias aclang="/usr/bin/clang"
+    alias aclang++="/usr/bin/clang++"
+fi
 
 # -------------------------
 # Exports
@@ -72,8 +74,3 @@ export LESS_TERMCAP_so=$purple
 export LESS_TERMCAP_ue=$default
 # Begin underline
 export LESS_TERMCAP_us=$green
-
-# -------------------
-# Misc
-
-xmodmap . < ~/.xmodmap
