@@ -9,6 +9,11 @@ fi
 
 for file in $(find ./tilda -name "*")
 do
+    # ignore the base dir
+    if [ $file == "./tilda" ]; then
+        continue;
+    fi
+
     readablePath=${file#"./tilda/"}
     to=~/$readablePath
     from=$file
