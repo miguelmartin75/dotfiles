@@ -19,6 +19,7 @@ DISABLE_AUTO_UPDATE="true"
 
 source $ZSH/oh-my-zsh.sh
 
+
 # -------------------------
 # aliases
 
@@ -71,3 +72,8 @@ export LESS_TERMCAP_so=$purple
 export LESS_TERMCAP_ue=$default
 # Begin underline
 export LESS_TERMCAP_us=$green
+
+# -------------------
+# Misc
+
+xmodmap . < ~/.xmodmap

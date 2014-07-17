@@ -28,5 +28,3 @@ do
 
     cp $from $to 
 done
-
-xmodmap . < ~/.xmodmap
