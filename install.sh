@@ -1,4 +1,5 @@
 #!/bin/bash
+
 if [ ! -d ~/.vim/bundle ]; then
     echo 'installing Vundle'
 
@@ -27,3 +28,5 @@ do
 
     cp $from $to 
 done
+
+xmodmap . < ~/.xmodmap
