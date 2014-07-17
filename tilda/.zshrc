@@ -24,7 +24,7 @@ source $ZSH/oh-my-zsh.sh
 # aliases
 
 # if we're on Mac...
-if [ "$(uname)" == "Darwin" ]; then
+if [[ "$(uname)" == "Darwin" ]]; then
     alias vim="/usr/local/bin/vim"
     alias v=vim
     alias vi=vim
@@ -37,6 +37,9 @@ if [ "$(uname)" == "Darwin" ]; then
     alias clang++="/usr/local/opt/llvm/bin/clang++"
     alias aclang="/usr/bin/clang"
     alias aclang++="/usr/bin/clang++"
+elif [[ "$(expr substr $(uname -s) 1 5)" == "Linux" ]]; then
+    # linux specific aliases...
+    alias c++="clang++"
 fi
 
 # -------------------------

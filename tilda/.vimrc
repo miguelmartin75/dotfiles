@@ -118,6 +118,14 @@ let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
 "   UI
 " ======
 
+" If we're using a gnome-terminal
+if $COLORTERM == 'gnome-terminal'
+    " then just manually set 256 colours
+    " since gnome terminal doesn't like to advertise
+    " it's colours :(
+    set t_Co=256
+endif
+
 " Set (relative) line numbers
 set relativenumber
 " so we can see the current line number we're on
