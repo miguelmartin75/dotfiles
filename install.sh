@@ -14,8 +14,13 @@ do
 
     # if we hit an actual directory
     if [ -d $file ]; then
-        mkdir $to # make the directory (just incase it doesn't exist)
-        continue # then continue
+
+        # if the directory doesn't exist
+        if [ ! -d $to ]; then 
+            mkdir $to # then make the directory 
+        fi
+
+        continue # then continue to the next dir
     fi
 
     echo "Installing" $to
