@@ -40,6 +40,7 @@ Plugin 'gmarik/vundle'
 " My bundes (plug-ins)
 " ====================
 
+
 " for my colour scheme addiction
 Plugin 'flazz/vim-colorschemes'                
 
@@ -54,6 +55,9 @@ Plugin 'scrooloose/nerdtree'
 
 " for surrounding text with {}, (), "", <tag></tag>, etc.
 Plugin 'tpope/vim-surround'
+
+" for automatically putting matching ', ", >, etc. 
+Plugin 'Raimondi/delimitMate'
 
 " for using '.' with remaps (specifically for vim-surround)
 Plugin 'tpope/vim-repeat'
@@ -81,6 +85,9 @@ Plugin 'majutsushi/tagbar'
 
 " for nodejs dev (uni)
 Plugin 'moll/vim-node'
+
+" for working with git
+Plugin 'tpope/vim-fugitive'
 
 call vundle#end()
 
@@ -290,7 +297,6 @@ try
     set stal=2
 catch
 endtry
-
 
 " =============
 " Status Line
