@@ -316,6 +316,6 @@ set viminfo^=%
 " e.g. in ftpplugin
 
 augroup cpp:
-    autocmd BufNewFile *.{hpp,h,hxx,hh} exe 'normal ionce		' | exe ':4'
+    autocmd BufNewFile *.{hpp,h,hxx,hh} exe 'normal ionce		' | exe '4'
     autocmd BufNewFile main.{cpp,c,cxx,cc} exe 'normal omain	'
 augroup END
