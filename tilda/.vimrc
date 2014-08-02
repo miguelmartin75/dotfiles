@@ -79,6 +79,9 @@ Plugin 'joequery/Stupid-EasyMotion'
 " for viewing functions/classes etc.
 Plugin 'majutsushi/tagbar'
 
+" for nodejs dev (uni)
+Plugin 'moll/vim-node'
+
 call vundle#end()
 
 " ===================
@@ -113,6 +116,9 @@ let g:SuperTabDefaultCompletionType = '<C-n>'
 let g:UltiSnipsExpandTrigger = "<tab>"
 let g:UltiSnipsJumpForwardTrigger = "<tab>"
 let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
+
+" Tagbar
+nmap <Leader>t :TagbarToggle<CR> 
 
 " ======
 "   UI
@@ -201,10 +207,8 @@ set ffs=unix,dos,mac
 " Files/back-ups/etc.
 " ===================
 
-" Turn back-up off, since most of this stuff is in SVN, git etc.
-set nobackup
-set nowb
-set noswapfile
+" store swap files elsewhere
+set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//,.
 
 " Change directory to the current buffer when opening files.
 set autochdir
@@ -233,6 +237,12 @@ set autoindent
 
 " Wrap lines
 set wrap
+
+" ================
+" General remaps
+" ================
+
+map , <Leader>
 
 " =============================================
 " Moving around - tabs, windows, buffers, etc.

@@ -1,5 +1,5 @@
 " For goto's and public/private/protected:
 set cindent
-"set cinoptions=g-1
 
+" to correctly indent templates
 set cino=g0,+0
