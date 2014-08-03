@@ -23,9 +23,11 @@ source $ZSH/oh-my-zsh.sh
 # -------------------------
 # aliases
 
+VIM_PATH="/usr/local/bin/vim"
+
 # if we're on Mac...
 if [[ "$(uname)" == "Darwin" ]]; then
-    alias vim="/usr/local/bin/vim"
+    alias vim=$VIM_PATH
     alias v=vim
     alias vi=vim
     alias e=vim
@@ -48,7 +50,7 @@ fi
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/local/git/bin"
 
 # Preferred editor for local and remote sessions
-EDITOR='vim'
+export EDITOR=$VIM_PATH
 
 # Compilation flags
 export ARCHFLAGS="-arch x86_64"
