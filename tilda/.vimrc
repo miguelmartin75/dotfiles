@@ -41,8 +41,8 @@ Plugin 'gmarik/vundle'
 " ====================
 
 
-" for my colour scheme addiction
-Plugin 'flazz/vim-colorschemes'                
+" we're gonna be using vim-hybrid from now on
+Plugin 'w0ng/vim-hybrid'
 
 " the snippet engine I am using 
 Plugin 'SirVer/ultisnips'
@@ -201,7 +201,8 @@ set tm=500
 syntax enable
 
 " Set the colour scheme
-colorscheme inkpot
+let g:hybrid_use_iTerm_colors = 1
+colorscheme hybrid
 
 " Set utf8 as the standard encoding
 set encoding=utf8
