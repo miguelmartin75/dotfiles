@@ -68,7 +68,7 @@ Plug 'wting/rust.vim', { 'for' : 'rust' }
 Plug 'ervandew/supertab'
 
 " for auto completion
-Plug 'Valloric/YouCompleteMe', { 'do' : './install.sh --clang-completer' }
+Plug 'Valloric/YouCompleteMe', { 'do': './install.sh --clang-completer' }
 
 " for syntax checking
 Plug 'scrooloose/syntastic'
