@@ -37,4 +37,4 @@ do
 done
 
 # run vim and install the plugins for us
-vim -c "PlugInstall" -c "q"
+vim -c "PlugInstall|qa"
