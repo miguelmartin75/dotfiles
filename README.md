@@ -2,18 +2,17 @@
 
 All my personal dot files.
 
-# Prerequisites
-
-Some of my `*rc` files require some pre-reqs. Here are the prerequisites:
-
-- Vundle
-	- Vundle is required to be installed for my vimrc. Please note that you must type `:BundleInstall`, after you have install Vundle.
-
-All of these prerequisites should be install automagically for you, via the `./install.sh` script.
-
 # Installation
 
-Now that you have prerequsites install, the installation of the dotfiles are quite simple! The `tilda` directory mimmics `~`. So you can just copy the contents of `tilda` to `~`, or alternatively just use the `./install.sh` script. This script will copy the directory `tilda` to `~`.
+The installation of the dotfiles are quite simple! Just
+run the `install.sh` script. Like so:
+
+```bash
+./install.sh
+```
+
+And boom clap! Everything will be installed for you, 
+including the plugins for vim.
 
 # Updating Self
 
