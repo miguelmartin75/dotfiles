@@ -23,73 +23,75 @@ filetype plugin on
 filetype plugin indent on
 syntax on
 
-" =============
-" Vundle Setup
-" =============
+" =====================
+" Plugin Manager Setup
+" =====================
 
 set nocompatible
 filetype off
 
-set rtp+=~/.vim/bundle/vundle
-call vundle#begin()
+set rtp+=~/.vim/bundle/plug
+call plug#begin('~/.vim/plugged')
 
-" Let Vundle manage Vundle, required!
-Plugin 'gmarik/vundle'
+Plug 'junegunn/vim-plug'
 
 " ====================
-" My bundes (plug-ins)
+" My plugins
 " ====================
 
-
-" we're gonna be using vim-hybrid from now on
-Plugin 'w0ng/vim-hybrid'
+" we're gonna be using vim-hybrid as 
+" a colour scheme from now on
+Plug 'w0ng/vim-hybrid'
 
 " the snippet engine I am using 
-Plugin 'SirVer/ultisnips'
+Plug 'SirVer/ultisnips'
 
 " for the actual snippets
-Plugin 'miguelmartin75/vim-snippets'
+Plug 'miguelmartin75/vim-snippets'
  
 " for file browsing
-Plugin 'scrooloose/nerdtree'
+Plug 'scrooloose/nerdtree', { 'on' : 'NERDTreeToggle' }
 
 " for surrounding text with {}, (), "", <tag></tag>, etc.
-Plugin 'tpope/vim-surround'
+Plug 'tpope/vim-surround'
 
 " for automatically putting matching ', ", >, etc. 
-Plugin 'Raimondi/delimitMate'
+Plug 'Raimondi/delimitMate'
 
 " for using '.' with remaps (specifically for vim-surround)
-Plugin 'tpope/vim-repeat'
+Plug 'tpope/vim-repeat'
 
 " for rust syntax supoprt
-Plugin 'wting/rust.vim'
+Plug 'wting/rust.vim', { 'for' : 'rust' }
 
 " for easy insertion completetion
-Plugin 'ervandew/supertab'
+Plug 'ervandew/supertab'
 
 " for auto completion
-Plugin 'Valloric/YouCompleteMe'
+Plug 'Valloric/YouCompleteMe', { 'do' : './install.sh --clang-completer' }
 
 " for syntax checking
-Plugin 'scrooloose/syntastic'                  
+Plug 'scrooloose/syntastic'
 
-" fuzzy searching files nigga
-Plugin 'kien/ctrlp.vim'
+" fuzzy searching files
+Plug 'kien/ctrlp.vim'
 
 " fast motion within a line 
-Plugin 'joequery/Stupid-EasyMotion'
+Plug 'joequery/Stupid-EasyMotion'
 
 " for viewing functions/classes etc.
-Plugin 'majutsushi/tagbar'
+Plug 'majutsushi/tagbar'
 
 " for nodejs dev (uni)
-Plugin 'moll/vim-node'
+Plug 'moll/vim-node', { 'for' : 'javascript' }
 
 " for working with git
-Plugin 'tpope/vim-fugitive'
+Plug 'tpope/vim-fugitive'
 
-call vundle#end()
+" for multiple cursors
+Plug 'terryma/vim-multiple-cursors'
+
+call plug#end()
 
 " ===================
 " Config for plug-ins
@@ -113,6 +115,9 @@ let g:nerdtree_tabs_open_on_gui_startup=0
 map <C-o> <Leader><Leader>w
 map <C-i> <Leader><Leader>W
 
+" Ultisnips
+let g:UltiSnipsSnippetsDir = "~/.vim/bundle/vim-snippets"
+
 " http://stackoverflow.com/a/18685821
 " make YCM compatible with UltiSnips (using supertab)
 let g:ycm_key_list_select_completion = ['<C-n>', '<Down>']
@@ -126,6 +131,9 @@ let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
 
 " Tagbar
 nmap <Leader>t :TagbarToggle<CR> 
+
+" for convenience
+let g:multi_cursor_exit_from_insert_mode=0
 
 " ======
 "   UI
@@ -202,14 +210,13 @@ syntax enable
 
 " Set the colour scheme
 let g:hybrid_use_iTerm_colors = 1
-colorscheme hybrid
+silent! colorscheme hybrid
 
 " Set utf8 as the standard encoding
 set encoding=utf8
 
 " Use Unix as the standard file-type
 set ffs=unix,dos,mac
-
 
 " ===================
 " Files/back-ups/etc.
@@ -239,9 +246,8 @@ set tabstop=4
 set lbr
 set tw=500
 
-" Set auto-indentation/smart-indentation
+" Set auto-indentation
 set autoindent
-"set smartindent
 
 " Wrap lines
 set wrap
@@ -260,14 +266,10 @@ map , <Leader>
 map j gj
 map k gk
 
-" Map space to search and CTRL-space to backwards search
-map <space> /
-map <c-space> ?
+" toggle highlight
+map <leader><cr> :set hls!<cr>
 
-" Disable highlight when <leader><cr> is pressed
-map <silent> <leader><cr> :noh<cr>
-
-" " Smart way to move between windows
+" Smart way to move between windows
 map <C-j> <C-W>j
 map <C-k> <C-W>k
 map <C-h> <C-W>h
@@ -285,7 +287,7 @@ map to :tabonly<cr>
 map tc :tabclose<cr>
 map tm :tabmove
 
-" Opens a new tab with the current buffer's path
+" Op/ns a new tab with the current buffer's path
 " Super useful when editing files in the same directory
 map te :tabedit <c-r>=expand("%:p:h")<cr>/
 

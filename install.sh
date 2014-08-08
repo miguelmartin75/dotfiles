@@ -1,10 +1,12 @@
 #!/bin/bash
 
-if [ ! -d ~/.vim/bundle ]; then
-    echo 'installing Vundle'
+if [ ! -f ~/.vim/autoload/plug.vim ]; then
+    echo 'installing plug.vim'
 
-    # install Vundle
-    git clone https://github.com/gmarik/vundle.git ~/.vim/bundle/vundle
+    # install plug.vim
+    mkdir -p ~/.vim/autoload
+    curl -fLo ~/.vim/autoload/plug.vim \
+        https://raw.github.com/junegunn/vim-plug/master/plug.vim
 fi
 
 for file in $(find ./tilda -name "*")
@@ -33,3 +35,6 @@ do
 
     cp $from $to 
 done
+
+# run vim and install the plugins for us
+vim -c "PlugInstall" -c "q"
