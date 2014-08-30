@@ -61,9 +61,6 @@ Plug 'Raimondi/delimitMate'
 " for using '.' with remaps (specifically for vim-surround)
 Plug 'tpope/vim-repeat'
 
-" for rust syntax supoprt
-Plug 'wting/rust.vim', { 'for' : 'rust' }
-
 " for easy insertion completetion
 Plug 'ervandew/supertab'
 
@@ -88,16 +85,18 @@ Plug 'moll/vim-node', { 'for' : 'javascript' }
 " for working with git
 Plug 'tpope/vim-fugitive'
 
-" for multiple cursors
-Plug 'terryma/vim-multiple-cursors'
+" for rust syntax supoprt
+Plug 'wting/rust.vim', { 'for' : 'rust' }
 
 call plug#end()
+
 
 " ===================
 " Config for plug-ins
 " ===================
 
 " NerdTree
+" ----------
 let g:NERDShutUp=1
 
 map <C-e> :NERDTreeToggle<CR>:NERDTreeMirror<CR>
@@ -112,17 +111,26 @@ let NERDTreeKeepTreeInNewTab=1
 let g:nerdtree_tabs_open_on_gui_startup=0
 
 " Stupid-EasyMotion
+" ------------------
 map <C-o> <Leader><Leader>w
 map <C-i> <Leader><Leader>W
 
 " Ultisnips
+" ---------
 let g:UltiSnipsSnippetsDir = "~/.vim/bundle/vim-snippets"
+
+" YCM
+" ----
 
 " http://stackoverflow.com/a/18685821
 " make YCM compatible with UltiSnips (using supertab)
 let g:ycm_key_list_select_completion = ['<C-n>', '<Down>']
 let g:ycm_key_list_previous_completion = ['<C-p>', '<Up>']
 let g:SuperTabDefaultCompletionType = '<C-n>'
+
+" remove the preview window automatically
+"set completeopt-=preview
+let g:ycm_autoclose_preview_window_after_insertion = 1
 
 " better key bindings for UltiSnipsExpandTrigger
 let g:UltiSnipsExpandTrigger = "<tab>"
@@ -132,8 +140,10 @@ let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
 " Tagbar
 nmap <Leader>t :TagbarToggle<CR> 
 
-" for convenience
-let g:multi_cursor_exit_from_insert_mode=0
+" so YCM and eclim will play nice
+let g:EclimCompletionMethod = 'omnifunc'
+
+
 
 " ======
 "   UI
@@ -242,15 +252,15 @@ set smarttab
 set shiftwidth=4
 set tabstop=4
 
-" Linebreak on 500 characters
-set lbr
-set tw=500
-
 " Set auto-indentation
 set autoindent
 
 " Wrap lines
 set wrap
+
+" Linebreak on 500 characters
+set lbr
+set tw=500
 
 " ================
 " General remaps
@@ -285,9 +295,12 @@ map <leader>ba :1,1000 bd!<cr>
 map tn :tabnew<cr>
 map to :tabonly<cr>
 map tc :tabclose<cr>
-map tm :tabmove
+map tq :tabclose<cr>
+map htm :tabmove -1<cr>
+map ltm :tabmove +1<cr>
+map tm :tabmove 
 
-" Op/ns a new tab with the current buffer's path
+" Opens a new tab with the current buffer's path
 " Super useful when editing files in the same directory
 map te :tabedit <c-r>=expand("%:p:h")<cr>/
 
@@ -311,14 +324,21 @@ set laststatus=2
 " ==============
 " Auto-commands
 " ==============
+"
 
 " Return to last edit position when opening files (You want this!)
-    autocmd BufReadPost *
-          \ if line("'\"") > 0 && line("'\"") <= line("$") |
-     \   exe "normal! g`\"" |
-     \ endif
+autocmd BufReadPost *
+      \ if line("'\"") > 0 && line("'\"") <= line("$") |
+ \   exe "normal! g`\"" |
+ \ endif
+
 " Remember info about open buffers on close
 set viminfo^=%
+
+augroup text_editing:
+    autocmd BufReadPost *.{txt,md} setlocal spell spelllang=en_au
+    autocmd BufReadPost *.{txt,md} setlocal tw=100
+augroup END
 
 " these autocmds are the autocmds that 
 " cannot be implemented elsewhere
