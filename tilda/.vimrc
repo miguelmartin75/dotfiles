@@ -1,43 +1,161 @@
-" =======
+" ========
 " General
-" =======
+" ========
+
+" we're using vim, not vi
+set nocompatible
 
 " http://superuser.com/questions/356970/smooth-scrolling-for-vim-in-mac-terminal-iterm
 set mouse=niv "or set mouse=a
 set clipboard=unnamed
 
+" set command history to 500
 set history=500
+
+filetype off
+
+" =================
+" UI/Colours
+" =================
+
+" If we're using a gnome-terminal
+if $COLORTERM == 'gnome-terminal'
+    " then just manually set 256 colours
+    " since gnome terminal doesn't like to advertise
+    " it's colours :(
+    set t_Co=256
+endif
+
+" use syntax highlighting
+syntax on
+
+" colour scheme
+" colo
+
+" use relative numbers
+set number
+set relativenumber
+
+" show current position
+set ruler
+
+" height of the command bar
+set cmdheight=2
+
+" make backspace act like backspace
+set backspace=eol,start,indent
+set whichwrap+=<,>,h,l
+
+" Ignore case when searching
+set ignorecase
+
+" When searching try to be smart about cases
+set smartcase
+
+" Highlight search results
+set hlsearch
+
+" Use incremental search
+set incsearch
+
+" don't redraw while executing macros (good performance config)
+set lazyredraw
+
+" for regex
+set magic
+
+" Show matching brackets when the text indicator is over them
+set showmatch
+" How many tenths of a second to blink when matching brackets
+set mat=2
+
+" No annoying sounds on errors
+set noerrorbells
+set visualbell
+set t_vb=
+set tm=500
+
+" Always show the status line
+set laststatus=2
+
+" ====================
+" Text/editing-related
+" ===================
 
 " auto read files when changed from other programs
 set autoread
 
-" Use 4 spaces instead of tabs
+" Use spaces instead of tabs
 set expandtab
-set tabstop=4
+
+" Be smart when using tabs,
+" namely to backspace the correct amount of spaces
+set smarttab
+
+" Set the tab width
 set shiftwidth=4
+set tabstop=4
 
-" for go syntax highlighting
-set rtp+=$GOROOT/misc/vim
+" Set auto-indentation
+set autoindent
 
-filetype plugin on
-filetype plugin indent on
-syntax on
+" Wrap lines
+set wrap
 
-" =====================
-" Plugin Manager Setup
-" =====================
+" Linebreak on 500 characters
+set lbr
+set tw=500
 
-set nocompatible
-filetype off
+" store swap files elsewhere
+set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//,.
+
+" Change directory to the current buffer when opening files.
+set autochdir
+
+" =============================
+" Re-maps (not plugin specific)
+" =============================
+
+" when wrapping lines, treat k, j, 0 and $ 
+" to imagine they are seperate lines
+noremap  <buffer> <silent> k gk
+noremap  <buffer> <silent> j gj
+noremap  <buffer> <silent> 0 g0
+noremap  <buffer> <silent> $ g$
+
+" toggle highlight
+map <leader><cr> :set hls!<cr>
+
+" Smart way to move between windows
+map <C-j> <C-W>j
+map <C-k> <C-W>k
+map <C-h> <C-W>h
+map <C-l> <C-W>l
+
+" Close the current buffer
+map <leader>bd :bd<cr>
+
+" Close all the buffers
+map <leader>ba :1,1000 bd!<cr>
+
+" Useful mappings for managing tabs
+map tn :tabnew<cr>
+map to :tabonly<cr>
+map tc :tabclose<cr>
+map tq :tabclose<cr>
+map tM :tabmove -1<cr>
+map tm :tabmove +1<cr>
+
+"" Opens a new tab with the current buffer's path
+"" Super useful when editing files in the same directory
+map te :tabedit <c-r>=expand("%:p:h")<cr>/
+
+" ==============
+" Plugins
+" ==============
 
 set rtp+=~/.vim/bundle/plug
 call plug#begin('~/.vim/plugged')
-
-Plug 'junegunn/vim-plug'
-
-" ====================
-" My plugins
-" ====================
 
 " we're gonna be using vim-hybrid as 
 " a colour scheme from now on
@@ -90,16 +208,13 @@ Plug 'wting/rust.vim', { 'for' : 'rust' }
 
 call plug#end()
 
-
-" ===================
-" Config for plug-ins
-" ===================
+" ==============
+" Plugin config
+" ==============
 
 " NerdTree
 " ----------
 let g:NERDShutUp=1
-
-map <C-e> :NERDTreeToggle<CR>:NERDTreeMirror<CR>
 
 let NERDTreeShowBookmarks=1
 let NERDTreeIgnore=['\.DS_Store', '\.pyc', '\~$', '\.swo$', '\.swp$', '\.git', '\.hg', '\.svn', '\.bzr']
@@ -109,11 +224,6 @@ let NERDTreeMouseMode=2
 let NERDTreeShowHidden=1
 let NERDTreeKeepTreeInNewTab=1
 let g:nerdtree_tabs_open_on_gui_startup=0
-
-" Stupid-EasyMotion
-" ------------------
-map <C-o> <Leader><Leader>w
-map <C-i> <Leader><Leader>W
 
 " Ultisnips
 " ---------
@@ -137,205 +247,38 @@ let g:UltiSnipsExpandTrigger = "<tab>"
 let g:UltiSnipsJumpForwardTrigger = "<tab>"
 let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
 
+" ==========================
+" Re-maps (plugin specific)
+" ==========================
+
+" NerdTree
+" --------
+map <C-e> :NERDTreeToggle<CR>:NERDTreeMirror<CR>
+
+
+" Stupid-EasyMotion
+" ------------------
+map <C-o> <Leader><Leader>w
+map <C-i> <Leader><Leader>W
+
 " Tagbar
+" ------
 nmap <Leader>t :TagbarToggle<CR> 
-
-" so YCM and eclim will play nice
-let g:EclimCompletionMethod = 'omnifunc'
-
-
-
-" ======
-"   UI
-" ======
-
-" If we're using a gnome-terminal
-if $COLORTERM == 'gnome-terminal'
-    " then just manually set 256 colours
-    " since gnome terminal doesn't like to advertise
-    " it's colours :(
-    set t_Co=256
-endif
-
-" Set (relative) line numbers
-set relativenumber
-" so we can see the current line number we're on
-set number 
-
-" move the file along when moving using j/k
-set so=7
-
-" Use wild menu
-set wildmenu
-set wildignore=*.o,*~,~.pyc
-
-" Show current position
-set ruler
-
-" Height of the command bar
-set cmdheight=2
-
-" A buffer becomes hidden when it is abandoned
-set hid
-
-" Congigure backspace so it acts as it should act
-set backspace=eol,start,indent
-set whichwrap+=<,>,h,l
-
-" Ignore case when searching
-set ignorecase
-
-" When searching try to be smart about cases
-set smartcase
-
-" Highlight search results
-set hlsearch
-
-" Use incremental search
-set incsearch
-
-" don't redraw while executing macros (good performance config)
-set lazyredraw
-
-" for regex
-set magic
-
-" Show matching brackets when the text indicator is over them
-set showmatch
-" How many tenths of a second to blink when matching brackets
-set mat=2
-
-" No annoying sounds on errors
-set noerrorbells
-set visualbell
-set t_vb=
-set tm=500
-
-" =======
-" Colours
-" =======
-
-" Enable syntax
-syntax enable
-
-" Set the colour scheme
-let g:hybrid_use_iTerm_colors = 1
-silent! colorscheme hybrid
-
-" Set utf8 as the standard encoding
-set encoding=utf8
-
-" Use Unix as the standard file-type
-set ffs=unix,dos,mac
-
-" ===================
-" Files/back-ups/etc.
-" ===================
-
-" store swap files elsewhere
-set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//,.
-
-" Change directory to the current buffer when opening files.
-set autochdir
-
-" =====================
-" Text/editing-related
-" =====================
-
-" Use spaces instead of tabs
-set expandtab
-
-" Be smart when using tabs
-set smarttab
-
-" Set the tab width
-set shiftwidth=4
-set tabstop=4
-
-" Set auto-indentation
-set autoindent
-
-" Wrap lines
-set wrap
-
-" Linebreak on 500 characters
-set lbr
-set tw=500
-
-" ================
-" General remaps
-" ================
-
-map , <Leader>
-
-" =============================================
-" Moving around - tabs, windows, buffers, etc.
-" =============================================
-
-" Treat long lines as break lines
-map j gj
-map k gk
-
-" toggle highlight
-map <leader><cr> :set hls!<cr>
-
-" Smart way to move between windows
-map <C-j> <C-W>j
-map <C-k> <C-W>k
-map <C-h> <C-W>h
-map <C-l> <C-W>l
-
-" Close the current buffer
-map <leader>bd :bd<cr>
-
-" Close all the buffers
-map <leader>ba :1,1000 bd!<cr>
-
-" Useful mappings for managing tabs
-map tn :tabnew<cr>
-map to :tabonly<cr>
-map tc :tabclose<cr>
-map tq :tabclose<cr>
-map htm :tabmove -1<cr>
-map ltm :tabmove +1<cr>
-map tm :tabmove 
-
-" Opens a new tab with the current buffer's path
-" Super useful when editing files in the same directory
-map te :tabedit <c-r>=expand("%:p:h")<cr>/
-
-" Switch CWD to the directory of the open buffer
-map cd :cd %:p:h<cr>:pwd<cr>
-
-" Specify the behavior when switching between buffers 
-try
-    set switchbuf=useopen,usetab,newtab
-    set stal=2
-catch
-endtry
-
-" =============
-" Status Line
-" ============
-
-" Always show the status line
-set laststatus=2
 
 " ==============
 " Auto-commands
 " ==============
-"
-
-" Return to last edit position when opening files (You want this!)
-autocmd BufReadPost *
-      \ if line("'\"") > 0 && line("'\"") <= line("$") |
- \   exe "normal! g`\"" |
- \ endif
 
 " Remember info about open buffers on close
 set viminfo^=%
 
 augroup text_editing:
+    " Return to last edit position when opening files (You want this!)
+    autocmd BufReadPost *
+          \ if line("'\"") > 0 && line("'\"") <= line("$") |
+     \   exe "normal! g`\"" |
+     \ endif
+
     autocmd BufReadPost *.{txt,md} setlocal spell spelllang=en_au
     autocmd BufReadPost *.{txt,md} setlocal tw=100
 augroup END
