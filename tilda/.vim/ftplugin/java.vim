@@ -1,2 +1,2 @@
 " so YCM and eclim will play nice
-let g:EclimCompletionMethod = 'omnifunc'
+"let g:EclimCompletionMethod = 'omnifunc'

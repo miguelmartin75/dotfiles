@@ -29,9 +29,6 @@ endif
 " use syntax highlighting
 syntax on
 
-" colour scheme
-" colo
-
 " use relative numbers
 set number
 set relativenumber
@@ -246,6 +243,22 @@ let g:ycm_autoclose_preview_window_after_insertion = 1
 let g:UltiSnipsExpandTrigger = "<tab>"
 let g:UltiSnipsJumpForwardTrigger = "<tab>"
 let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
+
+" Hybrid
+" -------
+
+" colour scheme
+if has("unix")
+    let s:uname = system("uname -s")
+    if s:uname == "Darwin"
+        let g:hybrid_use_iTerm_colors = 1
+    endif
+endif
+
+" must set the color scheme here, in order for vim 
+" load it properly
+silent! colorscheme hybrid
+
 
 " ==========================
 " Re-maps (plugin specific)

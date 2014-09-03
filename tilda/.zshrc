@@ -23,15 +23,17 @@ source $ZSH/oh-my-zsh.sh
 # -------------------------
 # aliases
 
-VIM_PATH="vim"
+VIM_PATH="/usr/local/"
 
 # if we're on Mac...
 if [[ "$(uname)" == "Darwin" ]]; then
-    VIM_PATH="/usr/local/bin/vim"
-    alias vim=$VIM_PATH
+    VIM_PATH="/usr/local/bin/"
+    alias vim=$VIM_PATH"vim"
     alias v=vim
     alias vi=vim
     alias e=vim
+    alias vimdiff=$VIM_PATH"vimdiff"
+    alias vdiff=vimdiff
 
     # gcc
     alias gcc="gcc-4.9"
