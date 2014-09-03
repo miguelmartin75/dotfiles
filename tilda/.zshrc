@@ -28,12 +28,6 @@ VIM_PATH="/usr/local/"
 # if we're on Mac...
 if [[ "$(uname)" == "Darwin" ]]; then
     VIM_PATH="/usr/local/bin/"
-    alias vim=$VIM_PATH"vim"
-    alias v=vim
-    alias vi=vim
-    alias e=vim
-    alias vimdiff=$VIM_PATH"vimdiff"
-    alias vdiff=vimdiff
 
     # gcc
     alias gcc="gcc-4.9"
@@ -47,13 +41,23 @@ elif [[ "$(expr substr $(uname -s) 1 5)" == "Linux" ]]; then
     alias c++="clang++"
 fi
 
+VIM=$VIM_PATH"vim"
+alias vim=$VIM
+alias v=vim
+alias vi=vim
+alias e=vim
+
+VIMDIFF=$VIM_PATH"vimdiff"
+alias vimdiff=$VIMDIFF
+alias vdiff=vimdiff
+
 # -------------------------
 # Exports
 
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/local/git/bin"
 
 # Preferred editor for local and remote sessions
-export EDITOR=$VIM_PATH
+export EDITOR=$VIM
 
 # Compilation flags
 export ARCHFLAGS="-arch x86_64"
