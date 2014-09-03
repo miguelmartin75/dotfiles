@@ -250,7 +250,7 @@ let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
 " colour scheme
 if has("unix")
     let s:uname = system("uname -s")
-    if s:uname == "Darwin"
+    if s:uname == "Darwin\n"
         let g:hybrid_use_iTerm_colors = 1
     endif
 endif
