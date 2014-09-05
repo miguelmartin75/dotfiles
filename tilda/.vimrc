@@ -7,12 +7,14 @@ set nocompatible
 
 " http://superuser.com/questions/356970/smooth-scrolling-for-vim-in-mac-terminal-iterm
 set mouse=niv "or set mouse=a
-set clipboard=unnamed
 
 " set command history to 500
 set history=500
 
 filetype off
+
+set wildignore+=*/tmp/*,*.so,*.swp,*.zip     " MacOSX/Linux
+set wildignore+=*\\tmp\\*,*.swp,*.zip,*.exe  " Windows
 
 " =================
 " UI/Colours
@@ -113,12 +115,25 @@ set autochdir
 " Re-maps (not plugin specific)
 " =============================
 
+" normal re-map leader-p to 
+" paste from the system clipboard
+nmap <leader>p "+p
+
+" insert re-map CTRL-p to paste 
+" from the clipboard
+imap <C-R> <C-r>+
+
+" yank re-map for system clipboard
+nmap Y "+y
+nmap YY "+yy
+vmap Y "+y
+
 " when wrapping lines, treat k, j, 0 and $ 
 " to imagine they are seperate lines
-noremap  <buffer> <silent> k gk
-noremap  <buffer> <silent> j gj
-noremap  <buffer> <silent> 0 g0
-noremap  <buffer> <silent> $ g$
+map k gk
+map j gj
+map 0 g0
+map $ g$
 
 " toggle highlight
 map <leader><cr> :set hls!<cr>
