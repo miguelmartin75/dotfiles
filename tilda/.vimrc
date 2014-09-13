@@ -11,8 +11,6 @@ set mouse=niv "or set mouse=a
 " set command history to 500
 set history=500
 
-filetype off
-
 set wildignore+=*/tmp/*,*.so,*.swp,*.zip     " MacOSX/Linux
 set wildignore+=*\\tmp\\*,*.swp,*.zip,*.exe  " Windows
 
@@ -27,9 +25,6 @@ if $COLORTERM == 'gnome-terminal'
     " it's colours :(
     set t_Co=256
 endif
-
-" use syntax highlighting
-syntax on
 
 " use relative numbers
 set number
@@ -121,19 +116,12 @@ nmap <leader>p "+p
 
 " insert re-map CTRL-p to paste 
 " from the clipboard
-imap <C-R> <C-r>+
+imap <C-p> <C-r>+
 
 " yank re-map for system clipboard
 nmap Y "+y
 nmap YY "+yy
 vmap Y "+y
-
-" when wrapping lines, treat k, j, 0 and $ 
-" to imagine they are seperate lines
-map k gk
-map j gj
-map 0 g0
-map $ g$
 
 " toggle highlight
 map <leader><cr> :set hls!<cr>
@@ -169,60 +157,47 @@ map te :tabedit <c-r>=expand("%:p:h")<cr>/
 set rtp+=~/.vim/bundle/plug
 call plug#begin('~/.vim/plugged')
 
-" we're gonna be using vim-hybrid as 
-" a colour scheme from now on
-Plug 'w0ng/vim-hybrid'
+""" Syntax-checking/auto-completion
+Plug 'Valloric/YouCompleteMe', { 'do': './install.sh --clang-completer', 'on': [] }
+Plug 'scrooloose/syntastic', { 'on': 'SyntasticCheck' }
 
-" the snippet engine I am using 
-Plug 'SirVer/ultisnips'
-
-" for the actual snippets
+""" Snippets
+Plug 'SirVer/ultisnips', { 'on': [] }
 Plug 'miguelmartin75/vim-snippets'
- 
-" for file browsing
-Plug 'scrooloose/nerdtree', { 'on' : 'NERDTreeToggle' }
 
-" for surrounding text with {}, (), "", <tag></tag>, etc.
-Plug 'tpope/vim-surround'
-
-" for automatically putting matching ', ", >, etc. 
-Plug 'Raimondi/delimitMate'
-
-" for using '.' with remaps (specifically for vim-surround)
-Plug 'tpope/vim-repeat'
-
-" for easy insertion completetion
+""" Text-editing/manipulation/movement
 Plug 'ervandew/supertab'
-
-" for auto completion
-Plug 'Valloric/YouCompleteMe', { 'do': './install.sh --clang-completer' }
-
-" for syntax checking
-Plug 'scrooloose/syntastic'
-
-" fuzzy searching files
-Plug 'kien/ctrlp.vim'
-
-" fast motion within a line 
+Plug 'tpope/vim-repeat'
+Plug 'Raimondi/delimitMate'
+Plug 'tpope/vim-surround'
 Plug 'joequery/Stupid-EasyMotion'
+Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
 
-" for viewing functions/classes etc.
-Plug 'majutsushi/tagbar'
+""" File Browsing
+Plug 'scrooloose/nerdtree', { 'on' : 'NERDTreeToggle' }
+Plug 'kien/ctrlp.vim', { 'on': 'CtrlP' }
 
-" for nodejs dev (uni)
+""" Lang
 Plug 'moll/vim-node', { 'for' : 'javascript' }
+Plug 'wting/rust.vim', { 'for' : 'rust' }
 
-" for working with git
+""" Git
 Plug 'tpope/vim-fugitive'
 
-" for rust syntax supoprt
-Plug 'wting/rust.vim', { 'for' : 'rust' }
+""" Colour scheme
+Plug 'w0ng/vim-hybrid'
 
 call plug#end()
 
 " ==============
 " Plugin config
 " ==============
+
+augroup load_insert_mode_plugs
+  autocmd!
+  autocmd InsertEnter * call plug#load('ultisnips', 'YouCompleteMe')
+                     \| call youcompleteme#Enable() | autocmd! load_insert_mode_plugs
+augroup END
 
 " NerdTree
 " ----------
@@ -301,21 +276,12 @@ nmap <Leader>t :TagbarToggle<CR>
 set viminfo^=%
 
 augroup text_editing:
+    autocmd!
     " Return to last edit position when opening files (You want this!)
     autocmd BufReadPost *
           \ if line("'\"") > 0 && line("'\"") <= line("$") |
      \   exe "normal! g`\"" |
      \ endif
 
-    autocmd BufReadPost *.{txt,md} setlocal spell spelllang=en_au
-    autocmd BufReadPost *.{txt,md} setlocal tw=100
-augroup END
-
-" these autocmds are the autocmds that 
-" cannot be implemented elsewhere
-" e.g. in ftpplugin
-
-augroup cpp:
-    autocmd BufNewFile *.{hpp,h,hxx,hh} exe 'normal ionce		' | exe '4'
-    autocmd BufNewFile main.{cpp,c,cxx,cc} exe 'normal omain	'
+    autocmd FileType text,markdown setlocal spell spelllang=en_au | setlocal tw=100
 augroup END
