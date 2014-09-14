@@ -154,7 +154,6 @@ map te :tabedit <c-r>=expand("%:p:h")<cr>/
 " Plugins
 " ==============
 
-set rtp+=~/.vim/bundle/plug
 call plug#begin('~/.vim/plugged')
 
 """ Syntax-checking/auto-completion
