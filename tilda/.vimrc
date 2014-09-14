@@ -193,10 +193,15 @@ call plug#end()
 " Plugin config
 " ==============
 
+augroup load_ycm
+    autocmd!
+    autocmd FileType c,cpp,objc,objcpp,python,cs call plug#load('YouCompleteMe') 
+                                              \| call youcompleteme#Enable() 
+augroup END
+
 augroup load_insert_mode_plugs
   autocmd!
-  autocmd InsertEnter * call plug#load('ultisnips', 'YouCompleteMe')
-                     \| call youcompleteme#Enable() | autocmd! load_insert_mode_plugs
+  autocmd InsertEnter * call plug#load('ultisnips')
 augroup END
 
 " NerdTree
