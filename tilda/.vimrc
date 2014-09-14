@@ -157,7 +157,7 @@ map te :tabedit <c-r>=expand("%:p:h")<cr>/
 call plug#begin('~/.vim/plugged')
 
 """ Syntax-checking/auto-completion
-Plug 'Valloric/YouCompleteMe', { 'do': './install.sh --clang-completer', 'on': [] }
+Plug 'Valloric/YouCompleteMe', { 'do': './install.sh --clang-completer', 'for': 'c,cpp,objc,objcpp,cs,python' }
 Plug 'scrooloose/syntastic', { 'on': 'SyntasticCheck' }
 
 """ Snippets
@@ -192,15 +192,9 @@ call plug#end()
 " Plugin config
 " ==============
 
-augroup load_ycm
-    autocmd!
-    autocmd FileType c,cpp,objc,objcpp,python,cs call plug#load('YouCompleteMe') 
-                                              \| call youcompleteme#Enable() 
-augroup END
-
 augroup load_insert_mode_plugs
   autocmd!
-  autocmd InsertEnter * call plug#load('ultisnips')
+  autocmd InsertEnter * call plug#load('ultisnips') | autocmd! load_insert_mode_plugs
 augroup END
 
 " NerdTree
@@ -218,7 +212,7 @@ let g:nerdtree_tabs_open_on_gui_startup=0
 
 " Ultisnips
 " ---------
-let g:UltiSnipsSnippetsDir = "~/.vim/bundle/vim-snippets"
+let g:UltiSnipsSnippetsDir = "~/.vim/plugged/vim-snippets/UltiSnips"
 
 " YCM
 " ----
