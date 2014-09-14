@@ -238,6 +238,16 @@ let g:UltiSnipsExpandTrigger = "<tab>"
 let g:UltiSnipsJumpForwardTrigger = "<tab>"
 let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
 
+" CtrlP
+" ------
+
+" have to setup a remapping 
+" because with vim-plug, CtrlP is
+" not initialised, lol.
+nmap <c-p> :CtrlP<CR>
+let g:ctrlp_map = '<c-p>'
+let g:ctrlp_cmd = 'CtrlP'
+
 " Hybrid
 " -------
 
