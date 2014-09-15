@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# vim-plug for vim
 if [ ! -f ~/.vim/autoload/plug.vim ]; then
     echo 'installing plug.vim'
 
@@ -7,6 +8,13 @@ if [ ! -f ~/.vim/autoload/plug.vim ]; then
     mkdir -p ~/.vim/autoload
     curl -fLo ~/.vim/autoload/plug.vim \
         https://raw.github.com/junegunn/vim-plug/master/plug.vim
+fi
+
+# slate
+if [ ! if /Applications/Slate.app ]; then
+
+    pushd /Applications && curl http://www.ninjamonkeysoftware.com/slate/versions/slate-latest.tar.gz | tar -xz && popd
+
 fi
 
 for file in $(find ./tilda -name "*")

@@ -1,0 +1,52 @@
+# General aliases
+config defaultToCurrentScreen true
+config nudgePercentOf screenSize
+config resizePercentOf screenSize
+
+config windowHintsFontSize 100
+config nudgePercentOf screenSize
+config resizePercentOf screenSize
+config windowHintsTopLeftX (windowSizeX/2)-(windowHintsWidth/2)
+config windowHintsTopLeftY (windowSizeY/2)-(windowHintsHeight/2)
+config windowHintsIgnoreHiddenWindows false
+
+alias sox screenOriginX
+alias soy screenOriginY
+alias ssx screenSizeX
+alias ssy screenSizeY
+
+alias fullscreen ${sox};${soy} ${ssx};${ssy}
+alias leftHalf ${sox};${soy} ${ssx}/2;${ssy}
+alias bottomHalf ${sox};${soy}+${ssy}/2 ${ssx};${ssy}/2
+alias topHalf ${sox};${soy} ${ssx};${ssy}/2
+alias rightHalf ${sox}+${ssx}/2;${soy} ${ssx}/2;${ssy}
+
+bind l:cmd move ${rightHalf}
+bind h:cmd move ${leftHalf}
+bind k:cmd move ${topHalf}
+bind j:cmd move ${bottomHalf}
+
+# Resize Bindings
+bind l:alt resize +10% +0
+bind h:alt resize -10% +0
+bind k:alt resize +0   -10%
+bind j:alt resize +0   +10%
+
+bind l:ctrl;alt  resize -10% +0 bottom-right
+bind h:ctrl;alt  resize +10% +0 bottom-right
+bind k:ctrl;alt  resize +0   +10% bottom-right
+bind j:ctrl;alt  resize +0   -10% bottom-right
+
+# Nudge Bindings
+bind l:shift;alt nudge +10% +0
+bind h:shift;alt nudge -10% +0
+bind k:shift;alt nudge +0   -10%
+bind j:shift;alt nudge +0   +10%
+
+# Focus Bindings
+bind right:cmd    focus right
+bind left:cmd     focus left
+bind up:cmd       focus up
+bind down:cmd     focus down
+bind up:cmd;alt   focus behind
+bind down:cmd;alt focus behind
