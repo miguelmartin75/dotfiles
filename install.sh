@@ -11,7 +11,7 @@ if [ ! -f ~/.vim/autoload/plug.vim ]; then
 fi
 
 # slate
-if [ ! if /Applications/Slate.app ]; then
+if [ ! -d /Applications/Slate.app ]; then
 
     pushd /Applications && curl http://www.ninjamonkeysoftware.com/slate/versions/slate-latest.tar.gz | tar -xz && popd
 
