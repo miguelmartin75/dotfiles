@@ -21,6 +21,8 @@ alias bottomHalf ${sox};${soy}+${ssy}/2 ${ssx};${ssy}/2
 alias topHalf ${sox};${soy} ${ssx};${ssy}/2
 alias rightHalf ${sox}+${ssx}/2;${soy} ${ssx}/2;${ssy}
 
+bind k:cmd;shift move ${fullscreen}
+
 bind l:cmd move ${rightHalf}
 bind h:cmd move ${leftHalf}
 bind k:cmd move ${topHalf}
