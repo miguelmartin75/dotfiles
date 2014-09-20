@@ -10,11 +10,11 @@ if [ ! -f ~/.vim/autoload/plug.vim ]; then
         https://raw.github.com/junegunn/vim-plug/master/plug.vim
 fi
 
-# slate
-if [ ! -d /Applications/Slate.app ]; then
-
-    pushd /Applications && curl http://www.ninjamonkeysoftware.com/slate/versions/slate-latest.tar.gz | tar -xz && popd
-
+# if we're on a mac...
+if [ $(uname) == "Darwin" ]; then
+    # run the osx script
+    echo "running ./osx setup script" 
+    ./osx
 fi
 
 for file in $(find ./tilda -name "*")

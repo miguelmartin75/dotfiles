@@ -1,8 +1,33 @@
 #!/bin/bash
 
+# slate
+if [ ! -d /Applications/Slate.app ]; then
+
+    echo "installing slate..."
+    pushd /Applications && curl http://www.ninjamonkeysoftware.com/slate/versions/slate-latest.tar.gz | tar -xz && popd
+
+fi
+
+# ohmyzsh
+if [ ! -d ~/.oh-my-zsh ]; then
+    # install oh my zsh
+    echo "installing oh my zsh..."
+    curl -L http://install.ohmyz.sh | sh
+fi
+
+# brew
+which brew > /dev/null
+if [ $? == 1 ]; then
+    # install brew
+    echo "installing brew..."
+    ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+fi
+
 # =========
 # General
 # =========
+
+echo "setting up config..."
 
 # Set a blazingly fast keyboard repeat rate
 defaults write NSGlobalDomain KeyRepeat -int 0
@@ -11,7 +36,7 @@ defaults write NSGlobalDomain KeyRepeat -int 0
 defaults write -g ApplePressAndHoldEnabled -bool false
 
 # speed up window maximize time
-defaults write -g NSAutomaticWindowAnimationsEnabled -bool false.
+defaults write -g NSAutomaticWindowAnimationsEnabled -bool false
 
 # Use scroll gesture with the Ctrl (^) modifier key to zoom
 defaults write com.apple.universalaccess closeViewScrollWheelToggle -bool true
@@ -59,7 +84,9 @@ defaults write com.apple.Safari DebugSnapshotsUpdatePolicy -int 2
 # Enable Safari’s debug menu
 defaults write com.apple.Safari IncludeInternalDebugMenu -bool true
 
-# Enable the Develop menu and the Web Inspector in Safari
+## Enable the Develop menu and the Web Inspector in Safari
 defaults write com.apple.Safari IncludeDevelopMenu -bool true
 defaults write com.apple.Safari WebKitDeveloperExtrasEnabledPreferenceKey -bool true
 defaults write com.apple.Safari com.apple.Safari.ContentPageGroupIdentifier.WebKit2DeveloperExtrasEnabled -bool true
+
+echo "note you may have to restart/re-login for all changes to take effect"
