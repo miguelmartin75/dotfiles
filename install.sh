@@ -17,14 +17,14 @@ if [ $(uname) == "Darwin" ]; then
     ./osx
 fi
 
-for file in $(find ./tilda -name "*")
+for file in $(find $DOTFILES_DIR "*")
 do
     # ignore the base dir
-    if [ $file == "./tilda" ]; then
+    if [ $file == "./tilde" ]; then
         continue;
     fi
 
-    readablePath=${file#"./tilda/"}
+    readablePath=${file#"${DOTFILES_DIR}/"}
     to=~/$readablePath
     from=$file
 

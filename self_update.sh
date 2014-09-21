@@ -1,12 +1,15 @@
 #!/bin/bash
-for file in $(find ./tilda -name "*")
+
+source variables.sh
+
+for file in $(find $DOTFILES_DIR -name "*")
 do
     # if we hit an actual directory
     if [ -d $file ]; then
         continue # then continue
     fi
 
-    from=~/${file#"./tilda/"} 
+    from=~/${file#"${DOTFILES_DIR}/"}
     to=$file
 
     echo "copying" $from "to" $to "..."
