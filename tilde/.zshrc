@@ -1,7 +1,7 @@
 # -----------------------
 # General
 
-export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin"
+export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin"
 
 # Preferred editor for local and remote sessions
 export EDITOR=vim
