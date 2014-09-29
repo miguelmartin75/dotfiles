@@ -25,7 +25,6 @@ alias rightHalf ${sox}+${ssx}/2;${soy} ${ssx}/2;${ssy}
 # -------------------------
 
 # cmd-shift-up maximizes the window
-bind k:cmd;shift move ${fullscreen}
 bind up:cmd;shift move ${fullscreen}
 
 # cmd-<direction> places the window in <direction>
