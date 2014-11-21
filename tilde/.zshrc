@@ -18,17 +18,14 @@ if [[ "$(uname)" == "Darwin" ]]; then
     alias gcc="gcc-4.9"
     alias g++="g++-4.9"
 
+    # regular clang installed by homebrew
     alias clang="/usr/local/opt/llvm/bin/clang"
     alias clang++="/usr/local/opt/llvm/bin/clang++"
+
+    # apple clang, installed by default
     alias aclang="/usr/bin/clang"
     alias aclang++="/usr/bin/clang++"
-
-# if we're on linux
-elif [[ "$(expr substr $(uname -s) 1 5)" == "Linux" ]]; then
-
-    # linux specific aliases...
-    alias c++="clang++"
-
+    alias c++=aclang++
 fi
 
 alias v=vim
