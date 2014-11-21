@@ -103,8 +103,17 @@ set tw=500
 " store swap files elsewhere
 set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//,.
 
-" Change directory to the current buffer when opening files.
+" automatically change to the dir where the file is
 set autochdir
+
+" use some spell checking :)
+" for code, this will only spell check
+" within comments
+set spell spelllang=en_au
+
+" code folding
+set foldmethod=syntax
+set foldlevel=20
 
 " =============================
 " Re-maps (not plugin specific)
@@ -127,32 +136,22 @@ vmap Y "+y
 map <leader><cr> :set hls!<cr>
 
 " Smart way to move between windows
-map <C-j> <C-W>j
-map <C-k> <C-W>k
-map <C-h> <C-W>h
-map <C-l> <C-W>l
+"map <A-j> <C-W>j
+"map <A-k> <C-W>k
+"map <A-h> <C-W>h
+"map <A-l> <C-W>l
 
-" Close the current buffer
-map <leader>bd :bd<cr>
+" q for buffers is <leader>q
+map <leader>q :bd<cr>
+map <leader>qa :1,1000 bd!<cr>
 
-" Close all the buffers
-map <leader>ba :1,1000 bd!<cr>
+" just convenience to switch buffers
+nmap <C-l> :bn<CR>
+nmap <C-h> :bp<CR>
 
-" Useful mappings for managing tabs
-map tn :tabnew<cr>
-map to :tabonly<cr>
-map tc :tabclose<cr>
-map tq :tabclose<cr>
-map tM :tabmove -1<cr>
-map tm :tabmove +1<cr>
-
-"" Opens a new tab with the current buffer's path
-"" Super useful when editing files in the same directory
-map te :tabedit <c-r>=expand("%:p:h")<cr>/
-
-" ==============
+" ========
 " Plugins
-" ==============
+" ========
 
 call plug#begin('~/.vim/plugged')
 
@@ -166,14 +165,14 @@ Plug 'miguelmartin75/vim-snippets'
 
 """ Text-editing/manipulation/movement
 Plug 'ervandew/supertab'
-Plug 'tpope/vim-repeat'
-Plug 'Raimondi/delimitMate'
 Plug 'tpope/vim-surround'
+Plug 'tpope/vim-repeat'
 Plug 'joequery/Stupid-EasyMotion'
 Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
+Plug 'ap/vim-buftabline'
 
 """ File Browsing
-Plug 'scrooloose/nerdtree', { 'on' : 'NERDTreeToggle' }
+Plug 'scrooloose/nerdtree', { 'on' : ['NERDTree', 'NERDTreeToggle'] }
 Plug 'kien/ctrlp.vim', { 'on': 'CtrlP' }
 
 """ Lang
@@ -199,6 +198,7 @@ augroup END
 
 " NerdTree
 " ----------
+
 let g:NERDShutUp=1
 
 let NERDTreeShowBookmarks=1
@@ -217,6 +217,9 @@ let g:UltiSnipsSnippetsDir = "~/.vim/plugged/vim-snippets/UltiSnips"
 " YCM
 " ----
 
+let g:ycm_min_num_of_chars_for_completion = 1
+let g:ycm_confirm_extra_conf = 0
+
 " http://stackoverflow.com/a/18685821
 " make YCM compatible with UltiSnips (using supertab)
 let g:ycm_key_list_select_completion = ['<C-n>', '<Down>']
@@ -224,13 +227,12 @@ let g:ycm_key_list_previous_completion = ['<C-p>', '<Up>']
 let g:SuperTabDefaultCompletionType = '<C-n>'
 
 " remove the preview window automatically
-"set completeopt-=preview
 let g:ycm_autoclose_preview_window_after_insertion = 1
 
 " better key bindings for UltiSnipsExpandTrigger
 let g:UltiSnipsExpandTrigger = "<tab>"
-let g:UltiSnipsJumpForwardTrigger = "<tab>"
-let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
+let g:UltiSnipsJumpForwardTrigger = "<C-n>"
+let g:UltiSnipsJumpBackwardTrigger = "<C-p>"
 
 " CtrlP
 " ------
@@ -256,7 +258,6 @@ endif
 " must set the color scheme here, in order for vim 
 " load it properly
 silent! colorscheme hybrid
-
 
 " ==========================
 " Re-maps (plugin specific)
@@ -291,5 +292,5 @@ augroup text_editing:
      \   exe "normal! g`\"" |
      \ endif
 
-    autocmd FileType text,markdown setlocal spell spelllang=en_au | setlocal tw=100
+    autocmd FileType text,markdown setlocal tw=100
 augroup END
