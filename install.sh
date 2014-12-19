@@ -1,13 +1,14 @@
 #!/bin/bash
 
+DOTFILES_DIR=tilde
+
 # vim-plug for vim
 if [ ! -f ~/.vim/autoload/plug.vim ]; then
     echo 'installing plug.vim'
 
     # install plug.vim
     mkdir -p ~/.vim/autoload
-    curl -fLo ~/.vim/autoload/plug.vim \
-        https://raw.github.com/junegunn/vim-plug/master/plug.vim
+    curl https://raw.github.com/junegunn/vim-plug/master/plug.vim > ~/.vim/autoload/plug.vim
 fi
 
 # if we're on a mac...
@@ -17,7 +18,10 @@ if [ $(uname) == "Darwin" ]; then
     ./osx
 fi
 
-for file in $(find $DOTFILES_DIR "*")
+# NOTE I could use -type f to only copy files,
+# however, I'm not sure sure how to create the necessary
+# directories with the cp command if it doesn't exist...
+for file in $(find $DOTFILES_DIR -name "*")
 do
     # ignore the base dir
     if [ $file == "./tilde" ]; then
