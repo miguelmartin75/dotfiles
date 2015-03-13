@@ -14,6 +14,9 @@ if [ $(uname) == "Darwin" ]; then
     # run the osx script
     echo "running ./osx setup script" 
     ./osx
+elif [ $(uname) == "Linux" ]; then
+    echo "running ./linux setup script"
+    ./linux
 fi
 
 ./install_dotfiles.sh ./tilde
