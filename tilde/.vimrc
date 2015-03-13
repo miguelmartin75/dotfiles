@@ -14,21 +14,17 @@ set history=500
 set wildignore+=*/tmp/*,*.so,*.swp,*.zip     " MacOSX/Linux
 set wildignore+=*\\tmp\\*,*.swp,*.zip,*.exe  " Windows
 
+syntax enable
+
 " =================
 " UI/Colours
 " =================
 
-" If we're using a gnome-terminal
-if $COLORTERM == 'gnome-terminal'
-    " then just manually set 256 colours
-    " since gnome terminal doesn't like to advertise
-    " it's colours :(
-    set t_Co=256
-endif
-
 " use relative numbers
 set number
 if has("unix") && system("uname -s") == "Linux\n"
+    set t_Co=256
+
     " assuming we are using a raspberry pi on linux...
     set nocursorcolumn
     set nocursorline
