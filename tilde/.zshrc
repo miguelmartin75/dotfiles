@@ -25,8 +25,14 @@ if [[ "$(uname)" == "Darwin" ]]; then
     # apple clang, installed by default
     alias aclang="/usr/bin/clang"
     alias aclang++="/usr/bin/clang++"
-    alias c++=aclang++
+
+    # default compiler
+    export CC=clang
+    export CPP=clang++
+    export CXX=clang++
 fi
+
+alias prog='cd /Volumes/HDD/Programming'
 
 alias v=vim
 alias vi=vim

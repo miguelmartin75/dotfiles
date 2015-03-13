@@ -119,6 +119,9 @@ set foldlevel=20
 " Re-maps (not plugin specific)
 " =============================
 
+map j gj
+map k gk
+
 " normal re-map leader-p to 
 " paste from the system clipboard
 nmap <leader>p "+p
@@ -136,18 +139,22 @@ vmap Y "+y
 map <leader><cr> :set hls!<cr>
 
 " Smart way to move between windows
-"map <A-j> <C-W>j
-"map <A-k> <C-W>k
-"map <A-h> <C-W>h
-"map <A-l> <C-W>l
+map <C-j> <C-W>j
+map <C-k> <C-W>k
+map <C-h> <C-W>h
+map <C-l> <C-W>l
 
 " q for buffers is <leader>q
 map <leader>q :bd<cr>
 map <leader>qa :1,1000 bd!<cr>
 
 " just convenience to switch buffers
-nmap <C-l> :bn<CR>
-nmap <C-h> :bp<CR>
+nmap <leader>a :bn<CR>
+nmap <leader>f :bp<CR>
+
+nnoremap <F1> <nop>
+nnoremap Q <nop>
+nnoremap K <nop>
 
 " ========
 " Plugins
@@ -169,7 +176,6 @@ Plug 'tpope/vim-surround'
 Plug 'tpope/vim-repeat'
 Plug 'joequery/Stupid-EasyMotion'
 Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
-Plug 'ap/vim-buftabline'
 
 """ File Browsing
 Plug 'scrooloose/nerdtree', { 'on' : ['NERDTree', 'NERDTreeToggle'] }
