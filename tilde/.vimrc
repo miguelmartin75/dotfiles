@@ -28,7 +28,15 @@ endif
 
 " use relative numbers
 set number
-set relativenumber
+if has("unix") && system("uname -s") == "Linux\n"
+    " assuming we are using a raspberry pi on linux...
+    set nocursorcolumn
+    set nocursorline
+    set norelativenumber
+    syntax sync minlines=256
+else
+    set relativenumber
+end
 
 " show current position
 set ruler
@@ -258,6 +266,8 @@ if has("unix")
     let s:uname = system("uname -s")
     if s:uname == "Darwin\n"
         let g:hybrid_use_iTerm_colors = 1
+    elseif s:uname == "Linux\n"
+        let g:hybrid_use_Xresources = 1
     endif
 endif
 
