@@ -22,10 +22,11 @@ syntax enable
 
 " use relative numbers
 set number
-if has("unix") && system("uname -s") == "Linux\n"
+if (has("unix") && system("uname -s") == "Linux\n") || $SSH_CONNECTION
+    " why am I doing this? Well to speed things up because of two reasons:
+    " 1. I use my pi with linux mainly
+    " 2. SSH connections can be slow...
     set t_Co=256
-
-    " assuming we are using a raspberry pi on linux...
     set nocursorcolumn
     set nocursorline
     set norelativenumber
@@ -260,10 +261,10 @@ let g:ctrlp_cmd = 'CtrlP'
 " colour scheme
 if has("unix")
     let s:uname = system("uname -s")
-    if s:uname == "Darwin\n"
-        let g:hybrid_use_iTerm_colors = 1
-    elseif s:uname == "Linux\n"
+    if s:uname == "Linux\n" || $SSH_CONNECTION
         let g:hybrid_use_Xresources = 1
+    elseif s:uname == "Darwin\n"
+        let g:hybrid_use_iTerm_colors = 1
     endif
 endif
 
