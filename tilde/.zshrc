@@ -1,13 +1,14 @@
 # -----------------------
 # General
 
-export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin"
+export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin:/usr/texbin"
 
 # Preferred editor for local and remote sessions
 export EDITOR=vim
 
 # Compilation flags
 export ARCHFLAGS="-arch x86_64"
+
 
 # -------------------------
 # aliases
@@ -38,6 +39,10 @@ alias v=vim
 alias vi=vim
 alias e=vim
 alias vdiff=vimdiff
+
+function gen() { pushd build && ccmake .. && popd }
+alias build='make -C ./build'
+
 
 # -----------------
 # Misc
