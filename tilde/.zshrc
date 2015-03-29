@@ -40,7 +40,7 @@ alias vi=vim
 alias e=vim
 alias vdiff=vimdiff
 
-function gen() { pushd build && ccmake .. && popd }
+function gen() { pushd build && ccmake "$@" .. && popd }
 alias build='make -C ./build'
 
 
