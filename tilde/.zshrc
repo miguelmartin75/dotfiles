@@ -1,7 +1,10 @@
 # -----------------------
 # General
 
-export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin:/usr/texbin"
+export ANDROID_HOME="/Users/miguel/Library/Android/sdk"
+
+export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin:/usr/texbin:/usr/local/bin/depot_tools"
+export PATH=${PATH}:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools
 
 # Preferred editor for local and remote sessions
 export EDITOR=vim
@@ -40,8 +43,8 @@ alias vi=vim
 alias e=vim
 alias vdiff=vimdiff
 
-function gen() { pushd build && ccmake "$@" .. && popd }
-alias build='make -C ./build'
+function dcmake() { mkdir -p "${1:-build}"; (cd "${1:-build}" && ccmake "$@" ..) }
+alias dmake='make -C ${1:-build}'
 
 
 # -----------------
