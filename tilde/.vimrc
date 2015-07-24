@@ -172,6 +172,10 @@ nmap <leader>f :bp<CR>
 nnoremap <F1> <nop>
 nnoremap Q <nop>
 nnoremap K <nop>
+vnoremap K <nop>
+
+" delete word in insert mode
+imap <C-b> <Esc>ldw
 
 " ========
 " Plugins
@@ -179,13 +183,21 @@ nnoremap K <nop>
 
 call plug#begin('~/.vim/plugged')
 
+""" Colour scheme
+Plug 'w0ng/vim-hybrid'
+
+""" Lang
+Plug 'moll/vim-node', { 'for' : 'javascript' }
+Plug 'wting/rust.vim', { 'for' : 'rust' }
+
 """ Syntax-checking/auto-completion
-Plug 'Valloric/YouCompleteMe', { 'do': './install.sh --clang-completer', 'for': 'c,cpp,objc,objcpp,cs,python' }
+Plug 'phildawes/racer', { 'do': 'cargo build --release', 'for': 'rust' }
 Plug 'scrooloose/syntastic', { 'on': 'SyntasticCheck' }
+Plug 'Valloric/YouCompleteMe', { 'do': './install.sh --clang-completer', 'for': ['c', 'cpp', 'objc', 'objcpp', 'cs', 'python', 'rust'] }
 
 """ Snippets
-Plug 'SirVer/ultisnips', { 'on': [] }
-Plug 'miguelmartin75/vim-snippets'
+Plug 'SirVer/ultisnips'
+Plug 'miguelmartin75/ultisnips-snippets'
 
 """ Text-editing/manipulation/movement
 Plug 'ervandew/supertab'
@@ -198,15 +210,8 @@ Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
 Plug 'scrooloose/nerdtree', { 'on' : ['NERDTree', 'NERDTreeToggle'] }
 Plug 'kien/ctrlp.vim', { 'on': 'CtrlP' }
 
-""" Lang
-Plug 'moll/vim-node', { 'for' : 'javascript' }
-Plug 'wting/rust.vim', { 'for' : 'rust' }
-
 """ Git
 Plug 'tpope/vim-fugitive'
-
-""" Colour scheme
-Plug 'w0ng/vim-hybrid'
 
 call plug#end()
 
@@ -215,8 +220,8 @@ call plug#end()
 " ==============
 
 augroup load_insert_mode_plugs
-  autocmd!
-  autocmd InsertEnter * call plug#load('ultisnips') | autocmd! load_insert_mode_plugs
+    autocmd!
+    autocmd InsertEnter * call plug#load('ultisnips') | autocmd! load_insert_mode_plugs
 augroup END
 
 " NerdTree
@@ -235,7 +240,7 @@ let g:nerdtree_tabs_open_on_gui_startup=0
 
 " Ultisnips
 " ---------
-let g:UltiSnipsSnippetsDir = "~/.vim/plugged/vim-snippets/UltiSnips"
+let g:UltiSnipsSnippetsDir = "~/.vim/plugged/ultisnips-snippets/UltiSnips"
 
 " YCM
 " ----
@@ -247,15 +252,31 @@ let g:ycm_confirm_extra_conf = 0
 " make YCM compatible with UltiSnips (using supertab)
 let g:ycm_key_list_select_completion = ['<C-n>', '<Down>']
 let g:ycm_key_list_previous_completion = ['<C-p>', '<Up>']
-let g:SuperTabDefaultCompletionType = '<C-n>'
+let g:SuperTabDefaultCompletionType = 'context'
 
 " remove the preview window automatically
 let g:ycm_autoclose_preview_window_after_insertion = 1
 
 " better key bindings for UltiSnipsExpandTrigger
 let g:UltiSnipsExpandTrigger = "<tab>"
-let g:UltiSnipsJumpForwardTrigger = "<C-n>"
-let g:UltiSnipsJumpBackwardTrigger = "<C-p>"
+let g:UltiSnipsJumpForwardTrigger = "<tab>"
+let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
+
+"let g:ycm_cache_omnifunc = 0
+let g:ycm_semantic_triggers =  {
+\   'c' : ['->', '.'],
+\   'objc' : ['->', '.'],
+\   'ocaml' : ['.', '#'],
+\   'cpp,objcpp' : ['->', '.', '::'],
+\   'perl' : ['->'],
+\   'php' : ['->', '::'],
+\   'cs,java,javascript,d,python,perl6,scala,vb,elixir,go' : ['.'],
+\   'vim' : ['re![_a-zA-Z]+[_\w]*\.'],
+\   'ruby' : ['.', '::'],
+\   'lua' : ['.', ':'],
+\   'erlang' : [':'],
+\   'rust' : ['::', '.'],
+\ }
 
 " CtrlP
 " ------
@@ -283,6 +304,7 @@ endif
 " must set the color scheme here, in order for vim 
 " load it properly
 silent! colorscheme hybrid
+
 
 " ==========================
 " Re-maps (plugin specific)
