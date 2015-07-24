@@ -1,7 +1,9 @@
 #!/bin/bash
 
 if [ "${1}x" == "x" ]; then
-    echo "please give me a directory full of dotfiles to install..."
+    echo "usage: $0 dir"
+    printf "\t"
+    echo "where dir is the directory to install dotfiles"
     exit 1
 fi
 

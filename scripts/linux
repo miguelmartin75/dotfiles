@@ -1,0 +1,3 @@
+#!/bin/bash
+
+./scripts/mv_dotfiles tilde_linux

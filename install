@@ -12,14 +12,14 @@ fi
 # if we're on a mac...
 if [ $(uname) == "Darwin" ]; then
     # run the osx script
-    echo "running ./osx setup script" 
-    ./osx
+    echo "running osx setup script" 
+    ./scripts/osx
 elif [ $(uname) == "Linux" ]; then
-    echo "running ./linux setup script"
-    ./linux
+    echo "running linux setup script"
+    ./scripts/linux
 fi
 
-./install_dotfiles.sh ./tilde
+./scripts/mv_dotfiles ./tilde
 
 # run vim and install the plugins for us
 vim -c "PlugInstall|qa"

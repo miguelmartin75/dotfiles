@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source variables.sh
+source scripts/variables.sh
 
 for file in $(find $DOTFILES_DIR -name "*")
 do
