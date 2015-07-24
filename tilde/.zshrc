@@ -74,6 +74,8 @@ export LESS_TERMCAP_ue=$default
 # Begin underline
 export LESS_TERMCAP_us=$green
 
+export RUST_SRC_PATH=/Library/Caches/Homebrew/rust--git/src
+
 # ----------------------------
 # oh-my-zsh specifics
 
