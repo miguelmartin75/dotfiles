@@ -49,7 +49,7 @@ defaults write com.apple.universalaccess closeViewZoomFollowsFocus -bool true
 # Screen
 # ========
 
-# Save screenshots to the desktop
+# Save screenshots to custom folder (default: Desktop)
 defaults write com.apple.screencapture location -string "~/Google\ Drive/foto/screensh0t"
 
 # Save screenshots in PNG format (other options: BMP, GIF, JPG, PDF, TIFF)
