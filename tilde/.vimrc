@@ -1,4 +1,3 @@
-" ========
 " General
 " ========
 
@@ -32,20 +31,12 @@ syntax enable
 " UI/Colours
 " =================
 
+" highlight current line cursor is on
+set cursorline
+
 " use relative numbers
 set number
-if (has("unix") && system("uname -s") == "Linux\n") || $SSH_CONNECTION
-    " why am I doing this? Well to speed things up because of two reasons:
-    " 1. I use my pi with linux mainly
-    " 2. SSH connections can be slow...
-    set t_Co=256
-    set nocursorcolumn
-    set nocursorline
-    set norelativenumber
-    syntax sync minlines=256
-else
-    set relativenumber
-end
+set relativenumber
 
 " show current position
 set ruler
@@ -105,6 +96,8 @@ set smarttab
 
 " Set the tab width
 set shiftwidth=4
+
+" \t size
 set tabstop=4
 
 " Set auto-indentation
@@ -121,7 +114,7 @@ set tw=500
 set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//,.
 
 " automatically change to the dir where the file is
-set autochdir
+"set autochdir
 
 " use some spell checking :)
 " for code, this will only spell check
@@ -130,7 +123,7 @@ set spell spelllang=en_au
 
 " code folding
 set foldmethod=syntax
-set foldlevel=20
+set foldlevel=0
 
 " =============================
 " Re-maps (not plugin specific)
@@ -164,10 +157,6 @@ map <C-l> <C-W>l
 " q for buffers is <leader>q
 map <leader>q :bd<cr>
 map <leader>qa :1,1000 bd!<cr>
-
-" just convenience to switch buffers
-nmap <leader>a :bn<CR>
-nmap <leader>f :bp<CR>
 
 nnoremap <F1> <nop>
 nnoremap Q <nop>
@@ -304,6 +293,8 @@ endif
 " must set the color scheme here, in order for vim 
 " load it properly
 silent! colorscheme hybrid
+
+set background=dark
 
 
 " ==========================
