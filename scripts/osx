@@ -8,13 +8,6 @@ if [ ! -d /Applications/Slate.app ]; then
 
 fi
 
-# ohmyzsh
-if [ ! -d ~/.oh-my-zsh ]; then
-    # install oh my zsh
-    echo "installing oh my zsh..."
-    curl -L http://install.ohmyz.sh | sh
-fi
-
 # brew
 which brew > /dev/null
 if [ $? == 1 ]; then
