@@ -1,6 +1,8 @@
 " General
 " ========
 
+set t_Co=256
+
 " we're using vim, not vi
 set nocompatible
 
@@ -176,17 +178,18 @@ call plug#begin('~/.vim/plugged')
 Plug 'w0ng/vim-hybrid'
 
 """ Lang
-Plug 'moll/vim-node', { 'for' : 'javascript' }
-Plug 'wting/rust.vim', { 'for' : 'rust' }
+"Plug 'moll/vim-node', { 'for' : 'javascript' }
+"Plug 'wting/rust.vim', { 'for' : 'rust' }
 
 """ Syntax-checking/auto-completion
-Plug 'phildawes/racer', { 'do': 'cargo build --release', 'for': 'rust' }
-Plug 'scrooloose/syntastic', { 'on': 'SyntasticCheck' }
-Plug 'Valloric/YouCompleteMe', { 'do': './install.sh --clang-completer', 'for': ['c', 'cpp', 'objc', 'objcpp', 'cs', 'python', 'rust'] }
+"Plug 'phildawes/racer', { 'do': 'cargo build --release', 'for': 'rust' }
+"Plug 'scrooloose/syntastic', { 'on': 'SyntasticCheck' }
+Plug 'w0rp/ale'
+Plug 'Valloric/YouCompleteMe', { 'do': './install.py', 'for': ['c', 'cpp', 'objc', 'objcpp', 'cs', 'python', 'rust'] }
 
 """ Snippets
-Plug 'SirVer/ultisnips'
-Plug 'miguelmartin75/ultisnips-snippets'
+"Plug 'SirVer/ultisnips'
+"Plug 'miguelmartin75/ultisnips-snippets'
 
 """ Text-editing/manipulation/movement
 Plug 'ervandew/supertab'
@@ -207,6 +210,9 @@ call plug#end()
 " ==============
 " Plugin config
 " ==============
+
+let g:syntastic_check_on_open = 0
+let g:syntastic_check_on_wq = 1
 
 augroup load_insert_mode_plugs
     autocmd!
