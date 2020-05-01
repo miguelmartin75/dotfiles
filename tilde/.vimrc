@@ -168,28 +168,37 @@ vnoremap K <nop>
 " delete word in insert mode
 imap <C-b> <Esc>ldw
 
+" buffers
+
+" set hidden basically allows you to 
+" open another buffer without saving changes
+set hidden
+nnoremap <leader>a :bp<CR>
+nnoremap <leader>s :bn<CR>
+
+
 " ========
 " Plugins
 " ========
 
 call plug#begin('~/.vim/plugged')
 
+""" UI
+
+" use buffers as tabs
+Plug 'ap/vim-buftabline'
+
 """ Colour scheme
 Plug 'w0ng/vim-hybrid'
 
-""" Lang
-"Plug 'moll/vim-node', { 'for' : 'javascript' }
-"Plug 'wting/rust.vim', { 'for' : 'rust' }
-
 """ Syntax-checking/auto-completion
-"Plug 'phildawes/racer', { 'do': 'cargo build --release', 'for': 'rust' }
-"Plug 'scrooloose/syntastic', { 'on': 'SyntasticCheck' }
+Plug 'ap/vim-buftabline'
 Plug 'w0rp/ale'
 Plug 'Valloric/YouCompleteMe', { 'do': './install.py', 'for': ['c', 'cpp', 'objc', 'objcpp', 'cs', 'python', 'rust'] }
 
 """ Snippets
-"Plug 'SirVer/ultisnips'
-"Plug 'miguelmartin75/ultisnips-snippets'
+Plug 'SirVer/ultisnips', { 'for': ['c', 'cpp', 'cpp', 'objcpp'] }
+Plug 'miguelmartin75/ultisnips-snippets', { 'for': ['c', 'cpp', 'cpp', 'objcpp'] }
 
 """ Text-editing/manipulation/movement
 Plug 'ervandew/supertab'
@@ -199,10 +208,10 @@ Plug 'joequery/Stupid-EasyMotion'
 Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
 
 """ File Browsing
-Plug 'scrooloose/nerdtree', { 'on' : ['NERDTree', 'NERDTreeToggle'] }
-Plug 'kien/ctrlp.vim', { 'on': 'CtrlP' }
+Plug 'kien/ctrlp.vim', { 'on': 'CtrlP' } " TODO: switch to fzf
 
 """ Git
+" TODO: barely use this: consider removing
 Plug 'tpope/vim-fugitive'
 
 call plug#end()
@@ -211,35 +220,29 @@ call plug#end()
 " Plugin config
 " ==============
 
-let g:syntastic_check_on_open = 0
-let g:syntastic_check_on_wq = 1
+" :e
+let g:netrw_banner = 0
+let g:netrw_liststyle = 3
+let g:netrw_browse_split = 4
+let g:netrw_altv = 1
+let g:netrw_winsize = 25
+nmap <C-e> :Lexplore<cr>
+
+" Ultisnips
+" ---------
+let g:UltiSnipsSnippetsDir = "~/.vim/plugged/ultisnips-snippets/UltiSnips"
 
 augroup load_insert_mode_plugs
     autocmd!
     autocmd InsertEnter * call plug#load('ultisnips') | autocmd! load_insert_mode_plugs
 augroup END
 
-" NerdTree
-" ----------
-
-let g:NERDShutUp=1
-
-let NERDTreeShowBookmarks=1
-let NERDTreeIgnore=['\.DS_Store', '\.pyc', '\~$', '\.swo$', '\.swp$', '\.git', '\.hg', '\.svn', '\.bzr']
-let NERDTreeChDirMode=0
-let NERDTreeQuitOnOpen=1
-let NERDTreeMouseMode=2
-let NERDTreeShowHidden=1
-let NERDTreeKeepTreeInNewTab=1
-let g:nerdtree_tabs_open_on_gui_startup=0
-
-" Ultisnips
-" ---------
-let g:UltiSnipsSnippetsDir = "~/.vim/plugged/ultisnips-snippets/UltiSnips"
-
 " YCM
 " ----
 
+nmap <leader>gt :YcmCompleter GetType<cr>
+nmap <leader>d :YcmCompleter GoToDefinition<cr>
+nmap <leader>r :YcmCompleter GoToDefinition<cr>
 let g:ycm_min_num_of_chars_for_completion = 1
 let g:ycm_confirm_extra_conf = 0
 
@@ -302,14 +305,9 @@ silent! colorscheme hybrid
 
 set background=dark
 
-
 " ==========================
 " Re-maps (plugin specific)
 " ==========================
-
-" NerdTree
-" --------
-map <C-e> :NERDTreeToggle<CR>:NERDTreeMirror<CR>
 
 
 " Stupid-EasyMotion
