@@ -189,7 +189,7 @@ call plug#begin('~/.vim/plugged')
 Plug 'ap/vim-buftabline'
 
 """ Colour scheme
-Plug 'w0ng/vim-hybrid'
+Plug 'morhetz/gruvbox'
 
 """ Syntax-checking/auto-completion
 Plug 'ap/vim-buftabline'
@@ -286,29 +286,16 @@ nmap <c-p> :CtrlP<CR>
 let g:ctrlp_map = '<c-p>'
 let g:ctrlp_cmd = 'CtrlP'
 
-" Hybrid
+" ColorScheme (gruvbox)
 " -------
 
-" colour scheme
-if has("unix")
-    let s:uname = system("uname -s")
-    if s:uname == "Linux\n" || $SSH_CONNECTION
-        let g:hybrid_use_Xresources = 1
-    elseif s:uname == "Darwin\n"
-        let g:hybrid_use_iTerm_colors = 1
-    endif
-endif
-
-" must set the color scheme here, in order for vim 
-" load it properly
-silent! colorscheme hybrid
-
 set background=dark
+set termguicolors
+colorscheme gruvbox
 
 " ==========================
 " Re-maps (plugin specific)
 " ==========================
-
 
 " Stupid-EasyMotion
 " ------------------
@@ -322,9 +309,6 @@ nmap <Leader>t :TagbarToggle<CR>
 " ==============
 " Auto-commands
 " ==============
-
-" Remember info about open buffers on close
-set viminfo^=%
 
 augroup text_editing:
     autocmd!
