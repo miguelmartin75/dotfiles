@@ -1,5 +1,4 @@
-# -----------------------
-# General
+# ===== General =====
 
 export PATH="/usr/local/cuda/bin:/home/media/config/mxe/usr/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin:/usr/texbin:/usr/local/bin/depot_tools"
 
@@ -77,3 +76,15 @@ export LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/lib:$LD_LIBRARY_PATH"
 export OPENCV_ROOT="$HOME/repos/config/opencv-3.2.0"
 export CAFFE_ROOT="$HOME/repos/config/caffe"
 export PYTHONPATH="./:${CAFFE_ROOT}/python:$PYTHONPATH"
+
+export WIKI_FILES_DIR="$HOME/wiki/wiki"
+function wikigoto() {
+    cd $WIKI_FILES_DIR
+}
+
+function wikiedit() {
+    wikigoto && $EDITOR
+}
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
