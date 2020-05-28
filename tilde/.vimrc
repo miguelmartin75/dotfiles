@@ -1,13 +1,56 @@
-" General
-" ========
+call plug#begin('~/.vim/plugged')
 
-set t_Co=256
+""" misc
+"Plug 'vimwiki/vimwiki'
 
-" we're using vim, not vi
-set nocompatible
+""" ui
+Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
 
-" http://superuser.com/questions/356970/smooth-scrolling-for-vim-in-mac-terminal-iterm
-set mouse=niv "or set mouse=a
+" typing
+Plug 'junegunn/goyo.vim'
+Plug 'junegunn/limelight.vim'
+Plug 'reedes/vim-pencil'
+
+""" colour scheme
+Plug 'morhetz/gruvbox'
+
+"" snippets
+Plug 'SirVer/ultisnips', { 'for': ['markdown', 'vimwiki'] }
+Plug 'miguelmartin75/ultisnips-snippets', { 'for': ['markdown', 'vimwiki'] }
+
+""" text-editing/manipulation/movement
+"Plug 'ervandew/supertab'
+Plug 'tpope/vim-surround'
+Plug 'tpope/vim-repeat'
+Plug 'joequery/Stupid-EasyMotion'
+
+Plug 'godlygeek/tabular'
+Plug 'plasticboy/vim-markdown'
+
+" files
+if has('mac')
+    Plug '/usr/local/opt/fzf'
+else
+    Plug '~/.fzf'
+endif
+Plug 'junegunn/fzf.vim'
+
+" deoplete
+"if has('nvim')
+"  Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
+"else
+"  Plug 'Shougo/deoplete.nvim'
+"  Plug 'roxma/nvim-yarp'
+"  Plug 'roxma/vim-hug-neovim-rpc'
+"endif
+"let g:deoplete#enable_at_startup = 1
+
+call plug#end()
+
+" ===== General =====
+
+set rtp+=/usr/local/bin/
+set mouse=a
 
 " set command history to 500
 set history=500
@@ -15,10 +58,7 @@ set history=500
 set wildignore+=*/tmp/*,*.so,*.swp,*.zip     " MacOSX/Linux
 set wildignore+=*\\tmp\\*,*.swp,*.zip,*.exe  " Windows
 
-" change cursor shape in insert mode
-" such a lovely thing :)
-
-" OS X
+" change cursor to line in insert mode
 if exists('$TMUX')
     let &t_SI = "\<Esc>]50;CursorShape=1\x7"
     let &t_EI = "\<Esc>]50;CursorShape=0\x7"
@@ -27,11 +67,9 @@ else
     let &t_EI = "\<Esc>]50;CursorShape=0\x7"
 endif
 
-syntax enable
+syntax on
 
-" =================
-" UI/Colours
-" =================
+" ===== UI/Colours =====
 
 " highlight current line cursor is on
 set cursorline
@@ -44,16 +82,16 @@ set relativenumber
 set ruler
 
 " height of the command bar
-set cmdheight=2
+set cmdheight=1
 
 " make backspace act like backspace
 set backspace=eol,start,indent
 set whichwrap+=<,>,h,l
 
-" Ignore case when searching
+" ignorecase by default for searches
+" smartcase => use case if captial 
+" letters are introduced in the pattern
 set ignorecase
-
-" When searching try to be smart about cases
 set smartcase
 
 " Highlight search results
@@ -65,7 +103,8 @@ set incsearch
 " don't redraw while executing macros (good performance config)
 set lazyredraw
 
-" for regex
+" for some regex chars to be non-escaped
+" use \v to enable all regex chars to be non-escaped
 set magic
 
 " Show matching brackets when the text indicator is over them
@@ -82,9 +121,7 @@ set tm=500
 " Always show the status line
 set laststatus=2
 
-" ====================
-" Text/editing-related
-" ===================
+" ===== Text Editing =====
 
 " auto read files when changed from other programs
 set autoread
@@ -92,8 +129,8 @@ set autoread
 " Use spaces instead of tabs
 set expandtab
 
-" Be smart when using tabs,
-" namely to backspace the correct amount of spaces
+" Be smart when using tabs, most notably 
+" to backspace the correct amount of spaces
 set smarttab
 
 " Set the tab width
@@ -108,12 +145,12 @@ set autoindent
 " Wrap lines
 set wrap
 
-" Linebreak on 500 characters
+" visual linebreak
 set lbr
-set tw=500
+set tw=80
 
 " store swap files elsewhere
-set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//,.
+set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//
 
 " automatically change to the dir where the file is
 "set autochdir
@@ -125,12 +162,12 @@ set spell spelllang=en_au
 
 " code folding
 set foldmethod=syntax
-set foldlevel=0
+set foldlevelstart=20
 
-" =============================
-" Re-maps (not plugin specific)
-" =============================
 
+" ===== re-maps =====
+
+" for wrapped lines
 map j gj
 map k gk
 
@@ -150,13 +187,13 @@ vmap Y "+y
 " toggle highlight
 map <leader><cr> :set hls!<cr>
 
-" Smart way to move between windows
+" easy way to move around windows
 map <C-j> <C-W>j
 map <C-k> <C-W>k
 map <C-h> <C-W>h
 map <C-l> <C-W>l
 
-" q for buffers is <leader>q
+" q and qa for buffers
 map <leader>q :bd<cr>
 map <leader>qa :1,1000 bd!<cr>
 
@@ -164,9 +201,6 @@ nnoremap <F1> <nop>
 nnoremap Q <nop>
 nnoremap K <nop>
 vnoremap K <nop>
-
-" delete word in insert mode
-imap <C-b> <Esc>ldw
 
 " buffers
 
@@ -176,51 +210,20 @@ set hidden
 nnoremap <leader>a :bp<CR>
 nnoremap <leader>s :bn<CR>
 
+" ===== Plugin Config =====
 
-" ========
-" Plugins
-" ========
+let g:vimwiki_table_mappings = 0
 
-call plug#begin('~/.vim/plugged')
+" Trigger configuration
+"let g:UltiSnipsExpandTrigger="<tab>"
+"let g:UltiSnipsJumpForwardTrigger="<c-b>"
+"let g:UltiSnipsJumpBackwardTrigger="<c-z>"
+"
+"" If you want :UltiSnipsEdit to split your window.
+"let g:UltiSnipsEditSplit="vertical"
+"let g:UltiSnipsSnippetsDir = "/home/miguelmartin/.vim/plugged/ultisnips-snippets/UltiSnips"
 
-""" UI
-
-" use buffers as tabs
-Plug 'ap/vim-buftabline'
-
-""" Colour scheme
-Plug 'morhetz/gruvbox'
-
-""" Syntax-checking/auto-completion
-Plug 'ap/vim-buftabline'
-Plug 'w0rp/ale'
-Plug 'Valloric/YouCompleteMe', { 'do': './install.py', 'for': ['c', 'cpp', 'objc', 'objcpp', 'cs', 'python', 'rust'] }
-
-""" Snippets
-Plug 'SirVer/ultisnips', { 'for': ['c', 'cpp', 'cpp', 'objcpp'] }
-Plug 'miguelmartin75/ultisnips-snippets', { 'for': ['c', 'cpp', 'cpp', 'objcpp'] }
-
-""" Text-editing/manipulation/movement
-Plug 'ervandew/supertab'
-Plug 'tpope/vim-surround'
-Plug 'tpope/vim-repeat'
-Plug 'joequery/Stupid-EasyMotion'
-Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
-
-""" File Browsing
-Plug 'kien/ctrlp.vim', { 'on': 'CtrlP' } " TODO: switch to fzf
-
-""" Git
-" TODO: barely use this: consider removing
-Plug 'tpope/vim-fugitive'
-
-call plug#end()
-
-" ==============
-" Plugin config
-" ==============
-
-" :e
+" :e to emulate NerdTree
 let g:netrw_banner = 0
 let g:netrw_liststyle = 3
 let g:netrw_browse_split = 4
@@ -228,95 +231,56 @@ let g:netrw_altv = 1
 let g:netrw_winsize = 25
 nmap <C-e> :Lexplore<cr>
 
-" Ultisnips
-" ---------
-let g:UltiSnipsSnippetsDir = "~/.vim/plugged/ultisnips-snippets/UltiSnips"
-
-augroup load_insert_mode_plugs
-    autocmd!
-    autocmd InsertEnter * call plug#load('ultisnips') | autocmd! load_insert_mode_plugs
-augroup END
-
-" YCM
-" ----
-
-nmap <leader>gt :YcmCompleter GetType<cr>
-nmap <leader>d :YcmCompleter GoToDefinition<cr>
-nmap <leader>r :YcmCompleter GoToDefinition<cr>
-let g:ycm_min_num_of_chars_for_completion = 1
-let g:ycm_confirm_extra_conf = 0
-
-" http://stackoverflow.com/a/18685821
-" make YCM compatible with UltiSnips (using supertab)
-let g:ycm_key_list_select_completion = ['<C-n>', '<Down>']
-let g:ycm_key_list_previous_completion = ['<C-p>', '<Up>']
-let g:SuperTabDefaultCompletionType = 'context'
-
-" remove the preview window automatically
-let g:ycm_autoclose_preview_window_after_insertion = 1
-
-" better key bindings for UltiSnipsExpandTrigger
-let g:UltiSnipsExpandTrigger = "<tab>"
-let g:UltiSnipsJumpForwardTrigger = "<tab>"
-let g:UltiSnipsJumpBackwardTrigger = "<s-tab>"
-
-"let g:ycm_cache_omnifunc = 0
-let g:ycm_semantic_triggers =  {
-\   'c' : ['->', '.'],
-\   'objc' : ['->', '.'],
-\   'ocaml' : ['.', '#'],
-\   'cpp,objcpp' : ['->', '.', '::'],
-\   'perl' : ['->'],
-\   'php' : ['->', '::'],
-\   'cs,java,javascript,d,python,perl6,scala,vb,elixir,go' : ['.'],
-\   'vim' : ['re![_a-zA-Z]+[_\w]*\.'],
-\   'ruby' : ['.', '::'],
-\   'lua' : ['.', ':'],
-\   'erlang' : [':'],
-\   'rust' : ['::', '.'],
-\ }
-
-" CtrlP
-" ------
-
-" have to setup a remapping 
-" because with vim-plug, CtrlP is
-" not initialised, lol.
-nmap <c-p> :CtrlP<CR>
-let g:ctrlp_map = '<c-p>'
-let g:ctrlp_cmd = 'CtrlP'
-
-" ColorScheme (gruvbox)
-" -------
-
+" colour scheme
 set background=dark
 set termguicolors
 colorscheme gruvbox
 
-" ==========================
-" Re-maps (plugin specific)
-" ==========================
+" add a highlight for 81 chars
+highlight ColorColumn ctermbg=magenta
+call matchadd('ColorColumn', '\%81v', 100)
+
+" Limelight
+let g:limelight_conceal_ctermfg = 'gray'
+let g:limelight_conceal_ctermfg = 240
+
+autocmd! User GoyoEnter Limelight
+autocmd! User GoyoLeave Limelight!
+
+" vimwiki
+let g:vimwiki_list = [{'path': '~/wiki/wiki',
+                      \ 'syntax': 'markdown', 'ext': '.md'}]
+
+
+" ===== Plugin-specific Remaps =====
+
+" fzf.vim
+nmap <C-p> :Files<cr>
+nmap <C-]> :Buffers<cr>
 
 " Stupid-EasyMotion
-" ------------------
 map <C-o> <Leader><Leader>w
 map <C-i> <Leader><Leader>W
 
+nmap <Leader>l :Limelight!!<cr>
+
 " Tagbar
-" ------
 nmap <Leader>t :TagbarToggle<CR> 
 
-" ==============
-" Auto-commands
-" ==============
+" ===== Auto-commands =====
 
-augroup text_editing:
+augroup text_editing
     autocmd!
     " Return to last edit position when opening files (You want this!)
     autocmd BufReadPost *
           \ if line("'\"") > 0 && line("'\"") <= line("$") |
      \   exe "normal! g`\"" |
      \ endif
-
-    autocmd FileType text,markdown setlocal tw=100
+    "autocmd Filetype text,markdown,mkd call WriteMode()
 augroup END
+
+function! WriteMode()
+	if !exists('#goyo')
+		Goyo 80
+	endif
+endfunction
