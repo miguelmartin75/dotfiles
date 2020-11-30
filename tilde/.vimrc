@@ -1,8 +1,5 @@
 call plug#begin('~/.vim/plugged')
 
-""" misc
-"Plug 'vimwiki/vimwiki'
-
 """ ui
 Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
 
@@ -14,12 +11,13 @@ Plug 'reedes/vim-pencil'
 """ colour scheme
 Plug 'morhetz/gruvbox'
 
-"" snippets
-Plug 'SirVer/ultisnips', { 'for': ['markdown', 'vimwiki'] }
-Plug 'miguelmartin75/ultisnips-snippets', { 'for': ['markdown', 'vimwiki'] }
+Plug 'autozimu/LanguageClient-neovim', {
+    \ 'branch': 'next',
+    \ 'do': 'bash install.sh',
+\ }
+Plug 'dense-analysis/ale'
 
 """ text-editing/manipulation/movement
-"Plug 'ervandew/supertab'
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-repeat'
 Plug 'joequery/Stupid-EasyMotion'
@@ -36,14 +34,14 @@ endif
 Plug 'junegunn/fzf.vim'
 
 " deoplete
-"if has('nvim')
-"  Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-"else
-"  Plug 'Shougo/deoplete.nvim'
-"  Plug 'roxma/nvim-yarp'
-"  Plug 'roxma/vim-hug-neovim-rpc'
-"endif
-"let g:deoplete#enable_at_startup = 1
+if has('nvim')
+  Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
+else
+  Plug 'Shougo/deoplete.nvim'
+  Plug 'roxma/nvim-yarp'
+  Plug 'roxma/vim-hug-neovim-rpc'
+endif
+let g:deoplete#enable_at_startup = 1
 
 call plug#end()
 
@@ -214,6 +212,13 @@ nnoremap <leader>s :bn<CR>
 
 let g:vimwiki_table_mappings = 0
 
+" close preview when we leave insert mode
+autocmd InsertLeave * if pumvisible() == 0 | pclose | endif 
+
+" use tab to navigate omni completion
+inoremap <expr><TAB> pumvisible() ? "\<C-n>" : "\<TAB>"
+inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<S-TAB>"
+
 " Trigger configuration
 "let g:UltiSnipsExpandTrigger="<tab>"
 "let g:UltiSnipsJumpForwardTrigger="<c-b>"
@@ -251,21 +256,27 @@ autocmd! User GoyoLeave Limelight!
 let g:vimwiki_list = [{'path': '~/wiki/wiki',
                       \ 'syntax': 'markdown', 'ext': '.md'}]
 
-
 " ===== Plugin-specific Remaps =====
+
+" ale
+nnoremap ]a :ALENextWrap<CR>
+nnoremap [a :ALEPreviousWrap<CR>
+nnoremap ]A :ALELast
+nnoremap [A :ALEFirst
 
 " fzf.vim
 nmap <C-p> :Files<cr>
 nmap <C-]> :Buffers<cr>
 
-" Stupid-EasyMotion
-map <C-o> <Leader><Leader>w
-map <C-i> <Leader><Leader>W
-
 nmap <Leader>l :Limelight!!<cr>
 
 " Tagbar
 nmap <Leader>t :TagbarToggle<CR> 
+
+" LanguageClient-neovim
+nnoremap <silent> K :call LanguageClient#textDocument_hover()<CR>
+nnoremap <silent> gd :call LanguageClient#textDocument_definition()<CR>
+nnoremap <silent> cn :call LanguageClient#textDocument_rename()<CR>
 
 " ===== Auto-commands =====
 
@@ -284,3 +295,5 @@ function! WriteMode()
 		Goyo 80
 	endif
 endfunction
+
+source ~/.fb-vimrc

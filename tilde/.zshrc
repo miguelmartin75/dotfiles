@@ -3,7 +3,7 @@
 export PATH="/usr/local/cuda/bin:/home/media/config/mxe/usr/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin:/usr/texbin:/usr/local/bin/depot_tools"
 
 # Preferred editor for local and remote sessions
-export EDITOR=vim
+export EDITOR=nvim
 
 # Compilation flags
 export ARCHFLAGS="-arch x86_64"
@@ -88,3 +88,6 @@ function wikiedit() {
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
+source ~/.fb-zshrc
+
+source "$HOME/.cargo/env"
