@@ -1,0 +1,629 @@
+* Design Guideline
+Main priority is **org-mode** with this I prioritize what on what vim cannot do (as otherwise I may as well be using vim). I do aim emacs to be vim-like. Code editing is not a priority; I'll just use vim for that.
+
+**In general:**
+
+- All keyboard shortcuts specific to emacs will be under Ctrl or Meta (Alt). This includes navigating the UI, finding files, buffers, expanding windows.
+- All files related to text editing and org-mode will be under the leader key or have the default org-mode configuration.
+
+* Cheatsheet
+
+Please note that `<leader>` refers to space in NORMAL mode and C-SPC in INSERT mode.
+
+** Help Commands
+
+I use Ivy and which-key where possible. which-key will show which key you can use after typing a prefix. Ivy is for searching files/commands/buffers.
+https://www.gnu.org/software/emacs/manual/html_node/emacs/Help.html
+
+| Emacs Command/Description | Emacs Default Binding | Preferred Binding |
+|---------------------------+-----------------------+-------------------|
+| describe-function         | C-h f                 |                   |
+| describe-bindings         | C-h b                 |                   |
+| describe-variable         | C-h v                 |                   |
+| search help               | C-h a                 |                   |
+| search emacs packages     | C-h p                 |                   |
+
+** TODO General Commands
+
+| Emacs Command/Description      | Emacs Default Binding | Preferred Binding |
+|--------------------------------+-----------------------+-------------------|
+| reload config                  | None                  | C-x r             |
+| load this file                 | None                  | C-x c             |
+| load init.el                   | None                  | C-x C             |
+| execute elisp function/command | M-x                   |                   |
+| execute line                   | C-x C-e               |                   |
+| cancel command                 | C-g                   | ESC               |
+| evaluate whole buffer          | M-x eval-buffer       |                   |
+
+** TODO UI Navigation
+
+TODO: https://www.reddit.com/r/emacs/comments/jzzo1q/expand_buffersplit_temporarily/
+
+| Emacs Command/Description       | Emacs Default Binding | Preferred Binding |
+|---------------------------------+-----------------------+-------------------|
+| Move to window                  | ?                     | C-w hjkl          |
+| delete-window (remove the pane) | c-x 0                 | :q                |
+| focus on split                  | C-x 0                 |                   |
+
+** TODO Text Editing
+
+| Emacs Command/Description | Emacs Default Binding | Preferred Binding |
+|---------------------------+-----------------------+-------------------|
+| save                      | C-x C-s               | :w                |
+| fuzzy find file           | C-x C-f               | <leader>f         |
+| fuzzy find buffer         | C-x b                 | <leader>b         |
+| start interactive search  | C-s                   | <leader>s         |
+| exit/finish search        | C-g or RET            |                   |
+| open project              | C-c p                 | <leader>p         |
+
+** TODO Org-Mode
+
+| Command                       | Default Binding     | To Use                    |
+|-------------------------------+---------------------+---------------------------|
+| Collapse/Expand Heading       | Tab                 | za                        |
+| Table Move To Next Column/Row | Tab                 | Tab                       |
+| Insert link                   | M-x org-insert-link | <leader>l                 |
+| Insert codeblock              | None                | Insert <s, <el, <py, etc. |
+| Execute code-block            | ?                   | <leader>e                 |
+| Create heading                | ?                   | I                         |
+
+*** TODO Tasks
+
+Task times are automatically logged when they switch state.
+
+| Command                          | Default Binding  | To Use    |
+|----------------------------------+------------------+-----------|
+| Open org-agenda                  | M-x org-agenda   | <leader>a |
+| Create TODO/Cycle State          | Shift Left/Right | <leader>t |
+| Set Task State                   |                  | <leader>s |
+| Capture Task                     | M-x org-capture  | <leader>c |
+| org-set-effort                   | C-c C-x e        | <leader>e |
+
+** TODO org-agenda
+???
+
+* Visuals
+** Theme
+
+https://github.com/cryon/almost-mono-themes
+
+#+begin_src emacs-lisp
+;;(use-package doom-themes
+;;    :ensure t
+;;    :config
+;;    (load-theme 'doom-gruvbox-light)
+;;    (setq doom-gruvbox-light-variant "hard")
+;;)
+
+;;(use-package gruvbox-theme :ensure t :config (load-theme 'gruvbox-light-soft t))
+(use-package gruvbox-theme :ensure t :config (load-theme 'gruvbox-dark-soft t))
+
+;;(use-package almost-mono-themes
+;;  :ensure t
+;;  :config
+;;  ;; (load-theme 'almost-mono-black t)
+;;  (load-theme 'almost-mono-white t))
+;;
+;;;; Good alternative
+;;;;(load-theme 'tango t)
+#+end_src
+
+** Mode Line
+#+begin_src emacs-lisp
+;; use the char height
+;;(use-package doom-modeline :ensure t :init (setq doom-modeline-height 1) (doom-modeline-mode))
+#+end_src
+** Display Text Centered
+#+begin_src emacs-lisp
+(defun my/org-mode-visual-fill ()
+  (setq visual-fill-column-width 100
+        visual-fill-column-center-text t)
+  (visual-fill-column-mode 1))
+
+(use-package visual-fill-column
+  :ensure t
+  :hook (org-mode . my/org-mode-visual-fill))
+#+end_src
+** Fonts
+
+Use Menlo and Helvetica, default to size 14.
+
+#+begin_src emacs-lisp
+(defvar efs/default-font-size 140)
+(defvar efs/default-variable-font-size 140)
+
+(set-face-attribute 'default nil :font "Menlo" :height efs/default-font-size)
+
+;; Set the fixed pitch face
+(set-face-attribute 'fixed-pitch nil :font "Menlo" :height efs/default-font-size)
+
+;; Set the variable pitch face
+(set-face-attribute 'variable-pitch nil :font "Helvetica" :height efs/default-variable-font-size :weight 'regular)
+#+end_src
+
+** Icons
+
+#+begin_src emacs-lisp
+(use-package all-the-icons :ensure t)
+#+end_src
+
+** GUI configuration
+
+I don't care for anything besides text.
+#+begin_src emacs-lisp
+(tool-bar-mode -1)          ; Disable the toolbar
+(scroll-bar-mode -1)        ; Disable visible scrollbar
+(set-fringe-mode 10)        ; Give some breathing room
+(menu-bar-mode -1)          ; Disable the menu bar
+#+end_src
+
+** Misc
+
+Don't blink the cursor
+#+begin_src emacs-lisp
+(blink-cursor-mode 0)
+#+end_src
+
+Highlight matching parans
+#+begin_src emacs-lisp
+(use-package rainbow-delimiters :ensure t :config (rainbow-delimiters-mode))
+#+end_src
+
+Show vim-like tilde in the fringe on empty lines.
+#+begin_src emacs-lisp
+(use-package vi-tilde-fringe
+  :ensure t
+  :config
+  (global-vi-tilde-fringe-mode 1))
+#+end_src
+* which-key
+
+Show which keys I can use after a command, e.g. C-c
+
+#+begin_src emacs-lisp
+(use-package which-key
+  :ensure t
+  :init (which-key-mode)
+  :diminish which-key-mode
+  :config
+  (setq which-key-idle-delay 1))
+#+end_src
+
+* helpful
+
+Better help information about a command
+
+#+begin_src emacs-lisp
+(use-package helpful
+  :ensure t
+  :custom
+  (counsel-describe-function-function #'helpful-callable)
+  (counsel-describe-variable-function #'helpful-variable)
+  :bind
+  ([remap describe-function] . counsel-describe-function)
+  ([remap describe-command] . helpful-command)
+  ([remap describe-variable] . counsel-describe-variable)
+  ([remap describe-key] . helpful-key))
+#+end_src
+
+* general (plug-in)
+Use (my/leader-keys ...) to add more
+
+#+begin_src emacs-lisp
+(use-package general
+:ensure t
+:config
+(general-create-definer my/leader-keys
+    :keymaps '(normal insert visual emacs)
+    :prefix "SPC"
+    :global-prefix "C-SPC")
+
+)
+#+end_src
+* Ivy
+Auto completion
+
+#+begin_src emacs-lisp
+(use-package counsel
+  :ensure t
+  :config
+  (counsel-mode 1)
+)
+
+(use-package ivy
+  :ensure t
+  :diminish
+  :bind (("C-s" . swiper)
+	 :map ivy-minibuffer-map
+	 ("TAB" . ivy-alt-done)
+	 ("C-l" . ivy-alt-done)
+	 ("C-j" . ivy-next-line)
+	 ("C-k" . ivy-previous-line)
+	 :map ivy-switch-buffer-map
+	 ("C-k" . ivy-previous-line)
+	 ("C-l" . ivy-done)
+	 ("C-d" . ivy-switch-buffer-kill)
+	 :map ivy-reverse-i-search-map
+	 ("C-k" . ivy-previous-line)
+	 ("C-d" . ivy-reverse-i-search-kill))
+  :config
+  (ivy-mode 1))
+
+(use-package ivy-rich
+  :ensure t
+  :init
+  (ivy-rich-mode 1))
+#+end_src
+
+#+begin_src emacs-lisp
+(my/leader-keys "b" '(counsel-switch-buffer :which-key "switch buffer"))
+(my/leader-keys "f" '(counsel-find-file :which-key "find a file"))
+#+end_src
+
+* Projectile
+
+Basic usage <leader>p
+
+| Description                  | Mapping                        |
+|------------------------------+--------------------------------|
+| Open Projectile Map Window   | <leader>P                      |
+| Open project                 | <leader>p                      |
+| Open file in current project | <leader><leader> or <leader>pf |
+
+#+begin_src emacs-lisp
+(use-package projectile
+  :diminish projectile-mode
+  :config (projectile-mode)
+  :custom ((projectile-completion-system 'ivy))
+  :bind-keymap
+  ("C-c p" . projectile-command-map)
+  :init
+  (setq projectile-project-search-path '("~/repos" "~/org"))
+)
+#+end_src
+
+#+begin_src emacs-lisp
+(my/leader-keys "P" '(projectile-command-map :which-key "projectile..."))
+(my/leader-keys "p" '(projectile-switch-project :which-key "open project"))
+(my/leader-keys "SPC" '(projectile-find-file :which-key "find file in current project"))
+#+end_src
+* Org-Mode
+
+** Proper Indent in Code Blocks
+
+https://github.com/syl20bnr/spacemacs/issues/13255?fbclid=IwAR2zcIa7_doP6xNOab3WsQ-2w_J6a6FzzjCE_O5lYQtCU5c_ICYW6Xs3vVk
+#+begin_src emacs-lisp
+;; weird indentation when pressing o or O
+(setq org-src-preserve-indentation t)
+#+end_src
+** TODO org-capture
+
+** evil mappings
+
+https://github.com/emacs-evil/evil-collection
+#+begin_src emacs-lisp
+(use-package evil-collection
+  :after evil
+  :ensure t
+  :config
+  (evil-collection-init))
+#+end_src
+
+https://github.com/Somelauw/evil-org-mode
+
+#+begin_src emacs-lisp
+(use-package evil-org
+  :ensure t
+  :after org
+  :init (evil-org-mode)
+  :config
+  (add-hook 'org-mode-hook 'evil-org-mode)
+  (add-hook 'evil-org-mode-hook
+	      (lambda ()
+		(evil-org-set-key-theme)))
+  (require 'evil-org-agenda)
+  (evil-org-agenda-set-keys))
+#+end_src
+** Keymaps
+*** Tasks
+
+#+begin_src emacs-lisp
+;; set effort
+(my/leader-keys "e" '(org-set-effort :which-key "set effort for org-mode"))
+
+;; capture a task
+(my/leader-keys "c" '(org-capture :which-key "capture task"))
+#+end_src
+
+*** Insert Link
+#+begin_src emacs-lisp
+(my/leader-keys "l" '(org-insert-link :which-key "insert link in org-mode"))
+#+end_src
+*** Execute Blocks
+<leader>e
+#+begin_src emacs-lisp
+(my/leader-keys "e" '(org-babel-execute-src-block :which-key "execute org-mode source block"))
+#+end_src
+
+Test
+#+begin_src emacs-lisp
+(+ 3 7)
+#+end_src
+
+#+RESULTS:
+: 10
+** Org Directory
+#+begin_src emacs-lisp
+;; Store all my org files in ~/org.
+(setq org-directory "~/org")
+
+;; And all of those files should be in included agenda.
+(setq org-agenda-files '("~/org"))
+#+end_src
+** Inline Latex
+
+#+begin_src emacs-lisp
+(setq org-format-latex-options (plist-put org-format-latex-options :scale 2.5))
+#+end_src
+
+$x^2 + 3x +2y = 0$
+
+\begin{equation}
+e^{i\pi} = 1
+\end{equation}
+
+#+begin_src emacs-lisp
+(use-package org-fragtog :init (add-hook 'org-mode-hook 'org-fragtog-mode))
+#+end_src
+
+** Images
+Display by default
+#+begin_src emacs-lisp
+(setq org-startup-with-inline-images t)
+#+end_src
+*** Max width for images
+#+begin_src emacs-lisp
+(setq org-image-actual-width (/ (display-pixel-width) 2))
+;;(setq org-image-actual-width (/ (display-pixel-width) 1))
+#+end_src
+** Tasks
+*** Keywords
+#+begin_src emacs-lisp
+(setq org-todo-keywords
+    '((sequence "TODO(t!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)")))
+#+end_src
+*** Task Time Stamps
+#+begin_src emacs-lisp
+(setq org-clock-persist 'history)
+(org-clock-persistence-insinuate)
+#+end_src
+*** Use Log Drawer
+#+begin_src emacs-lisp
+(setq org-log-into-drawer t)
+#+end_src
+
+** Quickly Insert Codeblock
+Reference: https://emacs.stackexchange.com/questions/12841/quickly-insert-source-blocks-in-org-mode
+
+Type <s to add a source code block.
+#+begin_src emacs-lisp
+(require 'org-tempo)
+#+end_src
+
+Add some extra ones
+
+#+begin_src emacs-lisp
+(add-to-list 'org-structure-template-alist '("sh" . "src shell"))
+(add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
+(add-to-list 'org-structure-template-alist '("py" . "src python"))
+#+end_src
+
+** Visuals/Misc
+*** Text Scaling
+#+begin_src emacs-lisp
+(dolist (face '((org-level-1 . 2.0)
+                (org-level-2 . 1.75)
+                (org-level-3 . 1.5)
+                (org-level-4 . 1.25)
+                (org-level-5 . 1.1)
+                (org-level-6 . 1.05)
+                (org-level-7 . 1.0)
+                (org-level-8 . 1.0)))
+        (set-face-attribute (car face) nil :weight 'regular :height (cdr face)))
+
+;; (custom-theme-set-faces
+;;   'user
+;;   '(org-block ((t (:inherit fixed-pitch))))
+;;   '(org-code ((t (:inherit (shadow fixed-pitch)))))
+;;   '(org-document-info ((t (:foreground "dark orange"))))
+;;   '(org-document-info-keyword ((t (:inherit (shadow fixed-pitch)))))
+;;   '(org-indent ((t (:inherit (org-hide fixed-pitch)))))
+;;   '(org-link ((t (:inherit :foreground "royal blue" :underline t))))
+;;   '(org-meta-line ((t (:inherit (font-lock-comment-face fixed-pitch)))))
+;;   '(org-property-value ((t (:inherit fixed-pitch))) t)
+;;   '(org-special-keyword ((t (:inherit (font-lock-comment-face fixed-pitch)))))
+;;   '(org-table ((t (:inherit fixed-pitch :foreground "#83a598"))))
+;;   '(org-tag ((t (:inherit (shadow fixed-pitch) :weight bold :height 0.8))))
+;;   '(org-verbatim ((t (:inherit (shadow fixed-pitch))))))
+#+end_src
+*** Fix indentation for heading
+Reference: https://emacs.stackexchange.com/questions/55413/org-mode-how-to-expand-s-after-heading-without-indentation
+#+begin_src emacs-lisp
+(setq org-adapt-indentation nil)
+#+end_src
+*** Make bullets look nicer
+#+begin_src emacs-lisp
+(use-package org-bullets
+  :ensure t
+  :after org
+  :hook (org-mode . org-bullets-mode)
+  :custom
+  (org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●")))
+#+end_src
+*** Replace list hyphen with dot
+#+begin_src emacs-lisp
+(font-lock-add-keywords 'org-mode
+			'(("^ *\\([-]\\) "
+			 (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•"))))))
+#+end_src
+** Better RET key
+#+begin_src emacs-lisp
+(use-package org-autolist :init (add-hook 'org-mode-hook (lambda () (org-autolist-mode))))
+#+end_src
+
+* TODO LSP
+** TODO lsp-mode
+#+begin_src emacs-lisp
+;;(defun efs/lsp-mode-setup ()
+;;  (setq lsp-headerline-breadcrumb-segments '(path-up-to-project file symbols))
+;;  (lsp-headerline-breadcrumb-mode))
+
+  ;;(lsp-mode . my/lsp-mode-setup)
+
+  ;; enable lsp when you enter a particular language mode
+
+(use-package lsp-mode
+  :ensure t
+  :commands (lsp lsp-deferred)
+  :hook (python-mode . lsp)
+  :init
+  (setq lsp-keymap-prefix "C-c l")  ;; Or 'C-l', 's-l'
+  :config
+  (lsp-enable-which-key-integration t))
+#+end_src
+** TODO lsp-ui-mode
+#+begin_src emacs-lisp
+(use-package lsp-ui :ensure t :hook (lsp-mode . lsp-ui-mode))
+#+end_src
+** TODO lsp-ivy
+#+begin_src emacs-lisp
+(use-package lsp-ivy :ensure t)
+#+end_src
+** TODO dap-mode
+Not a priority right now.
+* flyspell
+
+#+begin_src emacs-lisp
+(flyspell-mode)
+#+end_src
+* flycheck
+#+begin_src emacs-lisp
+(use-package flycheck
+  :ensure t
+  :init (global-flycheck-mode))
+#+end_src
+
+* TODO company (autocomplete)
+#+begin_src emacs-lisp
+(use-package company
+  :after lsp-mode
+  :hook (lsp-mode . company-mode)
+  :bind (:map company-active-map
+         ("<tab>" . company-complete-selection))
+        (:map lsp-mode-map
+         ("<tab>" . company-indent-or-complete-common))
+  :custom
+  (company-minimum-prefix-length 1)
+  (company-idle-delay 0.0))
+#+end_src
+
+better front end
+
+#+begin_src emacs-lisp
+(use-package company-box :ensure t :hook (company-mode . company-box-mode))
+#+end_src
+
+* Misc
+** MacOS Specific
+
+#+begin_src emacs-lisp
+;; setup path
+(setenv "PATH" (concat (getenv "PATH") ":" (expand-file-name "/usr/local/bin") ":" (expand-file-name "/Library/TeX/Distributions/.DefaultTeX/Contents/Programs/texbin")))
+
+(setq exec-path (append exec-path (list (expand-file-name "/usr/local/bin") (expand-file-name "/Library/TeX/Distributions/.DefaultTeX/Contents/Programs/texbin"))))
+#+end_src
+** Enable Line Numbers
+*** relative line numbers
+#+begin_src emacs-lisp
+(column-number-mode)
+(global-display-line-numbers-mode t)
+(setq display-line-numbers-type 'visual)
+#+end_src
+** Disable Line Numbers For Some Modes
+Disable line numbers for some modes by default. Re-enable with `M-x display-line-numbers-mode`
+
+#+begin_src emacs-lisp
+(dolist (mode '(term-mode-hook
+		shell-mode-hook
+		treemacs-mode-hook
+		eshell-mode-hook))
+  (add-hook mode (lambda () (display-line-numbers-mode 0))))
+#+end_src
+
+** Make ESC quit prompts
+#+begin_src emacs-lisp
+(global-set-key (kbd "<escape>") 'keyboard-escape-quit)
+#+end_src
+
+** Global Keybindings
+#+begin_src emacs-lisp
+;; Open config file by pressing C-x and then C
+(global-set-key (kbd "C-x C") (lambda () (interactive) (find-file "~/.emacs.d/init.el")))
+(global-set-key (kbd "C-x c") (lambda () (interactive) (find-file "~/.emacs.d/myinit.org")))
+(global-set-key (kbd "C-x R") (lambda () (interactive) (load user-init-file)))
+#+end_src
+* Sane Defaults
+** Save Cursor
+#+begin_src emacs-lisp
+(save-place-mode 1)
+#+end_src
+
+** Scrolling
+#+begin_src emacs-lisp
+;;(setq scroll-margin 10
+;;   scroll-step 1
+;;   next-line-add-newlines nil
+;;   scroll-conservatively 10000
+;;   scroll-preserve-screen-position 1)
+;;
+;;(setq mouse-wheel-follow-mouse 't)
+;;(setq mouse-wheel-scroll-amount '(1 ((shift) . 1)))
+#+end_src
+** Backup Files
+https://emacs.stackexchange.com/a/36
+#+begin_src emacs-lisp
+;; Put backup files neatly away
+(let ((backup-dir "~/tmp/emacs/backups")
+      (auto-saves-dir "~/tmp/emacs/auto-saves/"))
+  (dolist (dir (list backup-dir auto-saves-dir))
+    (when (not (file-directory-p dir))
+      (make-directory dir t)))
+  (setq backup-directory-alist `(("." . ,backup-dir))
+        auto-save-file-name-transforms `((".*" ,auto-saves-dir t))
+        auto-save-list-file-prefix (concat auto-saves-dir ".saves-")
+        tramp-backup-directory-alist `((".*" . ,backup-dir))
+        tramp-auto-save-directory auto-saves-dir))
+
+(setq backup-by-copying t    ; Don't delink hardlinks
+      delete-old-versions t  ; Clean up the backups
+      version-control t      ; Use version numbers on backups,
+      kept-new-versions 5    ; keep some new versions
+      kept-old-versions 3)   ; and some old ones, too
+#+end_src
+** Spaces/Newline
+Delete trailing spaces and add new line in the end of a file on save.
+#+begin_src emacs-lisp
+(add-hook 'before-save-hook 'delete-trailing-whitespace)
+(setq require-final-newline t)
+#+end_src
+
+** Visual-Line-Mode
+
+#+begin_src emacs-lisp
+(global-visual-line-mode)
+(setq visual-fill-column-fringes-outside-margins nil)
+(setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
+#+end_src
+* References
+1. https://github.com/daviwil/emacs-from-scratch/blob/master/init.el
+2. https://github.com/freetonik/castlemacs/blob/master/init.el
