@@ -1,0 +1,451 @@
+#+TITLE: Doom/Emacs Config
+
+* Goals
+The highest priority of this configuration is to optimize for writing/org-mode, for:
+- personal notes
+- tasks
+- technical documents
+
+** Why Doom?
+
+1. Reduce my config file size
+2. Have optimized startup times
+3. Reduce fucking around with configuration
+
+* TODO Cheatsheets
+* org-mode
+** TODO How I use org-mode
+I use org-mode for note taking mixed with tasks. Why roam? So that I can easily add links, browse links, view backlinks, etc. I may not end up having to use roam for longer term but it's pretty friendly so I'll use it.
+
+*** Tasks
+#+begin_src emacs-lisp
+(after! org
+    ;; keywords
+    (setq org-todo-keywords
+        '((sequence "TODO(t!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)")))
+
+    ;; task time stamps
+    (setq org-clock-persist 'history)
+    (org-clock-persistence-insinuate)
+
+    ;; log into the drawer
+    (setq org-log-into-drawer t)
+)
+#+end_src
+
+*** org-capture
+
+Everything I collect goes into an inbox for me to sort out at the end of each day.
+
+#+begin_src emacs-lisp
+(after! org
+    (setq org-capture-templates
+        '(("t" "Todo" entry (file+olp "~/org/life.org" "Tasks" "Inbox")
+        "* TODO %?\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+        ("n" "Note" entry (file+olp "~/org/life.org" "Unfiled Notes")
+        "* %?\nAdded: %U" :empty-lines 1)
+        ("i" "Idea" entry (file+olp "~/org/life.org" "Ideas")
+        "* %?\nAdded: %U" :empty-lines 1)
+        ("j" "Journal" entry (file+olp+datetree "~/org/life.org" "Journal")
+        "* %U\n%?" :empty-lines 1))
+    )
+)
+#+end_src
+
+*** org-roam
+
+Disable showing org-roam sidebar by default. https://github.com/org-roam/org-roam/issues/1286
+#+begin_src emacs-lisp
+(use-package! org-roam :config
+  ;;(add-to-list 'company-backends '(company-capf))
+  (setq +org-roam-open-buffer-on-find-file nil)
+  (setq org-roam-completion-everywhere nil)
+)
+#+end_src
+
+*** org-ref
+
+#+begin_src emacs-lisp
+(use-package! org-ref)
+(after! org-ref
+
+  (setq reftex-default-bibliography '("~/org/references.bib"))
+
+  (setq bibtex-completion-bibliography '("~/org/references.bib"))
+
+  ;; see org-ref for use of these variables
+  (setq org-ref-bibliography-notes "~/org/notes.org"
+      org-ref-default-bibliography '("~/org/references.bib")
+      org-ref-pdf-directory "~/org/bibtex-pdfs")
+
+  ;; add entry
+  (map! :leader :desc "org-ref" "n B")
+  (map! :leader :desc "Insert existing citation" "n B i" 'org-ref-insert-link)
+  (map! :leader :desc "Add new citation from " "n B a" 'arxiv-add-bibtex-entry)
+
+  (org-ref-ivy-cite-completion)
+)
+
+#+end_src
+
+*** gscholar bibtex
+
+**** TODO change bibtex refs to variable
+#+begin_src emacs-lisp
+(use-package! gscholar-bibtex)
+(after! gscholar-bibtex
+  (setq gscholar-bibtex-database-file "~/org/references.bib")
+)
+#+end_src
+*** ivy-bibtex
+
+manage bibtex
+
+#+begin_src emacs-lisp
+(use-package! ivy-bibtex)
+(after! ivy-bibtex
+    (setq ivy-bibtex-default-action 'ivy-bibtex-insert-citation)
+    ;; https://github.com/tmalsburg/helm-bibtex/blob/master/ivy-bibtex.el#L186
+    ;; https://org-roam.discourse.group/t/ivy-bibtex-doesnt-create-new-notes-using-orb/768
+    (ivy-add-actions 'ivy-bibtex '(
+        ("u" ivy-bibtex-open-url-or-doi "Open URL or DOI in browser")
+        ("p" ivy-bibtex-open-pdf "Open PDF file (if present)")
+       )
+    )
+    (map! :leader :desc "Search bibliography" "nb" #'ivy-bibtex)
+    ;;(setq  org-ref-completion-library 'org-ref-ivy-cite
+    ;;        org-ref-notes-function 'orb-edit-notes
+    ;;        org-ref-get-pdf-filename-function 'org-ref-get-pdf-filename)
+)
+
+(use-package! org-roam-bibtex
+    :requires bibtex-completion
+    :custom
+    (orb-preformat-keywords
+        '(("citekey" . "=key=")
+        "title"
+        "url"
+        "author-or-editor-abbrev"
+        "abstract"
+        "author-or-editor"
+        "keywords")))
+
+(after! org-roam
+    (add-hook 'org-roam-mode org-roam-bibtex-mode)
+)
+#+end_src
+
+*** org-roam-bibtex
+
+#+begin_src emacs-lisp
+(use-package! org-roam-bibtex)
+
+(after! org-roam
+  (add-hook 'org-roam-mode 'org-roam-bibtex-mode)
+)
+#+end_src
+*** TODO org-babel
+:LOGBOOK:
+- State "TODO"       from              [2020-12-10 Thu 16:49]
+:END:
+
+execute src block with alt enter if in a source block
+
+#+begin_src emacs-lisp
+
+#+end_src
+
+** Details
+*** Org Directories
+
+#+begin_src emacs-lisp
+;; Store all my org files in ~/org.
+(setq org-directory "~/org")
+
+;; And all of those files should be in included agenda.
+;;(setq org-agenda-files '("~/org"))
+(setq org-agenda-files (directory-files-recursively "~/org/" "\\.org$"))
+#+end_src
+
+*** Visuals
+**** Set Bullets
+#+begin_src emacs-lisp
+(after! org
+    (setq org-superstar-headline-bullets-list '("⁖" "◉" "○" "✸" "✿"))
+)
+#+end_src
+**** Text Scaling
+:LOGBOOK:
+- State "TODO"       from              [2020-12-02 Wed 17:22]
+:END:
+#+begin_src emacs-lisp
+(after! org
+    (dolist (face '((org-level-1 . 2.0)
+                    (org-level-2 . 1.75)
+                    (org-level-3 . 1.5)
+                    (org-level-4 . 1.25)
+                    (org-level-5 . 1.1)
+                    (org-level-6 . 1.05)
+                    (org-level-7 . 1.0)
+                    (org-level-8 . 1.0)))
+    (set-face-attribute (car face) nil :weight 'regular :height (cdr face)))
+)
+#+end_src
+**** writeroom-mode
+Use writeroom mode by default for org-mode
+
+#+begin_src emacs-lisp
+(setq +zen-text-scale 1.25)
+(add-hook 'writeroom-mode-hook
+    (lambda ()
+       (if (bound-and-true-p writeroom-mode)
+           (display-line-numbers-mode -1)
+           (display-line-numbers-mode 'visual))
+    )
+)
+
+#+end_src
+
+**** Fix indentation for heading
+
+Reference: https://emacs.stackexchange.com/questions/22524/permanently-disable-org-indent-mode
+#+begin_src emacs-lisp
+(after! org
+  (add-hook 'org-mode-hook (lambda () (org-indent-mode -1)))
+  (setq org-adapt-indentation nil)
+)
+#+end_src
+
+**** Replace list hyphen with dot
+#+begin_src emacs-lisp
+(after! org
+    (font-lock-add-keywords 'org-mode
+                '(("^ *\\([-]\\) "
+                (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•"))))))
+)
+#+end_src
+**** Inline Latex
+$3 + 2x = y^2 + 2 + 3$
+
+#+begin_src emacs-lisp
+;; toggle it on hover
+(use-package! org-fragtog)
+(after! org
+  (setq org-format-latex-options (plist-put org-format-latex-options :scale 2.0))
+  (setq org-latex-create-formula-image-program 'dvisvgm)
+  (add-hook 'org-mode-hook 'org-fragtog-mode)
+)
+#+end_src
+*** Images
+Display by default
+#+begin_src emacs-lisp
+(setq org-startup-with-inline-images t)
+#+end_src
+**** Max width for images
+#+begin_src emacs-lisp
+(setq org-image-actual-width (/ (display-pixel-width) 2))
+#+end_src
+
+*** Editing
+**** Quickly Insert Codeblock
+Reference: https://emacs.stackexchange.com/questions/12841/quickly-insert-source-blocks-in-org-mode
+
+#+begin_src emacs-lisp
+;;(use-package! org-tempo)
+
+(require 'org-tempo)
+(add-to-list 'org-structure-template-alist '("sh" . "src shell"))
+(add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
+(add-to-list 'org-structure-template-alist '("py" . "src python"))
+#+end_src
+**** Better RET key
+
+#+begin_src emacs-lisp
+(use-package! org-autolist :init (add-hook 'org-mode-hook (lambda () (org-autolist-mode))))
+#+end_src
+*** Deft
+#+begin_src emacs-lisp
+(setq deft-directory "~/org" deft-recursive t)
+#+end_src
+*** org-roam-server
+#+begin_src emacs-lisp
+(defun my/org-roam-server-toggle () (interactive) (progn (server-mode) (org-roam-server-mode)))
+
+(map! :leader :desc "Toggle org roam server + server-mode" "n r s" 'my/org-roam-server-toggle)
+#+end_src
+*** TODO refile
+https://emacs.stackexchange.com/questions/10597/how-to-refile-into-a-datetree/29413#29413
+*** TODO extract clock data
+
+(nconc
+   '(("date" "hours"))
+   '(hline)
+   (let ((ast (org-element-parse-buffer 'element)))
+     (org-element-map ast 'clock
+       (lambda (x)
+         (let* ((val (org-element-property :value x))
+                (task (org-element-property
+                       :parent
+                       (org-element-property :parent x))))
+           `(,(let ((year (org-element-property :year-start val))
+                    (month (org-element-property :month-start val))
+                    (day (org-element-property :day-start val)))
+                ;; (insert (org-element-property :raw-value val))
+                (format "%s-%s-%s" year month day))
+             ;;,(org-element-property :PROJECT task)
+             ,(org-element-property :duration x)
+             )))))
+   '(hline)
+)
+
+Plot the data
+import matplotlib.pyplot as plt
+import datetime
+xs = set(d[0] for d in data[1:])
+ys = {x: 0 for x in xs}
+for x, y in data[1:]:
+    ys[x] += int(y.split(':')[0]) * 60 + int(y.split(':')[1])
+print(ys)
+
+ax = plt.subplot(111)
+
+#ax.figure()
+ds = [datetime.date(int(d[0].split('-')[0]), int(d[0].split('-')[1]), int(d[0].split('-')[2])) for d in ys.keys()]
+ax.bar(list(ys.keys()), list(ys.values()))
+#ax.title("Hours Spent Reading Per Day")
+#ax.xaxis_date()
+
+plt.savefig('img.png')
+return 'img.png'
+
+* Programming
+** TODO Languages
+   :LOGBOOK:
+   - State "TODO"       from              [2020-12-05 Sat 18:05]
+   :END:
+
+ #+begin_src emacs-lisp
+;;(when (and (executable-find "python3")
+;;             (string= python-shell-interpreter "python"))
+;;    (setq python-shell-interpreter "python3"))
+;;
+;;  ;; Env vars
+;;  (with-eval-after-load 'exec-path-from-shell
+;;    (exec-path-from-shell-copy-env "PYTHONPATH"))
+ #+end_src
+* Details/Misc
+** Text Editing
+*** Let me type the closing paren
+#+begin_src emacs-lisp
+(remove-hook 'doom-first-buffer-hook #'smartparens-global-mode)
+#+end_src
+
+*** Relative Line Numbers
+#+begin_src emacs-lisp
+;; This determines the style of line numbers in effect. If set to `nil', line
+;; numbers are disabled. For relative line numbers, set this to `relative'.
+(setq display-line-numbers-type 'visual)
+#+end_src
+
+*** Center Text
+#+begin_src emacs-lisp
+(use-package! olivetti
+  :init
+  (setq olivetti-body-width 100)
+  (add-hook 'text-mode-hook 'olivetti-mode)
+)
+#+end_src
+*** evil
+#+begin_src emacs-lisp
+(after! evil
+    (setq visual-fill-column-width 100)
+    (global-visual-line-mode)
+    ;;(visual-line-mode -1)
+
+
+    (setq visual-fill-column-fringes-outside-margins nil)
+    (setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
+)
+#+end_src
+
+** Faster Config Bindings
+
+#+begin_src emacs-lisp
+;; Open config file by pressing C-x and then C
+(global-set-key (kbd "C-x I") (lambda () (interactive) (find-file "~/.doom.d/init.el")))
+(global-set-key (kbd "C-x C") (lambda () (interactive) (find-file "~/.doom.d/packages.el")))
+(global-set-key (kbd "C-x c") (lambda () (interactive) (find-file "~/.doom.d/config.org")))
+(global-set-key (kbd "C-x R") (lambda () (interactive) (doom/reload)))
+#+end_src
+
+** macOS specifics
+#+begin_src emacs-lisp
+;; weird https://www.reddit.com/r/emacs/comments/jgwquf/macos_external_keyboard_remapped_modifier_keys/
+(setq ns-command-modifier 'super
+ns-option-modifier 'meta
+ns-alternate-modifier 'meta
+ns-control-modifier 'control
+ns-function-modifier 'hyper
+
+ns-right-command-modifier 'left
+ns-right-alternate-modifier 'left
+ns-right-option-modifier 'left
+ns-right-control-modifier 'left)
+
+;; setup path
+(setenv "PATH" (concat (getenv "PATH") ":" (expand-file-name "/usr/local/bin") ":" (expand-file-name "/Library/TeX/Distributions/.DefaultTeX/Contents/Programs/texbin")))
+
+(setq exec-path (append exec-path (list (expand-file-name "/usr/local/bin") (expand-file-name "/Library/TeX/Distributions/.DefaultTeX/Contents/Programs/texbin"))))
+#+end_src
+
+** Doom Specifics
+ #+begin_src emacs-lisp
+(setq user-full-name "Miguel Martin" user-mail-address "miguel@miguel-martin.com")
+
+(setq ispell-dictionary "en")
+ #+end_src
+
+** Visuals
+*** Theme
+:LOGBOOK:
+- State "DONE"       from "BLOCKED"    [2020-12-05 Sat 22:08]
+- State "BLOCKED"    from "DOING"      [2020-12-05 Sat 22:08]
+- State "DOING"      from "BLOCKED"    [2020-12-05 Sat 22:08]
+- State "BLOCKED"    from "DOING"      [2020-12-05 Sat 22:08]
+- State "DOING"      from "TODO"       [2020-12-05 Sat 22:08]
+:END:
+#+begin_src emacs-lisp
+;;(setq doom-theme 'doom-solarized-light)
+(setq doom-theme 'doom-gruvbox)
+#+end_src
+*** Font
+#+begin_src emacs-lisp
+(setq doom-font (font-spec :family "Menlo" :size 15 :weight 'semi-light)
+      doom-variable-pitch-font (font-spec :faimly "Helvetica" :size 15))
+
+(after! doom-themes
+  (setq doom-themes-enable-bold t
+        doom-themes-enable-italic t)
+)
+
+(use-package! mixed-pitch
+  :hook
+  ;; If you want it in all text modes:
+  (text-mode . mixed-pitch-mode))
+#+end_src
+
+* Tramp
+
+#+begin_src emacs-lisp
+;;(setq server-use-tcp t)
+;;(setq server-port 14000)
+;;(setq server-auth-key "todo")
+;;(server-start)
+;;
+;;;;(setq auth-sources '((:source "~/.authinfo.gpg")))
+;;
+;;(require 'tramp)
+;;(add-to-list 'tramp-remote-path 'tramp-own-remote-path)
+;;(setq tramp-default-method "sshx")
+;;(setq tramp-use-ssh-controlmaster-options nil)
+#+end_src
