@@ -60,6 +60,7 @@ Disable showing org-roam sidebar by default. https://github.com/org-roam/org-roa
   ;;(add-to-list 'company-backends '(company-capf))
   (setq +org-roam-open-buffer-on-find-file nil)
   (setq org-roam-completion-everywhere nil)
+  (setq completion-ignore-case t)
 )
 #+end_src
 
@@ -199,7 +200,8 @@ Use writeroom mode by default for org-mode
 (add-hook 'writeroom-mode-hook
     (lambda ()
        (if (bound-and-true-p writeroom-mode)
-           (display-line-numbers-mode -1)
+           ;;(display-line-numbers-mode -1)
+           (display-line-numbers-mode 'visual)
            (display-line-numbers-mode 'visual))
     )
 )
@@ -318,26 +320,11 @@ ax.bar(list(ys.keys()), list(ys.values()))
 plt.savefig('img.png')
 return 'img.png'
 
-* Programming
-** TODO Languages
-   :LOGBOOK:
-   - State "TODO"       from              [2020-12-05 Sat 18:05]
-   :END:
-
- #+begin_src emacs-lisp
-;;(when (and (executable-find "python3")
-;;             (string= python-shell-interpreter "python"))
-;;    (setq python-shell-interpreter "python3"))
-;;
-;;  ;; Env vars
-;;  (with-eval-after-load 'exec-path-from-shell
-;;    (exec-path-from-shell-copy-env "PYTHONPATH"))
- #+end_src
 * Details/Misc
 ** Text Editing
 *** Let me type the closing paren
 #+begin_src emacs-lisp
-(remove-hook 'doom-first-buffer-hook #'smartparens-global-mode)
+;;(remove-hook 'doom-first-buffer-hook #'smartparens-global-mode)
 #+end_src
 
 *** Relative Line Numbers
@@ -349,11 +336,11 @@ return 'img.png'
 
 *** Center Text
 #+begin_src emacs-lisp
-(use-package! olivetti
-  :init
-  (setq olivetti-body-width 100)
-  (add-hook 'text-mode-hook 'olivetti-mode)
-)
+;;(use-package! olivetti
+;;  :init
+;;  (setq olivetti-body-width 100)
+;;  (add-hook 'text-mode-hook 'olivetti-mode)
+;;)
 #+end_src
 *** evil
 #+begin_src emacs-lisp
@@ -368,9 +355,10 @@ return 'img.png'
 )
 #+end_src
 
-** Faster Config Bindings
+** Shortcuts to Frequent Files
 
 #+begin_src emacs-lisp
+(global-set-key (kbd "C-x z") (lambda () (interactive) (find-file "~/org/life.org")))
 ;; Open config file by pressing C-x and then C
 (global-set-key (kbd "C-x I") (lambda () (interactive) (find-file "~/.doom.d/init.el")))
 (global-set-key (kbd "C-x C") (lambda () (interactive) (find-file "~/.doom.d/packages.el")))
@@ -407,13 +395,6 @@ ns-right-control-modifier 'left)
 
 ** Visuals
 *** Theme
-:LOGBOOK:
-- State "DONE"       from "BLOCKED"    [2020-12-05 Sat 22:08]
-- State "BLOCKED"    from "DOING"      [2020-12-05 Sat 22:08]
-- State "DOING"      from "BLOCKED"    [2020-12-05 Sat 22:08]
-- State "BLOCKED"    from "DOING"      [2020-12-05 Sat 22:08]
-- State "DOING"      from "TODO"       [2020-12-05 Sat 22:08]
-:END:
 #+begin_src emacs-lisp
 ;;(setq doom-theme 'doom-solarized-light)
 (setq doom-theme 'doom-gruvbox)
@@ -434,18 +415,29 @@ ns-right-control-modifier 'left)
   (text-mode . mixed-pitch-mode))
 #+end_src
 
-* Tramp
+* Programming
+** Projects
 
 #+begin_src emacs-lisp
-;;(setq server-use-tcp t)
-;;(setq server-port 14000)
-;;(setq server-auth-key "todo")
-;;(server-start)
-;;
-;;;;(setq auth-sources '((:source "~/.authinfo.gpg")))
-;;
-;;(require 'tramp)
-;;(add-to-list 'tramp-remote-path 'tramp-own-remote-path)
-;;(setq tramp-default-method "sshx")
-;;(setq tramp-use-ssh-controlmaster-options nil)
+(after! projectile
+    (setq projectile-project-search-path '("~/repos"))
+)
 #+end_src
+** TODO Languages
+   :LOGBOOK:
+   - State "TODO"       from              [2020-12-05 Sat 18:05]
+   :END:
+
+ #+begin_src emacs-lisp
+(after! lsp
+  (setq lsp-enable-on-type-formatting nil)
+)
+
+
+(after! lsp-ui
+  (setq lsp-ui-doc-position 'top)
+  (setq lsp-ui-doc-enable t)
+  (add-hook 'lsp-mode 'lsp-ui-doc-mode)
+  (setq lsp-ui-doc-max-width 80)
+)
+ #+end_src
