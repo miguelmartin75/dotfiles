@@ -1,10 +1,99 @@
 #+TITLE: Doom/Emacs Config
 
-* Goals
+* Overview of Configuration
+** Goals
+- Text editing
+  + evil-mode for vim
+- Writing
+  + Notes
+  + Task tracking, scheduling events, etc.
+    - Specific to
+  + Personal wiki/knowdlege
+    - Uses org-roam
+  + Exporitng of notes:
+    - Writing papers
+    - Literature notes
+    - etc.
+  + Export
+  + Blogging
+- Programming
+  + Use of vterm (terminal emulator) over iTerm2 on OSX
+    - Allows for easy remote machine development
+  + Autocomplete (LSP), debugging, etc.
+- Literate programming
+  + for learning, teaching/blogging, notes and documenting scripts/configs, etc.
+
+** Why Emacs?
+
+*** Mentality of emacs (and the obligatory unix philosophy)
+
+Emacs has been said that it does not fit in the unix philosophy. I both agree and disagree. It is an emacs-lisp interpreter. Your configuration lives in the program that it is running in. Emacs, as in the text editor, is now built on this lisp-interpreter.
+
+The issue is, it tries to do everything. Effectively be your operating system: the way you interface with the computer. Theoretically this is true to some extent, which does seem to violate the unix philosophy. Though you can view emacs as you view your hands, it can interface with anything in the "world" of the computer; it may not be great for doing that particular task, but it doesn't matter, you can pick up and use it within your workflow.
+
+
+*** TODO is emacs right for you?
+:LOGBOOK:
+- State "TODO"       from              [2020-12-20 Sun 21:19]
+:END:
+
+
+I honestly think, at least from a programmer's perspective, this is an amazing concept. You interface your compute with the code you use to configure your text editor and other programs you use. I do like the fact that emacs-lisp is a pretty decent language. Though honestly, learning emacs was the first time I've ever used a functional language properly.
+
+So why not just use X? Where X = vim+tmux+bash/zsh+etc., simply because, it takes longer to learn
+
+- Learn emacs-lisp
+- Live in the world of text more frequently
+  + Be able to easily go to your
+
+Realistically having a seperate language to communicate with your machine is fine. It's just harder for us to context switch,
+
+*** lol
+
+It is the ultimate (theoretical) productivity machine. It will be addicting to stop, you will be spending a lot of time configuring emacs. It cannot replace pen and paper but that's okay.
+
+
+Emacs is not a text editor, it is a way of thinking, it is a single general tool to do things. If it doesn't do it quite right, you resort to using the specific tool you need. It is the jack of all trades tool. For some things, with extension, it actually does better than the standard tool you'd use.
+
+This of course, is similar to that of the command line. You enter a command, your compute spits out a result,
+
+Unfortunately, this is far from perfect with Emacs. Though it's a step in the right direction.
+
+I think the confusion is because emacs can do anything. And honestly it (the community) aims it to do absolutely anything. It is an interface to your computer. In order to analyze this further, we must determine your tasks for using the compute
+
+At the end of the day, emacs is a tool, it's a nice shiny tool with lots of little gadgets. It can feel a bit gross, especially in the stages of learning, but through time you learn to love it. The reason is simple: you & it adjust consistently. You can aid the learning curve by spending more time in it. Because of this, it makes sense to just do everything in emacs, to become super profecicient in it. That is the goal. Though realistically speaking - no that shouldn't be the goal.
+
+Though there is the issue of: how do I do things that it sucks at? Such as:
+
+1. Browsing the internet
+
+
+Vim is in my opinion, slowly turning into emacs. I personally think at some point vim will overtake emacs in terms of being able to use it for everything. Though I feel as if it is still awhile away. As proj has said, if you are trying to make vim do everything, you should just use emacs. I feel like that was me.
+
+
+
+*** Advantages over vim
+Basically being able to live in emacs. It's essentially your operating system.
+No joke. But this is good because you are interfacing your computer the same way
+you would interface anything. It's pretty nice.
+
+Basically it's a easier way to constantly live in the world of text. However, you
+
+I'm not going to lie - emacs is slow and sometimes a bit buggy on macOS. It also feels so wrong to use emacs. I don't know. Maybe I've been brainwashed by all those "vim vs. emacs" memes. Regardless, there are ways to speed up emacs (which seems like hacks to be honest):
+
+*** Disadvantages
+It's not perfect. The perfectionist in me wants to like at some point I'd want to make my own editor. But honestly, who has
+
 The highest priority of this configuration is to optimize for writing/org-mode, for:
 - personal notes
 - tasks
 - technical documents
+
+Addition
+
+** How does evil-mode compare to vim?
+
+The mentality of evil-mode is: if it doesn't do what vim does it is a bug.
 
 ** Why Doom?
 
@@ -12,7 +101,54 @@ The highest priority of this configuration is to optimize for writing/org-mode, 
 2. Have optimized startup times
 3. Reduce fucking around with configuration
 
-* TODO Cheatsheets
+* evil
+
+The most important package for emacs. Without this I would struggle.
+
+#+begin_src emacs-lisp
+(after! evil
+    (setq visual-fill-column-width 100)
+    (global-visual-line-mode)
+    ;;(visual-line-mode -1)
+
+
+    (setq visual-fill-column-fringes-outside-margins nil)
+    (setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
+)
+#+end_src
+
+* vterm
+
+Purpose of this is to replace iTerm2.
+
+** TODO Nested emacs/vim
+:LOGBOOK:
+- State "TODO"       from              [2020-12-20 Sun 22:25]
+:END:
+*** TODO Disable evil in vterm
+:LOGBOOK:
+- State "TODO"       from              [2020-12-20 Sun 22:25]
+:END:
+This will allow for nesting vim and emacs with evil-mode.
+
+#+begin_src emacs-lisp
+(after! vterm
+  (add-hook 'vterm-mode 'evil-collection-vterm-toggle-send-escape)
+)
+#+end_src
+
+*** Let everything go into nested instance
+
+https://www.reddit.com/r/emacs/comments/hz6ibe/how_to_bind_cc_to_send_ctr_c_in_vtermmode_in/
+
+C-x, C-c, M-x, etc.
+
+Press C-g twice to get out of nested emacs instance. Such that I can now use the buffer normally.
+
+#+begin_src emacs-lisp
+(map! :after vterm :map vterm-mode-map :ni "C-c" #'vterm-send-C-c)
+#+end_src
+
 * org-mode
 ** TODO How I use org-mode
 I use org-mode for note taking mixed with tasks. Why roam? So that I can easily add links, browse links, view backlinks, etc. I may not end up having to use roam for longer term but it's pretty friendly so I'll use it.
@@ -38,6 +174,14 @@ I use org-mode for note taking mixed with tasks. Why roam? So that I can easily 
 Everything I collect goes into an inbox for me to sort out at the end of each day.
 
 #+begin_src emacs-lisp
+(defun org-journal-find-location ()
+  ;; Open today's journal, but specify a non-nil prefix argument in order to
+  ;; inhibit inserting the heading; org-capture will insert the heading.
+  (org-journal-new-entry t)
+  (unless (eq org-journal-file-type 'daily)
+    (org-narrow-to-subtree))
+  (goto-char (point-max)))
+
 (after! org
     (setq org-capture-templates
         '(("t" "Todo" entry (file+olp "~/org/life.org" "Tasks" "Inbox")
@@ -46,8 +190,12 @@ Everything I collect goes into an inbox for me to sort out at the end of each da
         "* %?\nAdded: %U" :empty-lines 1)
         ("i" "Idea" entry (file+olp "~/org/life.org" "Ideas")
         "* %?\nAdded: %U" :empty-lines 1)
-        ("j" "Journal" entry (file+olp+datetree "~/org/life.org" "Journal")
-        "* %U\n%?" :empty-lines 1))
+        ;;("j" "Journal" entry (file+olp+datetree "~/org/life.org" "Journal")
+
+        ;; TODO: this doesn't open up a capture buffer which is kinda annoying
+        ("j" "Journal entry" plain (function org-journal-find-location)
+                               "** %(format-time-string org-journal-time-format)\n%i%?" :jump-to-captured t :immediate-finish t)
+        )
     )
 )
 #+end_src
@@ -320,6 +468,23 @@ ax.bar(list(ys.keys()), list(ys.values()))
 plt.savefig('img.png')
 return 'img.png'
 
+* org-journal
+#+begin_src emacs-lisp
+(setq org-journal-enable-agenda-integration t
+      org-icalendar-store-UID t
+      org-icalendar-include-todo "all"
+      org-icalendar-combined-agenda-file "~/org/journal.ics")
+#+end_src
+
+** TODO Refile Task
+:LOGBOOK:
+- State "TODO"       from              [2020-12-21 Mon 01:16]
+:END:
+Refile task to current journal file and set schedule to today
+#+begin_src emacs-lisp
+
+#+end_src
+
 * Details/Misc
 ** Text Editing
 *** Let me type the closing paren
@@ -341,18 +506,6 @@ return 'img.png'
 ;;  (setq olivetti-body-width 100)
 ;;  (add-hook 'text-mode-hook 'olivetti-mode)
 ;;)
-#+end_src
-*** evil
-#+begin_src emacs-lisp
-(after! evil
-    (setq visual-fill-column-width 100)
-    (global-visual-line-mode)
-    ;;(visual-line-mode -1)
-
-
-    (setq visual-fill-column-fringes-outside-margins nil)
-    (setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
-)
 #+end_src
 
 ** Shortcuts to Frequent Files
@@ -441,3 +594,5 @@ ns-right-control-modifier 'left)
   (setq lsp-ui-doc-max-width 80)
 )
  #+end_src
+
+
