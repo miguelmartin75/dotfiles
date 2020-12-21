@@ -48,7 +48,7 @@ call plug#end()
 " ===== General =====
 
 set rtp+=/usr/local/bin/
-set mouse=a
+set mouse=nv
 
 " set command history to 500
 set history=500
@@ -296,4 +296,14 @@ function! WriteMode()
 	endif
 endfunction
 
-source ~/.fb-vimrc
+if !empty(glob("~/.fb-vimrc"))
+    source ~/.fb-vimrc
+else
+    let g:LanguageClient_serverCommands = {
+    \ 'rust': ['~/.cargo/bin/rustup', 'run', 'stable', 'rls'],
+    \ 'javascript': ['/usr/local/bin/javascript-typescript-stdio'],
+    \ 'javascript.jsx': ['tcp://127.0.0.1:2089'],
+    \ 'python': ['/usr/local/bin/pyls'],
+    \ 'ruby': ['~/.rbenv/shims/solargraph', 'stdio'],
+    \ }
+endif
