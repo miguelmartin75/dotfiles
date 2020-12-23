@@ -149,7 +149,7 @@
        ;;nim               ; python + lisp at the speed of c
        ;;nix               ; I hereby declare "nix geht mehr!"
        ;;ocaml             ; an objective camel
-       (org +roam +evil-org +pretty +present +journal)
+       (org +roam +evil-org +pretty +present)
        ;;php               ; perl's insecure younger brother
        ;;plantuml          ; diagrams for confusing people more
        ;;purescript        ; javascript, but functional
@@ -177,7 +177,7 @@
        ;;(wanderlust +gmail)
 
        :app
-       ;;calendar
+       calendar
        ;;irc               ; how neckbeards socialize
        ;;(rss +org)        ; emacs as an RSS reader
        ;;twitter           ; twitter client https://twitter.com/vnought

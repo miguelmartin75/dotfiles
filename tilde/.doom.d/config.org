@@ -485,6 +485,18 @@ Refile task to current journal file and set schedule to today
 
 #+end_src
 
+* calendar
+#+begin_src emacs-lisp
+(defun my/open-calendar ()
+  (interactive)
+  (cfw:open-calendar-buffer
+   :contents-sources
+   (list
+    (cfw:org-create-source "Green")  ; org-agenda source
+    ;; TODO
+   )))
+#+end_src
+
 * Details/Misc
 ** Text Editing
 *** Let me type the closing paren
@@ -521,6 +533,9 @@ Refile task to current journal file and set schedule to today
 
 ** macOS specifics
 #+begin_src emacs-lisp
+;; external keyboard
+(setq mac-command-modifier 'meta)
+
 ;; weird https://www.reddit.com/r/emacs/comments/jgwquf/macos_external_keyboard_remapped_modifier_keys/
 (setq ns-command-modifier 'super
 ns-option-modifier 'meta
@@ -537,6 +552,7 @@ ns-right-control-modifier 'left)
 (setenv "PATH" (concat (getenv "PATH") ":" (expand-file-name "/usr/local/bin") ":" (expand-file-name "/Library/TeX/Distributions/.DefaultTeX/Contents/Programs/texbin")))
 
 (setq exec-path (append exec-path (list (expand-file-name "/usr/local/bin") (expand-file-name "/Library/TeX/Distributions/.DefaultTeX/Contents/Programs/texbin"))))
+
 #+end_src
 
 ** Doom Specifics
