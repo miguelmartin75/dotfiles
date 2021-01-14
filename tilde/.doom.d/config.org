@@ -522,7 +522,8 @@ ns-right-control-modifier 'left)
 *** Theme
 #+begin_src emacs-lisp
 ;;(setq doom-theme 'doom-solarized-light)
-(setq doom-theme 'doom-gruvbox)
+;;(setq doom-theme 'doom-gruvbox)
+(setq doom-theme 'doom-nord-light)
 #+end_src
 *** Font
 #+begin_src emacs-lisp
