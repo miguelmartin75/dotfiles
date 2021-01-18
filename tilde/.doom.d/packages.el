@@ -1,7 +1,7 @@
 ;; -*- no-byte-compile: t; -*-
 ;;(package! mixed-pitch)
 (package! org-fragtog)
-(package! org-autolist)
+;;(package! org-autolist)
 (unpin! org-ref)
 
 (package! olivetti)
@@ -22,3 +22,5 @@
 (package! org-roam-server)
 
 (package! command-log-mode)
+
+(package! emacs-tree-sitter)

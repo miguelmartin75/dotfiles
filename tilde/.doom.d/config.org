@@ -361,7 +361,12 @@ Reference: https://emacs.stackexchange.com/questions/12841/quickly-insert-source
 - State "TODO"       from              [2021-01-10 Sun 22:14]
 :END:
 #+begin_src emacs-lisp
-(use-package! org-autolist :init (add-hook 'org-mode-hook (lambda () (org-autolist-mode))))
+(add-to-list 'load-path '("~/.doom.d"))
+(require 'org-autolist "~/.doom.d/org-autolist.el")
+;;(after! org-mode
+;;    (add-hook 'org-mode-hook (lambda () (org-auto-list-mode))
+;;)
+;;(use-package! org-autolist :init (add-hook 'org-mode-hook (lambda () (org-autolist-mode))))
 #+end_src
 *** Deft
 #+begin_src emacs-lisp
@@ -523,12 +528,13 @@ ns-right-control-modifier 'left)
 #+begin_src emacs-lisp
 ;;(setq doom-theme 'doom-solarized-light)
 ;;(setq doom-theme 'doom-gruvbox)
-(setq doom-theme 'doom-nord-light)
+;;(setq doom-theme 'doom-nord-light)
+(setq doom-theme 'doom-nord)
 #+end_src
 *** Font
 #+begin_src emacs-lisp
-(setq doom-font (font-spec :family "SF Mono" :size 13 :weight
-'semi-light))
+;;(setq doom-font (font-spec :family "SF Mono" :size 13 :weight
+;;'semi-light))
       ;;doom-variable-pitch-font (font-spec :faimly "Helvetica" :size 15))
 
 (after! doom-themes
@@ -555,11 +561,11 @@ ns-right-control-modifier 'left)
    - State "TODO"       from              [2020-12-05 Sat 18:05]
    :END:
 
- #+begin_src emacs-lisp
-(after! lsp
+#+begin_src emacs-lisp
+(after! lsp-mode
+  (setq +lsp-company-backends '(company-capf company-yasnippet)) ;; bug?
   (setq lsp-enable-on-type-formatting nil)
 )
-
 
 (after! lsp-ui
   (setq lsp-ui-doc-position 'top)
@@ -567,4 +573,21 @@ ns-right-control-modifier 'left)
   (add-hook 'lsp-mode 'lsp-ui-doc-mode)
   (setq lsp-ui-doc-max-width 80)
 )
- #+end_src
+#+end_src
+
+** Snippets
+
+#+begin_src emacs-lisp
+(after! doom-snippets
+    (setq yas-snippet-dirs '(+snippets-dir))
+)
+#+end_src
+
+* Company
+
+#+begin_src emacs-lisp
+(after! company
+  (setq company-tooltip-idle-delay 0.1)
+  (setq company-idle-delay 0.1)
+)
+#+end_src
