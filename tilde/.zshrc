@@ -88,6 +88,12 @@ function wikiedit() {
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
-source ~/.fb-zshrc
+if [ -f ~/.fb-zshrc ]; then
+    source ~/.fb-zshrc
+fi
 
-source "$HOME/.cargo/env"
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
+
+export TERM=xterm-24bit
