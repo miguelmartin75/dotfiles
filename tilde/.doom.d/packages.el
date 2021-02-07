@@ -23,4 +23,6 @@
 
 (package! command-log-mode)
 
-(package! emacs-tree-sitter)
+;;(package! emacs-tree-sitter)
+
+(package! fzf :recipe (:host github :repo "seenaburns/fzf.el" :branch "master"))

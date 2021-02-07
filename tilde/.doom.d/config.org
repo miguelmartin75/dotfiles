@@ -141,13 +141,21 @@ Everything I collect goes into an inbox for me to sort out at the end of each da
   (goto-char (point-max)))
 (after! org
     (setq org-capture-templates
-        '(("t" "Todo" entry (file+olp "~/org/life.org" "Tasks" "Inbox")
+        '(
+        ("b" "Backlog" entry (file "~/org/backlog.org")
         "* TODO %?\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-        ("n" "Note" entry (file+olp "~/org/life.org" "Unfiled Notes")
+        ("B" "Work Backlog" entry (file "~/org/backlog.org")
+        "* TODO %? :work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+        ("t" "Todo" entry (file+olp+datetree "~/org/journal.org")
+        "* TODO %?\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+        ("T" "Work Todo" entry (file+olp+datetree "~/org/journal.org")
+        "* TODO %? :work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+        ("l" "Log" entry (file+olp+datetree "~/org/journal.org")
+        "* %U %?" :empty-lines 1)
+        ("L" "Work Log" entry (file+olp+datetree "~/org/journal.org")
+        "* %U %? :work:" :empty-lines 1)
+        ("i" "Idea" entry (file+olp "~/org/life.org" "Idea")
         "* %?\nAdded: %U" :empty-lines 1)
-        ("i" "Idea" entry (file+olp "~/org/life.org" "Ideas")
-        "* %?\nAdded: %U" :empty-lines 1)
-        ("j" "Journal" entry (file+olp+datetree "~/org/life.org" "Journal"))
         ))
 )
 #+end_src
@@ -293,7 +301,7 @@ execute src block with alt enter if in a source block
 Use writeroom mode by default for org-mode
 
 #+begin_src emacs-lisp
-(setq +zen-text-scale 1.25)
+(setq +zen-text-scale 2.5)
 (add-hook 'writeroom-mode-hook
     (lambda ()
        (if (bound-and-true-p writeroom-mode)
@@ -329,11 +337,12 @@ $3 + 2x = y^2 + 2 + 3$
 ;; toggle it on hover
 (use-package! org-fragtog)
 (after! org
-  (setq org-format-latex-options (plist-put org-format-latex-options :scale 2.0))
+  (setq org-format-latex-options (plist-put org-format-latex-options :scale 1.0))
   (setq org-latex-create-formula-image-program 'dvisvgm)
   (add-hook 'org-mode-hook 'org-fragtog-mode)
 )
 #+end_src
+
 *** Images
 Display by default
 #+begin_src emacs-lisp
@@ -361,8 +370,8 @@ Reference: https://emacs.stackexchange.com/questions/12841/quickly-insert-source
 - State "TODO"       from              [2021-01-10 Sun 22:14]
 :END:
 #+begin_src emacs-lisp
-(add-to-list 'load-path '("~/.doom.d"))
-(require 'org-autolist "~/.doom.d/org-autolist.el")
+;;(add-to-list 'load-path '("~/.doom.d"))
+;;(require 'org-autolist "~/.doom.d/org-autolist.el")
 ;;(after! org-mode
 ;;    (add-hook 'org-mode-hook (lambda () (org-auto-list-mode))
 ;;)
@@ -533,8 +542,7 @@ ns-right-control-modifier 'left)
 #+end_src
 *** Font
 #+begin_src emacs-lisp
-;;(setq doom-font (font-spec :family "SF Mono" :size 13 :weight
-;;'semi-light))
+(setq doom-font (font-spec :family "SF Mono" :size 13 :weight 'semi-light))
       ;;doom-variable-pitch-font (font-spec :faimly "Helvetica" :size 15))
 
 (after! doom-themes
@@ -587,7 +595,13 @@ ns-right-control-modifier 'left)
 
 #+begin_src emacs-lisp
 (after! company
-  (setq company-tooltip-idle-delay 0.1)
-  (setq company-idle-delay 0.1)
+  (setq company-tooltip-idle-delay 0.3)
+  (setq company-idle-delay 0.3)
 )
+#+end_src
+
+* fzf
+
+#+begin_src emacs-lisp
+(use-package! fzf)
 #+end_src
