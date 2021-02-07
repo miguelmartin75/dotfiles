@@ -97,3 +97,4 @@ if [ -f "$HOME/.cargo/env" ]; then
 fi
 
 export TERM=xterm-24bit
+export PATH="/usr/local/opt/llvm/bin:$PATH"
