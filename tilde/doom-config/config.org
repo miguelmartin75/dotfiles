@@ -548,7 +548,7 @@ ns-right-control-modifier 'left)
 #+end_src
 *** Font
 #+begin_src emacs-lisp
-(setq doom-font (font-spec :family "Menlo" :size 13 :weight 'semi-light))
+(setq doom-font (font-spec :family "SF Mono" :size 13 :weight 'semi-light))
       ;;doom-variable-pitch-font (font-spec :faimly "Helvetica" :size 15))
 
 (after! doom-themes
@@ -571,27 +571,14 @@ ns-right-control-modifier 'left)
 )
 #+end_src
 ** TODO Languages
-:LOGBOOK:
-- State "TODO"       from              [2020-12-05 Sat 18:05]
-:END:
+   :LOGBOOK:
+   - State "TODO"       from              [2020-12-05 Sat 18:05]
+   :END:
 
 #+begin_src emacs-lisp
 (after! lsp-mode
+  (setq +lsp-company-backends '(company-capf company-yasnippet)) ;; bug?
   (setq lsp-enable-on-type-formatting nil)
-
-  (setq +lsp-company-backends '((:seperate company-yasnippet company-capf)))
-  (when (and (featurep! :tools lsp) (not (featurep! :tools lsp +eglot)))
-    (use-package! lsp-mode :defer t :config
-        (add-hook! lsp-after-open
-        (setq company-backends (remove 'company-capf company-backends)))))
-
-  ;;(setq +lsp-company-backends ())
-  ;;(set-company-backend! 'prog-mode
-  ;;(add-hook 'lsp-mode-hook (lambda ()
-  ;;   (progn
-  ;;     (message "yo company")
-  ;;     (setq company-backends '((:seperate company-yasnippet company-capf)))))
-  ;; )
 )
 
 (after! lsp-ui
@@ -616,25 +603,11 @@ ns-right-control-modifier 'left)
 (after! company
   (setq company-tooltip-idle-delay 0.3)
   (setq company-idle-delay 0.3)
-
-  (add-hook 'objc-mode-hook (lambda () (progn (setq company-backends '((:separate company-irony-c-headers company-irony))) (message "objc hook triggered"))))
-  ;;(add-variable-watcher 'company-backends (lambda (symbol newval op where) (message "company-backend changed s=%s, val=%s, op=%s, where=%s" symbol newval op where)))
 )
 #+end_src
 
-* Projectile
+* fzf
 
 #+begin_src emacs-lisp
-(after! projectile
-  (setq projectile-switch-project-action 'projectile-dired)
-)
-#+end_src
-
-* Optimizations
-
-#+begin_src emacs-lisp
-(setq gc-cons-threshold 100000000)
-
-;; 10MB
-(setq read-process-output-max (* 3 (* 1024 1024)))
+(use-package! fzf)
 #+end_src
