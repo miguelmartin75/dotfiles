@@ -116,7 +116,7 @@ I use org-mode for note taking mixed with tasks. Why roam? So that I can easily 
 (after! org
     ;; keywords
     (setq org-todo-keywords
-        '((sequence "TODO(t!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)")))
+        '((sequence "TODO(t!)" "POST(p!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)")))
 
     ;; task time stamps
     (setq org-clock-persist 'history)
@@ -127,35 +127,41 @@ I use org-mode for note taking mixed with tasks. Why roam? So that I can easily 
 )
 #+end_src
 
-*** org-capture
+*** TODO org-capture
+:LOGBOOK:
+- State "TODO"       from              [2021-02-07 Sun 17:41]
+:END:
 
-Everything I collect goes into an inbox for me to sort out at the end of each day.
+- Backlog for all tasks I want to do eventually
+  - Preferable to refile here, unless I have a specific reason to add to my backlog
+- Tasks will be added to journal
+- Log will be added to journal
+- Weekly review will be added to journal
 
 #+begin_src emacs-lisp
-(defun org-journal-find-location ()
-  ;; Open today's journal, but specify a non-nil prefix argument in order to
-  ;; inhibit inserting the heading; org-capture will insert the heading.
-  (org-journal-new-entry t)
-  (unless (eq org-journal-file-type 'daily)
-    (org-narrow-to-subtree))
-  (goto-char (point-max)))
 (after! org
     (setq org-capture-templates
         '(
-        ("b" "Backlog" entry (file "~/org/backlog.org")
-        "* TODO %?\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-        ("B" "Work Backlog" entry (file "~/org/backlog.org")
-        "* TODO %? :work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-        ("t" "Todo" entry (file+olp+datetree "~/org/journal.org")
-        "* TODO %?\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-        ("T" "Work Todo" entry (file+olp+datetree "~/org/journal.org")
-        "* TODO %? :work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+        ("n" "Note" entry (file+olp+datetree "~/org/journal.org")
+        "* %T %? :note:" :empty-lines 1)
+        ("b" "Task: Backlog" entry (file "~/org/backlog.org")
+        "* TODO %? :backlog:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+        ("t" "Add Task" entry (file+olp+datetree "~/org/journal.org")
+        "* TODO %U: %? \n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
         ("l" "Log" entry (file+olp+datetree "~/org/journal.org")
-        "* %U %?" :empty-lines 1)
+        "* %T %? :log:" :empty-lines 1)
+        ("B" "Task: Work Backlog" entry (file "~/org/backlog.org")
+        "* TODO %U %? :backlog:work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+        ("T" "Add Work Task" entry (file+olp+datetree "~/org/journal.org")
+        "* TODO %U: %? :work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
         ("L" "Work Log" entry (file+olp+datetree "~/org/journal.org")
-        "* %U %? :work:" :empty-lines 1)
-        ("i" "Idea" entry (file+olp "~/org/life.org" "Idea")
-        "* %?\nAdded: %U" :empty-lines 1)
+        "* %T %? :log: :work:" :empty-lines 1)
+        ("r" "Week Review" entry (file+olp+datetree "~/org/journal.org")
+        "* Week Review: %t - %(- %t 7) :review:" :empty-lines 1)
+        ("j" "Journal Entry" entry (file+olp+datetree "~/org/journal.org")
+        "* %t :journal:\n%?" :empty-lines 1)
+        ("i" "Idea" entry (file+olp+datetree "~/org/life.org" "Ideas")
+        "* %?\nAdded: %U :inbox:idea:" :empty-lines 1)
         ))
 )
 #+end_src
@@ -237,6 +243,10 @@ manage bibtex
         "abstract"
         "author-or-editor"
         "keywords")))
+
+(after! org-roam
+    (add-hook 'org-roam-mode org-roam-bibtex-mode)
+)
 #+end_src
 
 *** org-roam-bibtex
@@ -245,7 +255,7 @@ manage bibtex
 (use-package! org-roam-bibtex)
 
 (after! org-roam
-  (add-hook 'org-roam-mode-hook 'org-roam-bibtex-mode)
+  (add-hook 'org-roam-mode 'org-roam-bibtex-mode)
 )
 #+end_src
 *** TODO org-babel
