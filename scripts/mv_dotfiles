@@ -36,6 +36,6 @@ do
 
     echo "Installing" $to
 
-    cp $from $to 
+    ln -sv $from $to 
 done
 
