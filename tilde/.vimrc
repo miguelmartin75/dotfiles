@@ -4,12 +4,11 @@ call plug#begin('~/.vim/plugged')
 Plug 'majutsushi/tagbar', { 'on': 'TagbarToggle' }
 
 " typing
-Plug 'junegunn/goyo.vim'
-Plug 'junegunn/limelight.vim'
-Plug 'reedes/vim-pencil'
+"Plug 'junegunn/goyo.vim'
+"Plug 'reedes/vim-pencil'
 
 """ colour scheme
-Plug 'morhetz/gruvbox'
+Plug 'arcticicestudio/nord-vim'
 
 Plug 'autozimu/LanguageClient-neovim', {
     \ 'branch': 'next',
@@ -17,13 +16,25 @@ Plug 'autozimu/LanguageClient-neovim', {
 \ }
 Plug 'dense-analysis/ale'
 
+"Plug 'nvim-treesitter/nvim-treesitter'
+"Plug 'nvim-treesitter/playground'
+"Plug 'nvim-treesitter/nvim-treesitter-textobjects'
+"Plug 'nvim-treesitter/nvim-treesitter-refactor'
+
+" todo: test other repl-based plugins
+"Plug 'Olical/conjure'
+Plug 'jpalardy/vim-slime'
+
 """ text-editing/manipulation/movement
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-repeat'
-Plug 'joequery/Stupid-EasyMotion'
 
-Plug 'godlygeek/tabular'
-Plug 'plasticboy/vim-markdown'
+" tmux
+Plug 'christoomey/vim-tmux-navigator'
+
+" snippets
+"Plug 'SirVer/ultisnips'
+"Plug 'miguelmartin75/ultisnips-snippets'
 
 " files
 if has('mac')
@@ -46,6 +57,11 @@ let g:deoplete#enable_at_startup = 1
 call plug#end()
 
 " ===== General =====
+
+let g:slime_target = "tmux"
+let g:slime_paste_file = "$HOME/.slime_paste"
+
+set completeopt=menu,noselect
 
 set rtp+=/usr/local/bin/
 set mouse=nv
@@ -140,12 +156,12 @@ set tabstop=4
 " Set auto-indentation
 set autoindent
 
-" Wrap lines
-set wrap
+" Don't wrap lines
+set nowrap
 
 " visual linebreak
-set lbr
-set tw=80
+"set lbr
+"set tw=80
 
 " store swap files elsewhere
 set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//
@@ -164,6 +180,10 @@ set foldlevelstart=20
 
 
 " ===== re-maps =====
+
+" space as leader
+nnoremap <Space> <Nop>
+let mapleader=" "
 
 " for wrapped lines
 map j gj
@@ -193,7 +213,7 @@ map <C-l> <C-W>l
 
 " q and qa for buffers
 map <leader>q :bd<cr>
-map <leader>qa :1,1000 bd!<cr>
+map <leader>qa :%bd<cr>
 
 nnoremap <F1> <nop>
 nnoremap Q <nop>
@@ -206,11 +226,9 @@ vnoremap K <nop>
 " open another buffer without saving changes
 set hidden
 nnoremap <leader>a :bp<CR>
-nnoremap <leader>s :bn<CR>
+nnoremap <leader>d :bn<CR>
 
 " ===== Plugin Config =====
-
-let g:vimwiki_table_mappings = 0
 
 " close preview when we leave insert mode
 autocmd InsertLeave * if pumvisible() == 0 | pclose | endif 
@@ -220,13 +238,13 @@ inoremap <expr><TAB> pumvisible() ? "\<C-n>" : "\<TAB>"
 inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<S-TAB>"
 
 " Trigger configuration
-"let g:UltiSnipsExpandTrigger="<tab>"
-"let g:UltiSnipsJumpForwardTrigger="<c-b>"
-"let g:UltiSnipsJumpBackwardTrigger="<c-z>"
-"
+let g:UltiSnipsExpandTrigger="<C-j>"
+let g:UltiSnipsJumpForwardTrigger="<c-n>"
+let g:UltiSnipsJumpBackwardTrigger="<c-b>"
+
 "" If you want :UltiSnipsEdit to split your window.
-"let g:UltiSnipsEditSplit="vertical"
-"let g:UltiSnipsSnippetsDir = "/home/miguelmartin/.vim/plugged/ultisnips-snippets/UltiSnips"
+let g:UltiSnipsEditSplit="vertical"
+let g:UltiSnipsSnippetDirectories = ["~/.vim/plugged/ultisnips-snippets/UltiSnips"]
 
 " :e to emulate NerdTree
 let g:netrw_banner = 0
@@ -239,22 +257,11 @@ nmap <C-e> :Lexplore<cr>
 " colour scheme
 set background=dark
 set termguicolors
-colorscheme gruvbox
+colorscheme nord
 
 " add a highlight for 81 chars
 highlight ColorColumn ctermbg=magenta
 call matchadd('ColorColumn', '\%81v', 100)
-
-" Limelight
-let g:limelight_conceal_ctermfg = 'gray'
-let g:limelight_conceal_ctermfg = 240
-
-autocmd! User GoyoEnter Limelight
-autocmd! User GoyoLeave Limelight!
-
-" vimwiki
-let g:vimwiki_list = [{'path': '~/wiki/wiki',
-                      \ 'syntax': 'markdown', 'ext': '.md'}]
 
 " ===== Plugin-specific Remaps =====
 
@@ -265,10 +272,9 @@ nnoremap ]A :ALELast
 nnoremap [A :ALEFirst
 
 " fzf.vim
-nmap <C-p> :Files<cr>
-nmap <C-]> :Buffers<cr>
-
-nmap <Leader>l :Limelight!!<cr>
+nnoremap <Leader>. :Files<cr>
+nnoremap <Leader>, :Buffers<cr>
+nnoremap <Leader>< :Buffers<cr>
 
 " Tagbar
 nmap <Leader>t :TagbarToggle<CR> 
@@ -277,6 +283,7 @@ nmap <Leader>t :TagbarToggle<CR>
 nnoremap <silent> K :call LanguageClient#textDocument_hover()<CR>
 nnoremap <silent> gd :call LanguageClient#textDocument_definition()<CR>
 nnoremap <silent> cn :call LanguageClient#textDocument_rename()<CR>
+nnoremap <silent> <Leader>s :call LanguageClient#textDocument_documentSymbol()<CR>
 
 " ===== Auto-commands =====
 
@@ -300,6 +307,7 @@ if !empty(glob("~/.fb-vimrc"))
     source ~/.fb-vimrc
 else
     let g:LanguageClient_serverCommands = {
+    \ 'cpp': ['clangd'],
     \ 'rust': ['~/.cargo/bin/rustup', 'run', 'stable', 'rls'],
     \ 'javascript': ['/usr/local/bin/javascript-typescript-stdio'],
     \ 'javascript.jsx': ['tcp://127.0.0.1:2089'],
@@ -307,3 +315,82 @@ else
     \ 'ruby': ['~/.rbenv/shims/solargraph', 'stdio'],
     \ }
 endif
+
+" Competitive Programming
+autocmd filetype cpp nnoremap <leader>c :w <bar> !c++ -std=c++14 % -o %:r -Wall<CR>
+autocmd filetype cpp nnoremap <leader>r <bar> :te %:r <CR>
+
+autocmd BufWinEnter,WinEnter term://* startinsert
+
+" doesn't work due to abi...
+lua <<EOF
+--require'nvim-treesitter.configs'.setup {
+--  ensure_installed = "maintained", -- one of "all", "maintained" (parsers with maintainers), or a list of languages
+--  highlight = {
+--    enable = true,              -- false will disable the whole extension
+--  },
+--  incremental_selection = {
+--    enable = true,
+--    keymaps = {
+--      init_selection = "gnn",
+--      node_incremental = "grn",
+--      scope_incremental = "grc",
+--      node_decremental = "grm",
+--    },
+--  },
+--  --indent = {
+--  --  enable = true
+--  --}
+--  refactor = {
+--    highlight_definitions = { enable = true },
+--    smart_rename = {
+--      enable = true,
+--      keymaps = {
+--        smart_rename = "grr",
+--      },
+--    },
+--    --highlight_current_scope = { enable = true },
+--  },
+--}
+--
+---- Treesitter stops syntax files from being loaded so need to redefine commentstrings for 
+---- languages we care about.
+--local commentstrings = {
+--  python  = '#',
+--  json    = '#',
+--  bash    = '#',
+--  lua     = '--',
+--  verilog = '//'
+--}
+
+--require'nvim-treesitter'.define_modules {
+--  fixspell = {
+--    enable = true,
+--    attach = function(bufnr, lang)
+--      local cs = commentstrings[lang]
+--      vim.cmd(
+--        ('syntax match spellComment "%s.*" contains=@Spell'):format(cs)
+--      )
+--    end,
+--    detach = function(bufnr)
+--    end,
+--    is_supported = function(lang)
+--      if commentstrings[lang] == nil then
+--        return false
+--      end
+--      if require('nvim-treesitter.query').get_query(lang, 'highlights') == nil then
+--        return false
+--      end
+--      return true
+--    end
+--  }
+--}
+EOF
+
+set foldmethod=expr
+set foldexpr=nvim_treesitter#foldexpr()
+
+nnoremap <M-x> :Commands<CR>
+
+"set g:python3_host_prog='/home/miguelmartin/anaconda3/bin/python3'
+"set autochdir
