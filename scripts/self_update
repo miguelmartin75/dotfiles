@@ -14,5 +14,5 @@ do
 
     echo "copying" $from "to" $to "..."
 
-    echo cp $from $to 
+    cp $from $to 
 done
