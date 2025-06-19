@@ -43,6 +43,7 @@ require('packer').startup(function()
     -- LSP
     use 'j-hui/fidget.nvim'
     use 'neovim/nvim-lspconfig'
+
     use 'williamboman/nvim-lsp-installer'
     use "folke/lua-dev.nvim"
     use 'nvimtools/none-ls.nvim'
@@ -55,11 +56,12 @@ require('packer').startup(function()
     use 'christoomey/vim-tmux-navigator'
 
     -- completion
-    use 'hrsh7th/nvim-cmp'
-    use 'hrsh7th/cmp-nvim-lsp'
-    use 'hrsh7th/cmp-buffer'
-    use 'hrsh7th/cmp-path'
-    use 'hrsh7th/cmp-cmdline'
+    -- use 
+    -- use 'hrsh7th/nvim-cmp'
+    -- use 'hrsh7th/cmp-nvim-lsp'
+    -- use 'hrsh7th/cmp-buffer'
+    -- use 'hrsh7th/cmp-path'
+    -- use 'hrsh7th/cmp-cmdline'
 
     use {
     	'nvim-telescope/telescope.nvim', requires = { {'nvim-lua/plenary.nvim'} }
@@ -73,47 +75,318 @@ require('packer').startup(function()
         commit = "6c1584eb76b55629702716995cca4ae2798a9cca"
     }
 
-    use { 
-        "/usr/share/fb-editor-support/nvim",
-        as = "meta.nvim",
+    -- use { "OXY2DEV/markview.nvim" }
+
+    -- use 'stevearc/dressing.nvim'
+    -- use 'MunifTanjim/nui.nvim'
+    -- use 'MeanderingProgrammer/render-markdown.nvim'
+
+    -- use {
+    --   'yetone/avante.nvim',
+    --   branch = 'main',
+    --   run = 'make',
+    --   config = function()
+    --     require('avante').setup({
+    --         provider = "ollama",
+    --         ollama = {
+    --           model = "qwen2.5-coder:32b",
+    --           options = {
+    --             num_ctx = 4096, -- TODO get exact
+    --           };
+    --         },
+    --         -- TODO
+    --         -- behaviour = {
+    --         --   enable_cursor_planning_mode = true, -- enable cursor planning mode!
+    --         -- },
+    --         vendors = {
+    --           ["gemma3-27b"] = {
+    --              __inherited_from = "ollama",
+    --              model = "hf.co/unsloth/gemma-3-27b-it-GGUF:Q4_K_M",
+    --              options = {
+    --                temperature = 0.1,
+    --              };
+    --           }
+    --        }
+    --     })
+    --   end
+    -- }
+
+    use {
+        "olimorris/codecompanion.nvim",
+        -- config = function()
+        -- end,
+        requires = {
+            "nvim-lua/plenary.nvim",
+            "nvim-treesitter/nvim-treesitter",
+        }
+    }
+
+    use {
+      "echasnovski/mini.diff",
+    }
+    --   config = function()
+    --   end,
+    -- },
+
+    use {
+        'saghen/blink.cmp',
+        build = 'cargo build --release',
+
     }
 end)
 
 -- AUTO-COMPLETE
-local cmp = require'cmp'
-cmp.setup({
-	window = {
-        -- TODO
-		--completion = cmp.config.window.bordered(),
-		--documentation = cmp.config.window.bordered(),
-	},
-	mapping = cmp.mapping.preset.insert({
-        ['<C-Space>'] = cmp.mapping.complete(),
-	}),
-	sources = cmp.config.sources({
-		{ name = 'nvim_lsp' },
-	}, {
-		{ name = 'buffer' },
-	}, {
-        name = 'path'
-    })
+local function t(str)
+    -- Adjust boolean arguments as needed
+    return vim.api.nvim_replace_termcodes(str, true, true, true)
+end
+
+local function telescope_cmd(cmd)
+    vim.api.nvim_command("Telescope " .. cmd)
+end
+
+ops = {
+    insert_now = function()
+        local cmd = "date +'\\%D \\%H:\\%M'"
+        vim.cmd("read !" .. cmd)
+    end,
+    send_text = function(txt)
+        vim.cmd("SlimeSend1 " .. txt)
+    end,
+    lldb_set_breakpoint_line = function()
+        local current_ln = vim.api.nvim_win_get_cursor(0)[1]
+        -- local current_file = vim.api.nvim_buf_get_name(0)
+        local current_file = vim.fn.expand('%')
+        local debug_cmd = string.format('b %s:%d', current_file, current_ln)
+        ops.send_text(debug_cmd)
+    end,
+    -- super_tab = my_tab,
+    -- super_rev_tab = my_rev_tab,
+    toggle_line_numbers = function()
+        vim.cmd([[
+        set invnumber
+        set invrelativenumber
+        ]])
+    end,
+    find_files = function()
+        telescope_cmd("find_files")
+    end,
+    rename_file = function()
+        print("TODO")
+    end,
+    find_buffers = function()
+        telescope_cmd("buffers")
+    end,
+    toggle_inlay = function()
+        vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled())
+    end
+}
+
+-- markdown preview
+-- local presets = require("markview.presets");
+-- 
+-- require("markview").setup({
+--     markdown = {
+--         headings = presets.headings.slanted
+--     },
+--     preview = {
+--       filetypes = { "markdown", "codecompanion" },
+--       ignore_buftypes = {},
+--     },
+-- })
+
+-- diff
+local diff = require("mini.diff")
+diff.setup({
+  source = diff.gen_source.none(),
 })
 
-cmp.setup.cmdline('/', {
-	mapping = cmp.mapping.preset.cmdline(),
-	sources = {
-		{ name = 'buffer' }
-	}
+-- AI
+
+require("codecompanion").setup({
+    adapters = {
+        sonnet = function()
+            return require("codecompanion.adapters").extend("anthropic", {
+                env = {
+                    api_key = "ANTHROPIC_API_KEY",
+                },
+                schema = {
+                    model = { default = "claude-sonnet-4-20250514", },
+                },
+            })
+        end,
+        opus = function()
+            return require("codecompanion.adapters").extend("anthropic", {
+                env = {
+                    api_key = "ANTHROPIC_API_KEY",
+                },
+                schema = {
+                    model = { default = "claude-opus-4-20250514", },
+                },
+            })
+        end,
+    },
+    strategies = {
+        chat = { adapter = "sonnet" },
+        inline = { adapter = "sonnet" },
+        cmd = { adapter = "sonnet" }
+    },
+    opts = {
+        log_level = "DEBUG",
+    },
 })
 
-cmp.setup.cmdline(':', {
-	mapping = cmp.mapping.preset.cmdline(),
-	sources = cmp.config.sources({
-		{ name = 'path' }
-	}, {
-		{ name = 'cmdline' }
-	})
+local progress = require("fidget.progress")
+
+local cc_indicator = {}
+cc_indicator.handles = {}
+
+function cc_indicator:init()
+  local group = vim.api.nvim_create_augroup("CodeCompanionFidgetHooks", {})
+
+  vim.api.nvim_create_autocmd({ "User" }, {
+    pattern = "CodeCompanionRequestStarted",
+    group = group,
+    callback = function(request)
+      local handle = cc_indicator:create_progress_handle(request)
+      cc_indicator:store_progress_handle(request.data.id, handle)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "User" }, {
+    pattern = "CodeCompanionRequestFinished",
+    group = group,
+    callback = function(request)
+      local handle = cc_indicator:pop_progress_handle(request.data.id)
+      if handle then
+        cc_indicator:report_exit_status(handle, request)
+        handle:finish()
+      end
+    end,
+  })
+end
+
+function cc_indicator:store_progress_handle(id, handle)
+  cc_indicator.handles[id] = handle
+end
+
+function cc_indicator:pop_progress_handle(id)
+  local handle = cc_indicator.handles[id]
+  cc_indicator.handles[id] = nil
+  return handle
+end
+
+function cc_indicator:create_progress_handle(request)
+  return progress.handle.create({
+    title = " Requesting assistance (" .. request.data.strategy .. ")",
+    message = "In progress...",
+    lsp_client = {
+      name = cc_indicator:llm_role_title(request.data.adapter),
+    },
+  })
+end
+
+function cc_indicator:llm_role_title(adapter)
+  local parts = {}
+  table.insert(parts, adapter.formatted_name)
+  if adapter.model and adapter.model ~= "" then
+    table.insert(parts, "(" .. adapter.model .. ")")
+  end
+  return table.concat(parts, " ")
+end
+
+function cc_indicator:report_exit_status(handle, request)
+  if request.data.status == "success" then
+    handle.message = "Completed"
+  elseif request.data.status == "error" then
+    handle.message = " Error"
+  else
+    handle.message = "󰜺 Cancelled"
+  end
+end
+
+cc_indicator.init()
+
+
+-- https://github.com/ioreshnikov/nvim/blob/425c048a3377d167c43f72f9695763ab241f0258/init.lua#L882
+require("blink.cmp").setup({
+    enabled = function() return not vim.tbl_contains({ "lua", "markdown" }, vim.bo.filetype) end,
+    keymap = { 
+        preset = 'default',
+        ['<Tab>'] = { 'select_next', 'fallback' },
+        ['<S-Tab>'] = { 'select_prev', 'fallback' },
+        ['<C-k>'] = { 'show_signature', 'hide_signature', 'fallback' },
+        ['<C-space>'] = { 'show', 'show_documentation', 'hide_documentation' },
+    },
+    appearance = {
+      nerd_font_variant = 'none'
+    },
+    sources = {
+      default = { 'lsp', 'path', 'snippets', 'buffer', 'codecompanion' },
+      per_filetype = {
+        codecompanion = { "codecompanion" },
+      }
+    },
+
+    completion = {
+        list = { 
+            selection = { 
+                preselect = false,
+                auto_insert = true
+            },
+        },
+        menu = {
+          auto_show = true,
+
+          draw = {
+            columns = {
+              { "label", "label_description", gap = 1 },
+              { "kind_icon", "kind" }
+            },
+          }
+        },
+        documentation = { auto_show = true },
+        ghost_text = { enabled = true }
+    },
+    signature = { enabled = true },
+    -- fuzzy = { implementation = "prefer_rust_with_warning" },
+    fuzzy = { implementation = "lua" },
 })
+
+local cmp = require'blink.cmp'
+-- cmp.setup({
+-- 	window = {
+--         -- TODO
+-- 		--completion = cmp.config.window.bordered(),
+-- 		--documentation = cmp.config.window.bordered(),
+-- 	},
+-- 	mapping = cmp.mapping.preset.insert({
+--         ['<C-Space>'] = cmp.mapping.complete(),
+-- 	}),
+-- 	sources = cmp.config.sources({
+-- 		{ name = 'nvim_lsp' },
+-- 	}, {
+-- 		{ name = 'buffer' },
+-- 	}, {
+--         name = 'path'
+--     })
+-- })
+-- 
+-- cmp.setup.cmdline('/', {
+-- 	mapping = cmp.mapping.preset.cmdline(),
+-- 	sources = {
+-- 		{ name = 'buffer' }
+-- 	}
+-- })
+-- 
+-- cmp.setup.cmdline(':', {
+-- 	mapping = cmp.mapping.preset.cmdline(),
+-- 	sources = cmp.config.sources({
+-- 		{ name = 'path' }
+-- 	}, {
+-- 		{ name = 'cmdline' }
+-- 	})
+-- })
 
 -- IMPORTS
 local wk = require"which-key"
@@ -155,6 +428,7 @@ local on_attach = function(client, bufnr)
             D = {'<cmd>lua vim.lsp.buf.type_definition()<CR>', "type definition"},
             r = {'<cmd>lua vim.lsp.buf.rename()<CR>', "rename"},
             a = {'<cmd>lua vim.lsp.buf.code_action()<CR>', "action"},
+            i = {ops.toggle_inlay, "toggle inlays"},
         }
     }, opts)
     -- Set some keybinds conditional on server capabilities
@@ -184,31 +458,24 @@ local on_attach = function(client, bufnr)
     end
 end
 
-local capabilities = require('cmp_nvim_lsp').default_capabilities(vim.lsp.protocol.make_client_capabilities())
+-- local capabilities = require('cmp_nvim_lsp').default_capabilities(vim.lsp.protocol.make_client_capabilities())
+local capabilities = require('blink.cmp').get_lsp_capabilities()
 
-
--- Use a loop to conveniently call 'setup' on multiple servers and
--- map buffer local keybindings when the language server attaches
-local servers = { 'rust_analyzer', 'tsserver' }
+local servers = { 
+    'rust_analyzer',
+    'ts_ls',
+    'clangd',
+    'jedi_language_server',
+    'sourcekit',
+    'nim_langserver',
+    'lua_ls',
+}
 for _, lsp in pairs(servers) do
     require('lspconfig')[lsp].setup {
         capabilities = capabilities,
         on_attach = on_attach,
-        flags = {
-            -- This will be the default in neovim 0.7+
-            debounce_text_changes = 150,
-        },
     }
 end
-
-
--- lua; slightly annoying to setup
--- luadev['settings']['Lua']['workspace']['checkThirdParty'] = false
--- luadev["capabilities"] = capabilities
--- luadev["on_attach"] = on_attach
--- luadev["flags"] = { debounce_text_changes = 150 }
--- print(vim.inspect(luadev))
-require('lspconfig').sumneko_lua.setup(luadev)
 
 -- TELESCOPE
 -- local actions = require"telescope-actions" -- TODO
@@ -383,7 +650,8 @@ set lbr
 set tw=0
 
 " store swap files elsewhere
-set dir=~/.vim/backup/swap//,~/.vim/backup/tmp//,~/.vim/backup//
+set backupdir=~/.cache/nvim/backup//
+set backupext=.bak
 
 " automatically change to the dir where the file is
 "set autochdir
@@ -399,8 +667,8 @@ set foldlevelstart=20
 
 " TODO moveme
 " Competitive Programming
-autocmd filetype cpp nnoremap <leader>c :w <bar> !c++ -std=c++14 % -o %:r -Wall<CR>
-autocmd filetype cpp nnoremap <leader>r <bar> :te %:r <CR>
+" autocmd filetype cpp nnoremap <leader>c :w <bar> !c++ -std=c++14 % -o %:r -Wall<CR>
+" autocmd filetype cpp nnoremap <leader>r <bar> :te %:r <CR>
 
 autocmd BufWinEnter,WinEnter term://* startinsert
 
@@ -409,6 +677,9 @@ syntax enable
 
 augroup FileTypeSpecificAutocommands
     autocmd!
+    autocmd FileType css* setlocal tabstop=2 softtabstop=2 shiftwidth=2
+    autocmd FileType html* setlocal tabstop=2 softtabstop=2 shiftwidth=2
+    autocmd FileType nim* setlocal tabstop=2 softtabstop=2 shiftwidth=2
     autocmd FileType javascript* setlocal tabstop=2 softtabstop=2 shiftwidth=2
     autocmd FileType typescript* setlocal tabstop=2 softtabstop=2 shiftwidth=2
     autocmd FileType typescript* :echom "typescipt"
@@ -489,56 +760,27 @@ set laststatus=2
 ]])
 
 -- KEY BINDINGS
-local function t(str)
-    -- Adjust boolean arguments as needed
-    return vim.api.nvim_replace_termcodes(str, true, true, true)
-end
 
-local function telescope_cmd(cmd)
-    vim.api.nvim_command("Telescope " .. cmd)
-end
-
-local function my_tab()
-    --print("tab hit", cmp.visible())
-    if cmp.visible() then
-        --cmp.select_next_item()
-        return t"<C-n>"
-    else
-        return t"<Tab>"
-    end
-end
-
-local function my_rev_tab()
-    if cmp.visible() then
-        --cmp.select_prev_item()
-        return t"<C-p>"
-    else
-        return t"<S-Tab>"
-        -- vim.fn.sendkeys(t"<S-Tab>")
-    end
-end
-
-
-ops = {
-    super_tab = my_tab,
-    super_rev_tab = my_rev_tab,
-    toggle_line_numbers = function()
-        vim.cmd([[
-        set invnumber
-        set invrelativenumber
-        ]])
-    end,
-    find_files = function()
-        telescope_cmd("find_files")
-    end,
-    rename_file = function()
-        print("TODO")
-    end,
-    find_buffers = function()
-        telescope_cmd("buffers")
-    end
-}
-
+-- local function my_tab()
+--     --print("tab hit", cmp.visible())
+--     if cmp.is_visible() then
+--         cmp.select_next_item()
+--         -- return t"<C-n>"
+--     else
+--         -- return t"<Tab>"
+--         vim.fn.sendkeys(t"<Tab>")
+--     end
+-- end
+-- 
+-- local function my_rev_tab()
+--     if cmp.visible() then
+--         cmp.select_prev_item()
+--         -- return t"<C-p>"
+--     else
+--         -- return t"<S-Tab>"
+--         vim.fn.sendkeys(t"<S-Tab>")
+--     end
+-- end
 
 vim.cmd([[
 " space as leader
@@ -572,7 +814,6 @@ vnoremap K <nop>
 set hidden
 ]])
 
-
 wk.setup {
     plugins = {
         marks = true, -- shows a list of your marks on ' and `
@@ -596,7 +837,7 @@ wk.setup {
 }
 
 wk.register({
-    ["<Tab>"] = {"za", "Toggle fold"},
+    -- ["<Tab>"] = {"za", "Toggle fold"},
     ["<C-p>"] = {ops.find_files, "Find files"},
     ["<C-s>"] = {"<cmd>Telescope myles<cr>", "Myles"},
     ["[d"] = {'<cmd>lua vim.diagnostic.goto_prev()<CR>', "prev diag"},
@@ -607,10 +848,12 @@ wk.register({
 }, {mode="n"})
 
 -- TODO
-wk.register({
-    ["<Tab>"] = {ops.super_tab, "Next completion", expr = true},
-    ["<S-Tab>"] = {ops.super_rev_tab, "Reverse completion", expr = true},
-}, {mode="i"})
+-- wk.register({
+--     -- ["<Tab>"] = {ops.super_tab, "Next completion", expr = true},
+--     -- ["<S-Tab>"] = {ops.super_rev_tab, "Reverse completion", expr = true},
+--     ["<Tab>"] = {ops.super_tab, "Next completion"},
+--     ["<S-Tab>"] = {ops.super_rev_tab, "Reverse completion"},
+-- }, {mode="i"})
 
 wk.register({
     -- groups
@@ -656,9 +899,9 @@ wk.register({
     },
     t = {
         name = "+telescope (more)",
-        r = {"<cmd>Telescope type_references<cr>", "type references"},
-        t = {"<cmd>Telescope type_definitions<cr>", "type definitions"},
-        i = {"<cmd>Telescope type_implementations<cr>", "type impls"},
+        r = {"<cmd>Telescope lsp_references<cr>", "type references"},
+        t = {"<cmd>Telescope lsp_type_definitions<cr>", "type definitions"},
+        i = {"<cmd>Telescope lsp_implementations<cr>", "type impls"},
         w = {"<cmd>Telescope workspace_symbols<cr>", "workspace symbols"},
     },
 
@@ -666,7 +909,7 @@ wk.register({
     ["/"] = { "<cmd>Telescope current_buffer_fuzzy_find<cr>", "Fuzzy find buffer"},
     ["?"] = { "<cmd>Telescope search_history<cr>", "Search history"},
     ["m"] = { "<cmd>Telescope marks<cr>", "Marks"},
-    ["j"] = { "<cmd>Telescope jump_list<cr>", "Jump list"},
+    ["j"] = { "<cmd>Telescope jumplist<cr>", "Jump list"},
     ["s"] = { "<cmd>Telescope lsp_document_symbols<cr>", "LSP Symbols"},
     ["e"] = { "<cmd>Telescope commands<cr>", "Commands"},
     ["."] = { ops.find_files, "Find File"},
@@ -678,64 +921,9 @@ wk.register({
     ["a"] = {"<cmd>bp<cr>", "previous buffer"},
     ["d"] = {"<cmd>bn<cr>", "next buffer"},
     ["l"] = {ops.toggle_line_numbers, "toggle line numbers"},
-    ["a"] = {"<cmd>bp<cr>", "previous buffer"},
-    ["d"] = {"<cmd>bp<cr>", "next buffer"},
+
+    ["G"] = { ops.lldb_set_breakpoint_line, "LSP Symbols"},
+    ["g"] = { "<cmd>Telescope live_grep<CR>", "ripGrep"},
+    ["n"] = { ops.insert_now, "insert now" },
 
 }, {mode = "n", prefix="<leader>"})
-
--- WORK
-local meta = require("meta")
-if meta then
-    require("plenary.filetype").add_file("meta")
-    require("telescope").load_extension("myles")
-    require("telescope").load_extension("biggrep")
-    local on_attach = require("_lsp").on_attach
-
-    local servers = {
-        "rusty@meta",
-        "wasabi@meta",
-        "pyls@meta",
-        "pyre@meta",
-        "thriftlsp@meta",
-        "cppls@meta",
-        "buckls@meta",
-        "hh_client",
-        -- "hhvm",
-    }
-    for _, lsp in ipairs(servers) do
-      require("lspconfig")[lsp].setup {
-            capabilities = capabilities,
-            on_attach = on_attach,
-            flags = {
-                -- This will be the default in neovim 0.7+
-                debounce_text_changes = 150,
-            },
-      }
-    end
-
-    require("lspconfig").flow.setup{
-      cmd = { 'flow', 'lsp' },
-      capabilities = capabilities,
-      on_attach = on_attach,
-      flags = {
-          -- This will be the default in neovim 0.7+
-          debounce_text_changes = 150,
-      },
-    }
-
-    local null_ls = require("null-ls")
-
-    null_ls.setup({
-      on_attach = on_attach,
-      sources = {
-        meta.null_ls.diagnostics.arclint,
-        meta.null_ls.formatting.arclint,
-      }
-    })
-        
-
-    require("nvim-treesitter.install").prefer_git = true
-    require("nvim-treesitter.install").command_extra_args = {
-        curl = { "--proxy", "http://fwdproxy:8080" },
-    }
-end
