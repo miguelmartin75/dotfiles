@@ -1,21 +1,12 @@
 #!/bin/bash
 
-# vim-plug for vim
-if [ ! -f ~/.vim/autoload/plug.vim ]; then
-    echo 'installing plug.vim'
-
-    # install plug.vim
-    mkdir -p ~/.vim/autoload
-    curl -L https://raw.github.com/junegunn/vim-plug/master/plug.vim > ~/.vim/autoload/plug.vim
-fi
-
 # ohmyzsh
 if [ ! -d ~/.oh-my-zsh ]; then
     # install oh my zsh
     echo "installing oh my zsh..."
     curl -L http://install.ohmyz.sh | sh
 fi
-
+ 
 # if we're on a mac...
 if [ $(uname) == "Darwin" ]; then
     # run the osx script
@@ -27,6 +18,3 @@ elif [ $(uname) == "Linux" ]; then
 fi
 
 ./scripts/mv_dotfiles ./tilde
-
-# run vim and install the plugins for us
-vim -c "PlugInstall|qa"

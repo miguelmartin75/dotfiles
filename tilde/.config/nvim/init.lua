@@ -465,8 +465,9 @@ local servers = {
     'rust_analyzer',
     'ts_ls',
     'clangd',
+    'zls',
     'jedi_language_server',
-    'sourcekit',
+    -- 'sourcekit',
     'nim_langserver',
     'lua_ls',
 }

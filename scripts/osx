@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # slate
-if [ ! -d /Applications/Slate.app ]; then
-
-    echo "installing slate..."
-    pushd /Applications && curl http://www.ninjamonkeysoftware.com/slate/versions/slate-latest.tar.gz | tar -xz && popd
-
-fi
+# if [ ! -d /Applications/Slate.app ]; then
+# 
+#     echo "installing slate..."
+#     pushd /Applications && curl http://www.ninjamonkeysoftware.com/slate/versions/slate-latest.tar.gz | tar -xz && popd
+# 
+# fi
 
 # brew
 which brew > /dev/null
@@ -29,27 +29,27 @@ defaults write NSGlobalDomain KeyRepeat -int 0
 defaults write -g ApplePressAndHoldEnabled -bool false
 
 # speed up window maximize time
-defaults write -g NSAutomaticWindowAnimationsEnabled -bool false
+# defaults write -g NSAutomaticWindowAnimationsEnabled -bool false
 
 # Use scroll gesture with the Ctrl (^) modifier key to zoom
-defaults write com.apple.universalaccess closeViewScrollWheelToggle -bool true
-defaults write com.apple.universalaccess HIDScrollZoomModifierMask -int 262144
+# defaults write com.apple.universalaccess closeViewScrollWheelToggle -bool true
+# defaults write com.apple.universalaccess HIDScrollZoomModifierMask -int 262144
 
 # Follow the keyboard focus while zoomed in
-defaults write com.apple.universalaccess closeViewZoomFollowsFocus -bool true
+# defaults write com.apple.universalaccess closeViewZoomFollowsFocus -bool true
 
 # =========
 # Screen
 # ========
 
 # Save screenshots to custom folder (default: Desktop)
-defaults write com.apple.screencapture location -string "~/Google\ Drive/foto/screensh0t"
+# defaults write com.apple.screencapture location -string "~/Google\ Drive/foto/screensh0t"
 
 # Save screenshots in PNG format (other options: BMP, GIF, JPG, PDF, TIFF)
-defaults write com.apple.screencapture type -string "png"
+# defaults write com.apple.screencapture type -string "png"
 
 # Disable shadow in screenshots
-defaults write com.apple.screencapture disable-shadow -bool true
+# defaults write com.apple.screencapture disable-shadow -bool true
 
 # ===========
 # Finder 
@@ -72,14 +72,14 @@ defaults write com.apple.finder QLEnableTextSelection -bool true
 # =============
 
 # Disable Safari’s thumbnail cache for History and Top Sites
-defaults write com.apple.Safari DebugSnapshotsUpdatePolicy -int 2
-
-# Enable Safari’s debug menu
-defaults write com.apple.Safari IncludeInternalDebugMenu -bool true
-
-## Enable the Develop menu and the Web Inspector in Safari
-defaults write com.apple.Safari IncludeDevelopMenu -bool true
-defaults write com.apple.Safari WebKitDeveloperExtrasEnabledPreferenceKey -bool true
-defaults write com.apple.Safari com.apple.Safari.ContentPageGroupIdentifier.WebKit2DeveloperExtrasEnabled -bool true
-
-echo "note you may have to restart/re-login for all changes to take effect"
+# defaults write com.apple.Safari DebugSnapshotsUpdatePolicy -int 2
+# 
+# # Enable Safari’s debug menu
+# defaults write com.apple.Safari IncludeInternalDebugMenu -bool true
+# 
+# ## Enable the Develop menu and the Web Inspector in Safari
+# defaults write com.apple.Safari IncludeDevelopMenu -bool true
+# defaults write com.apple.Safari WebKitDeveloperExtrasEnabledPreferenceKey -bool true
+# defaults write com.apple.Safari com.apple.Safari.ContentPageGroupIdentifier.WebKit2DeveloperExtrasEnabled -bool true
+# 
+# echo "note you may have to restart/re-login for all changes to take effect"

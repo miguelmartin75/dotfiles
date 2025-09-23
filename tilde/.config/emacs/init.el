@@ -1,4 +1,4 @@
-;; SECTION: fundamental
+;; SECTION: fundamental  -*- lexical-binding: t; -*-
 (require 'package)
 
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
@@ -9,6 +9,7 @@
 
 ;; Initialize use-package on non-Linux platforms
 (unless (package-installed-p 'use-package) (package-install 'use-package))
+
 
 
 (defvar bootstrap-version)
@@ -46,7 +47,13 @@
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(custom-safe-themes
-   '("a9eeab09d61fef94084a95f82557e147d9630fbbb82a837f971f83e66e21e5ad"
+   '("5c7720c63b729140ed88cf35413f36c728ab7c70f8cd8422d9ee1cedeb618de5"
+     "87fa3605a6501f9b90d337ed4d832213155e3a2e36a512984f83e847102a42f4"
+     "b5fd9c7429d52190235f2383e47d340d7ff769f141cd8f9e7a4629a81abc6b19"
+     "921f165deb8030167d44eaa82e85fcef0254b212439b550a9b6c924f281b5695"
+     "7ec8fd456c0c117c99e3a3b16aaf09ed3fb91879f6601b1ea0eeaee9c6def5d9"
+     "166a2faa9dc5b5b3359f7a31a09127ebf7a7926562710367086fcc8fc72145da"
+     "a9eeab09d61fef94084a95f82557e147d9630fbbb82a837f971f83e66e21e5ad"
      "2ab8cb6d21d3aa5b821fa638c118892049796d693d1e6cd88cb0d3d7c3ed07fc"
      "e14289199861a5db890065fdc5f3d3c22c5bac607e0dbce7f35ce60e6b55fc52"
      "7e068da4ba88162324d9773ec066d93c447c76e9f4ae711ddd0c5d3863489c52"
@@ -56,20 +63,20 @@
      "7a7b1d475b42c1a0b61f3b1d1225dd249ffa1abb1b7f726aec59ac7ca3bf4dae"
      "37768a79b479684b0756dec7c0fc7652082910c37d8863c35b702db3f16000f8"
      default))
- '(org-agenda-files '("/Users/miguelmartin/org/everything.org"))
+ '(org-agenda-files '("/Users/mig/org/journal.org"))
  '(package-selected-packages
    '(nim-mode org-autolist which-key vterm vi-tilde-fringe use-package
-              undo-tree org-ref org-fragtog olivetti nord-theme magit
+              undo-tree org-ref org-fragtog olivetti nord-theme
               lsp-ivy ivy-rich ivy-bibtex helpful gscholar-bibtex
               general flycheck evil-org evil-collection
               evil-better-visual-line dap-mode counsel company
               command-log-mode))
- '(server-port "1492")
- '(server-use-tcp t)
  '(tramp-completion-reread-directory-timeout nil)
  '(tramp-default-method "sshx")
  '(tramp-use-ssh-controlmaster-options nil)
- '(warning-suppress-log-types '((comp))))
+ '(warning-suppress-log-types
+   '((org-element org-element-cache) (org-element org-element-parser)
+     (comp))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
@@ -106,7 +113,16 @@
 
 
 ;; https://www.fromkk.com/posts/preview-latex-in-org-mode-with-emacs-in-macos/
-; (exec-path-from-shell-initialize)
+(use-package exec-path-from-shell
+  :config (exec-path-from-shell-initialize)
+)
+(use-package load-env-vars
+  :config
+  (load-env-vars "~/.secrets")
+  ;; (load-env-vars "~/.zshrc")
+  ;; (setenv "TERM" "xterm-256")
+  (setenv "TERM" "")
+)
 
 (use-package websocket)
 (use-package simple-httpd)
@@ -117,68 +133,156 @@
 ;;             :files (:defaults (:exclude "helm-org-ql.el"))))
 
 
-
 (setq config-path "~/.config/emacs/init.el")
 ;; (load "~/.config/emacs/defaults.el")
-;; (load "~/.config/emacs/editing-basics.el")
-;; (load "~/.config/emacs/org-config.el")
-;; (load "~/.config/emacs/evil-config.el")
-;; (load "~/.config/emacs/ui-config.el")
-;; (load "~/.config/emacs/primitives.el")
-;; (load "~/.config/emacs/completion-config.el")
-;; (load "~/.config/emacs/work-config.el")
+
+(electric-indent-mode)
+
+;; (defun my/remove-datetree-day-heading ()
+;;   "Remove the intermediate day-level heading under a weekly capture."
+;;   (save-excursion
+;;     (goto-char (point-min))
+;;     ;; Look for the day heading ("*** YYYY-MM-DD Weekday")
+;;     (when (re-search-forward "^\\*\\*\\* [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} .*$" nil t)
+;;       (let ((beg (line-beginning-position))
+;;             (end (progn (forward-line 1) (point))))
+;;         (delete-region beg end)))))
 
 
-(use-package org :ensure t
+
+;; (package-install 'magit)
+;; (package-install 'magit-section)
+;; (package-install 'transient)
+;; (package-install 'with-editor)
+(setq server-kill-new-buffers t)
+
+(use-package org
     :config
   (setq org-todo-keywords
-	'((sequence "TODO(t!)" "POST(p!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)")))
+	'((sequence "PROJ(P!)" "TODO(t!)" "POST(p!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)"))
+  )
   (setq org-capture-templates
 	'(
-          ("r" "Reading List" (file+opt "~/org/to_read.org") "* TODO %?" :)
-	  ("n" "Note" entry (file+olp+datetree "~/org/journal.org")
-	   "* %T %? :note:" :empty-lines 1)
-	  ("b" "Task: Backlog" entry (file+olp "~/org/life.org" "Tasks" "Backlog")
-	   "* TODO %? :backlog:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-	  ("t" "Add Task" entry (file+olp+datetree "~/org/journal.org")
-	   "* TODO %? \n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-	  ("l" "Log" entry (file+olp+datetree "~/org/journal.org")
-	   "* %T %? :log:" :empty-lines 1)
-	  ("B" "Task: Work Backlog" entry (file "~/org/life.org")
-	   "* TODO %? :backlog:work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-	  ("T" "Add Work Task" entry (file+olp+datetree "~/org/journal.org")
-	   "* TODO %? :work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-	  ("L" "Work Log" entry (file+olp+datetree "~/org/journal.org")
-	   "* %T %? :log:work:" :empty-lines 1)
-	  ("m" "Meeting" entry (file+olp+datetree "~/org/journal.org")
+    ("r" "Reflections")
+    ("rw" "Weekly Reflection" entry
+    (file+datetree "~/org/reflections.org")
+    (file "~/org/templates/weekly.org")
+    :empty-lines 1
+    :tree-type week
+    :clock-in t :clock-resume t
+    ; :after-finalize my/remove-datetree-day-heading
+    )
+    ("rm" "Monthly Reflection" entry
+    (file+datetree "~/org/reflections.org")
+    (file "~/org/templates/monthly.org")
+    :empty-lines 1
+    :tree-type month
+    :clock-in t :clock-resume t
+    )
+
+    ;; journal
+	  ("m" "Meeting" entry (file+datetree "~/org/journal.org")
 	   "* %T %? :meeting:work:" :empty-lines 1)
-	  ("r" "Week Review" entry (file+olp+datetree "~/org/journal.org")
-	   "* Week Review: %t - %(- %t 7) :review:" :empty-lines 1)
-	  ("j" "Journal Entry" entry (file+olp+datetree "~/org/journal.org")
+	  ("t" "Add Task" entry (file+datetree "~/org/journal.org")
+	   "* TODO %? \n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+	  ("l" "Log" entry (file+datetree "~/org/journal.org")
+	   "* %T %? :log:" :empty-lines 1)
+	  ("j" "Journal Entry" entry (file+datetree "~/org/journal.org")
 	   "* %t :journal:\n%?" :empty-lines 1)
-	  ("i" "Idea" entry (file+olp "~/org/life.org" "Ideas")
-	   "* %?\nAdded: %U :inbox:idea:" :empty-lines 1)
-	  ))
+
+    ;; life
+	  ("b" "Task: Backlog" entry (file+olp "~/org/life.org" "Backlog" "Inbox")
+	   "* TODO %? :backlog:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+	  ("n" "Note" entry (file+olp+datetree "~/org/life.org" "Backlog" "Inbox")
+	   "* %T %? :note:" :empty-lines 1)
+
+	  ("i" "Idea" entry (file+olp "~/org/life.org" "Areas" "Ideas")
+	   "* %? :inbox:idea:\nAdded: %U" :empty-lines 1)
+	  ("w" "Writing Idea" entry (file+olp "~/org/life.org" "Areas" "Writing Ideas")
+	   "* %? :writing:idea:\nAdded: %U" :empty-lines 1)
+	  ("s" "Startup Idea" entry (file+olp "~/org/life.org" "Areas" "Startup Ideas")
+	   "* %? :startup:idea:\nAdded: %U" :empty-lines 1)
+	  ("R" "Research Idea" entry (file+olp "~/org/life.org" "Areas" "Research Ideas")
+	   "* %? :research:idea:\nAdded: %U" :empty-lines 1)
+    )
+  )
+
+  ; refiling
+  (setq org-refile-targets '((nil :maxlevel . 9)))
+  (setq org-outline-path-complete-in-steps nil)         ; Refile in a single go
+  (setq org-refile-use-outline-path t)                  ; Show full paths for refiling
 
   (setq org-src-preserve-indentation t)
   (add-hook 'org-mode-hook (lambda () (electric-indent-mode -1)))
-  (add-hook 'org-mode-hook (lambda () (company-mode 0)))
+  ; (add-hook 'org-mode-hook (lambda () (company-mode -1)))
+  (with-eval-after-load 'corfu
+    (add-hook 'org-mode-hook (lambda () (corfu-mode -1)))
+  )
 
-  (setq org-agenda-files '("~/org/tasks.org" "~/org/life.org"))
+  (setq org-agenda-files '("~/org/life.org"))
 
   (setq org-log-into-drawer t)
   (setq org-tags-column 0)
 
-  ;; don't add this
+  (setq org-adapt-indentation nil)
+  (setq org-confirm-babel-evaluate nil)
+  (setq org-hierarchical-todo-statistics t)
+  (org-babel-do-load-languages 'org-babel-load-languages
+      '(
+          (shell . t)
+          (python . t)
+          (emacs-lisp . t)
+          (C . t)
+      )
+  )
+
+  (defun my/org-summary-todo (n‑done n‑not‑done)
+    "Set parent to DONE if all children are done, TODO if none, DOING otherwise."
+    (let (org-log-done org-log-states)  ;; suppress change logging
+        (org-todo
+        (cond ((= n-not-done 0)     "DONE")
+            ((= n-done 0)         "TODO")
+            (t                    "DOING")))))
+
+  (add-hook 'org-after-todo-statistics-hook #'my/org-summary-todo)
+
+  ;; Optional: For checkbox-based lists, update parent state too
+  (defun my/org-summary-checkbox-cookie ()
+    "Update parent TODO based on checkbox progress cookie."
+    (let ((state (org-get-todo-state)))
+        (when state
+        (save-excursion
+            (org-back-to-heading t)
+            (end-of-line)
+            (when (re-search-backward
+                "\\[\\([0-9]*%\\)\\]\\|\\[\\([0-9]*\\)/\\([0-9]*\\)\\]" (line-beginning-position) t)
+            (let ((p1 (match-string 1))
+                    (n (match-string 2))
+                    (m (match-string 3)))
+                (cond
+                (p1
+                (cond ((string= p1 "100%") (org-todo-if-needed "DONE"))
+                        ((string= p1 "0%")   (org-todo-if-needed "TODO"))
+                        (t                    (org-todo-if-needed "DOING"))))
+                ((and n m)
+                (cond ((string= n m)    (org-todo-if-needed "DONE"))
+                        ((or (string= n "") (string= n "0")) (org-todo-if-needed "TODO"))
+                        (t                (org-todo-if-needed "DOING")))))))))))
+
+  (add-hook 'org-checkbox-statistics-hook #'my/org-summary-checkbox-cookie)
+
+
+
   ;;(add-hook 'org-after-todo-state-change-hook (lambda ()
   ;;   (when
   ;;     (string= org-state "DONE")
   ;;     (org-refile-to-datetree "~/org/journal.org")
   ;;   )
   ;;))
+
 )
 
-(require 'org-tempo) ;; templates
+(use-package org-tempo)
 
 (use-package org-fragtog
     :ensure t
@@ -190,26 +294,110 @@
 )
 
 ;; AI
-;;
 (use-package gptel
   :config
-  (gptel-make-anthropic "Claude" :stream t :key gptel-api-key)
+  (setq
+    gptel-model 'claude-sonnet-4-20250514
+    gptel-backend (
+       gptel-make-anthropic
+       "Claude"
+       :stream t
+       :models '(claude-sonnet-4-20250514)
+       :key (getenv "ANTHROPIC_API_KEY")
+    )
   )
+)
+(use-package inline-diff
+  :straight (:repo "https://code.tecosaur.net/tec/inline-diff")
+  :after gptel-rewrite) ;or use :defer
 
-;;(use-package org-roam :ensure t
-;;      ;; :hook
-;;      ;; (after-init . org-roam-mode)
-;;      :custom
-;;      ;; (org-roam-directory (file-truename "~/org/roam"))
-;;      (org-roam-directory (file-truename "~/org/"))
-;;      (setq org-roam-db-location "~/.org-roam.db")
-;;      :config
-;;      (setq org-roam-v2-ack t)
-;;      (add-hook 'org-roam-hook (org-roam-db-autosync-mode))
-;;      (setq org-roam-display-template (concat "${title:*} " (propertize "${tags:*}" 'face 'org-tag)))
-;;)
-;;
-;;
+
+(use-package whisper
+  :load-path "~/repos/whisper.el"
+  :bind ("C-H-r" . whisper-run)
+  :config
+  (setq whisper-install-directory "~/repos/"
+        whisper-model "large-v3-turbo"
+        whisper-language "en"
+        whisper-translate nil
+        whisper-use-threads (/ (num-processors) 1)))
+
+(defun rk/get-ffmpeg-device ()
+  "Gets the list of devices available to ffmpeg.
+The output of the ffmpeg command is pretty messy, e.g.
+  [AVFoundation indev @ 0x7f867f004580] AVFoundation video devices:
+  [AVFoundation indev @ 0x7f867f004580] [0] FaceTime HD Camera (Built-in)
+  [AVFoundation indev @ 0x7f867f004580] AVFoundation audio devices:
+  [AVFoundation indev @ 0x7f867f004580] [0] Cam Link 4K
+  [AVFoundation indev @ 0x7f867f004580] [1] MacBook Pro Microphone
+so we need to parse it to get the list of devices.
+The return value contains two lists, one for video devices and one for audio devices.
+Each list contains a list of cons cells, where the car is the device number and the cdr is the device name."
+  (unless (string-equal system-type "darwin")
+    (error "This function is currently only supported on macOS"))
+
+  (let ((lines (string-split (shell-command-to-string "ffmpeg -list_devices true -f avfoundation -i dummy || true") "\n")))
+    (cl-loop with at-video-devices = nil
+             with at-audio-devices = nil
+             with video-devices = nil
+             with audio-devices = nil
+             for line in lines
+             when (string-match "AVFoundation video devices:" line)
+             do (setq at-video-devices t
+                      at-audio-devices nil)
+             when (string-match "AVFoundation audio devices:" line)
+             do (setq at-audio-devices t
+                      at-video-devices nil)
+             when (and at-video-devices
+                       (string-match "\\[\\([0-9]+\\)\\] \\(.+\\)" line))
+             do (push (cons (string-to-number (match-string 1 line)) (match-string 2 line)) video-devices)
+             when (and at-audio-devices
+                       (string-match "\\[\\([0-9]+\\)\\] \\(.+\\)" line))
+             do (push (cons (string-to-number (match-string 1 line)) (match-string 2 line)) audio-devices)
+             finally return (list (nreverse video-devices) (nreverse audio-devices)))))
+
+(defun rk/find-device-matching (string type)
+  "Get the devices from `rk/get-ffmpeg-device' and look for a device
+matching `STRING'. `TYPE' can be :video or :audio."
+  (let* ((devices (rk/get-ffmpeg-device))
+         (device-list (if (eq type :video)
+                          (car devices)
+                        (cadr devices))))
+    (cl-loop for device in device-list
+             when (string-match-p string (cdr device))
+             return (car device))))
+
+(defcustom rk/default-audio-device nil
+  "The default audio device to use for whisper.el and outher audio processes."
+  :type 'string)
+
+(defun rk/select-default-audio-device (&optional device-name)
+  "Interactively select an audio device to use for whisper.el and other audio processes.
+If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
+  (interactive)
+  (let* ((audio-devices (cadr (rk/get-ffmpeg-device)))
+         (indexes (mapcar #'car audio-devices))
+         (names (mapcar #'cdr audio-devices))
+         (name (or device-name (completing-read "Select audio device: " names nil t))))
+    (setq rk/default-audio-device (rk/find-device-matching name :audio))
+    (when (boundp 'whisper--ffmpeg-input-device)
+      (setq whisper--ffmpeg-input-device (format ":%s" rk/default-audio-device)))))
+
+
+
+(use-package org-roam :ensure t
+      :hook
+      (after-init . org-roam-mode)
+      :custom
+      ;; (org-roam-directory (file-truename "~/org/roam"))
+      (org-roam-directory (file-truename "~/org/"))
+      (setq org-roam-db-location "~/.org-roam.db")
+      :config
+      ;; (setq org-roam-v2-ack t)
+      (add-hook 'org-roam-hook (org-roam-db-autosync-mode))
+      (setq org-roam-display-template (concat "${title:*} " (propertize "${tags:*}" 'face 'org-tag)))
+)
+
 ;;(use-package org-roam-ui
 ;;  :straight
 ;;    (:host github :repo "org-roam/org-roam-ui" :branch "main" :files ("*.el" "out"))
@@ -275,6 +463,8 @@
    (evil-mode 1)
    (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
    (define-key evil-insert-state-map (kbd "C-h") 'evil-delete-backward-char-and-join)
+   (define-key evil-normal-state-map (kbd "[-d") 'flymake-goto-next-error)
+   (define-key evil-normal-state-map (kbd "]-d") 'flymake-goto-prev-error)
    ;; Use visual line motions even outside of visual-line-mode buffers
    ;;(evil-global-set-key 'motion "j" 'evil-next-visual-line)
    ;;(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
@@ -314,19 +504,20 @@
 (use-package evil-org
   :ensure t
   :after org
-  :init (evil-org-mode)
   :config
   (add-hook 'org-mode-hook 'evil-org-mode)
   (add-hook 'evil-org-mode-hook
 	      (lambda ()
 		(evil-org-set-key-theme)))
   (require 'evil-org-agenda)
-  (evil-org-agenda-set-keys))
+  (evil-org-agenda-set-keys)
+)
 
 (use-package evil-better-visual-line
   :ensure t
   :config
-  (evil-better-visual-line-on))
+  (evil-better-visual-line-on)
+)
 
 ;; TODO removeme
 ;; (use-package vi-tilde-fringe
@@ -334,15 +525,21 @@
 ;;   :config
 ;;   (global-vi-tilde-fringe-mode 1))
 
-;; TODO
-;; (use-package evil-numbers :ensure t)
+(use-package
+  evil-numbers :ensure t
+  :config
+  (evil-define-key '(normal visual) 'global (kbd "C-c +") 'evil-numbers/inc-at-pt)
+  (evil-define-key '(normal visual) 'global (kbd "C-c -") 'evil-numbers/dec-at-pt)
+)
 
 ;; TODO move me
 (global-undo-tree-mode)
 (evil-set-undo-system 'undo-tree)
+(setq undo-tree-history-directory-alist '(("." . "~/.config/emacs/undo")))
 
 ;; terminal
 (use-package vterm
+  :hook (vterm-mode . compilation-shell-minor-mode)
   :config
   (setq vterm-keymap-exceptions nil)
 ;; TODO re-map some of these with CMD prefix
@@ -364,49 +561,54 @@
   (evil-define-key 'insert vterm-mode-map (kbd "C-g")      #'vterm--self-insert)
   (evil-define-key 'insert vterm-mode-map (kbd "C-c")      #'vterm--self-insert)
   (evil-define-key 'insert vterm-mode-map (kbd "C-SPC")    #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "S-<left>")  #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "S-<right>") #'vterm--self-insert)
+  (evil-define-key 'insert vterm-mode-map (kbd "s-<left>")  #'vterm--self-insert)
+  (evil-define-key 'insert vterm-mode-map (kbd "s-<right>") #'vterm--self-insert)
 
   (evil-define-key 'normal vterm-mode-map (kbd "C-d")      #'vterm--self-insert)
   (evil-define-key 'normal vterm-mode-map (kbd "i")        #'evil-insert-resume)
   (evil-define-key 'normal vterm-mode-map (kbd "o")        #'evil-insert-resume)
   (evil-define-key 'normal vterm-mode-map (kbd "<return>") #'evil-insert-resume)
   (evil-define-key 'insert vterm-mode-map (kbd "<escape>")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "S-<escape>")    #'evil-normal-state)
+  (evil-define-key 'insert vterm-mode-map (kbd "s-<escape>")    #'evil-normal-state)
 
-  (setq vterm-term-environment-variable "xterm-24bit")
+  ;; (setq vterm-term-environment-variable "xterm-24bit")
 
   (add-hook 'vterm-mode-hook (lambda () (visual-line-mode 0)))
   (add-hook 'vterm-mode-hook (lambda () (vi-tilde-fringe-mode 0)))
 )
 
+(defun my/run-in-vterm (command)
+  "Run COMMAND in a dedicated vterm buffer with compilation parsing."
+  (interactive
+   (list (read-shell-command "Run or Compile (vterm): "
+                             compile-command)))
+  (let ((buf (get-buffer-create "*vterm-compile*")))
+    (with-current-buffer buf
+      (unless (eq major-mode 'vterm-mode) (vterm))
+      (compilation-shell-minor-mode)
+      (vterm-send-string command)
+      (vterm-send-return))
+    (pop-to-buffer buf)))
+
 ;; -- ----------
 ;; lsp
-(use-package eglot
-  :config
-  (add-to-list 'eglot-server-programs
-             `(swift-mode . ("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/sourcekit-lsp")))
-  (add-to-list 'eglot-server-programs
-             `(nim-mode . ("")))
+;; (use-package eglot
+;;   :config
+;;   (add-to-list 'eglot-server-programs
+;;              `(swift-mode . ("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/sourcekit-lsp")))
+;;   ;; (add-to-list 'eglot-server-programs
+;;   ;;            `(nim-mode . ("~/")))
+;; )
+;; (use-package lsp-mode)
 
-)
-;;(use-package lsp-mode
-;;  :config
-;;  (lsp-register-client
-;;   (make-lsp-client
-;;    :new-connection (lsp-stdio-connection "~/zls/zig-out/bin/zls")
-;;    :major-modes '(zig-mode)
-;;    :server-id 'zls
-;;    :priority -1
-;;    ))
-;;)
+(use-package dap-mode)
 
 ;; languages
 (use-package nim-mode)
 (use-package zig-mode)
 (use-package swift-mode)
 ;; https://justinramel.github.io/2013/09/25/vim-to-emacs-smart-tab/
-(use-package smart-tab :config (global-smart-tab-mode t) (setq smart-tab-using-hippie-expand t))
+;; (use-package smart-tab :config (global-smart-tab-mode t) (setq smart-tab-using-hippie-expand t))
 
 (use-package markdown-mode
   :ensure t
@@ -417,9 +619,11 @@
 ;; completion
 (use-package corfu
   ;; Optional customizations
-  ;; :custom
-  ;; (corfu-cycle t)                ;; Enable cycling for `corfu-next/previous'
-  ;; (corfu-quit-at-boundary nil)   ;; Never quit at completion boundary
+  :custom
+  (corfu-auto-prefix 2)
+  (corfu-auto t)
+  (corfu-cycle t)                ;; Enable cycling for `corfu-next/previous'
+  ;; (corfu-quit-at-boundary t)
   ;; (corfu-quit-no-match nil)      ;; Never quit, even if there is no match
   ;; (corfu-preview-current nil)    ;; Disable current candidate preview
   ;; (corfu-preselect 'prompt)      ;; Preselect the prompt
@@ -435,12 +639,20 @@
   ;; Recommended: Enable Corfu globally.  Recommended since many modes provide
   ;; Capfs and Dabbrev can be used globally (M-/).  See also the customization
   ;; variable `global-corfu-modes' to exclude certain modes.
-  (global-corfu-mode)
+  ; (global-corfu-mode)
+
+  (keymap-unset corfu-map "RET")
+  ;; (keymap-unset corfu-map "TAB")
 
   ;; Enable optional extension modes:
-  ;; (corfu-history-mode)
-  ;; (corfu-popupinfo-mode)
+  (corfu-history-mode)
+  (corfu-popupinfo-mode)
 )
+;; (use-package corfu-terminal :ensure t
+;;   :unless (display-graphic-p)
+;;   :after corfu
+;;   :init (corfu-terminal-mode +1))
+
 
 ;; Add extensions
 (use-package cape
@@ -466,21 +678,22 @@
 )
 
 ; company-mode
-(use-package company
-  :ensure t
-  :config
-  ;; (global-company-mode 1)
-  ;; (company-tng-mode)
-  (setq company-tooltip-idle-delay 0.2)
-  (setq company-idle-delay 0.1)
-  ;;(setq company-backends '((company-capf company-files company-yasnippet company-dabbrev company-dabbrev-code)))
-  ;; (setq company-backends '((company-capf company-files company-yasnippet)))
-  (setq company-backends '(company-capf))
-  (setq company-dabbrev-downcase nil)
-  (setq company-transformers '(company-sort-by-occurrence delete-consecutive-dups))
-  (setq company-minimum-prefix-length 1)
-)
-(use-package company-box)
+;; (use-package company
+;;   :ensure t
+;;   :config
+;;   ;; (global-company-mode 1)
+;;   ;; (company-tng-mode)
+;;   (setq company-tooltip-idle-delay 0.2)
+;;   (setq company-idle-delay 0.1)
+;;   ;;(setq company-backends '((company-capf company-files company-yasnippet company-dabbrev company-dabbrev-code)))
+;;   ;; (setq company-backends '((company-capf company-files company-yasnippet)))
+;;   (setq company-backends '(company-capf))
+;;   (setq company-dabbrev-downcase nil)
+;;   (setq company-transformers '(company-sort-by-occurrence delete-consecutive-dups))
+;;   (setq company-minimum-prefix-length 1)
+;; )
+;; (use-package company-box)
+;; (use-package company-posframe :config (company-posframe-mode 1))
 
 
 ;; You may prefer to use `initials' instead of `partial-completion'.
@@ -491,9 +704,12 @@
   ;;       orderless-component-separator #'orderless-escapable-split-on-space)
 
   ;; (setq orderless-component-separator "!") ;; will work for most PLs
-  (setq completion-styles '(orderless)
-        completion-category-defaults nil
-        completion-category-overrides '((file (styles . (partial-completion))))))
+  (setq
+    completion-styles '(orderless basic)
+    completion-category-defaults nil
+    completion-category-overrides '((file (styles . (partial-completion))))
+  )
+)
 
 ;; Use dabbrev with Corfu!
 (use-package dabbrev
@@ -506,6 +722,49 @@
 ;; ---- other completions
 
 ;; search
+(use-package consult :ensure t)
+(use-package embark-consult :ensure t)
+(use-package consult-eglot :ensure t :after consult)
+
+; (use-package consult-omni
+;   :straight (consult-omni :type git :host github :repo "armindarvish/consult-omni" :branch "main" :files (:defaults "sources/*.el"))
+;   :after consult
+;   :custom
+;    ;; General settings that apply to all sources
+;   (consult-omni-show-preview t) ;;; show previews
+;   (consult-omni-preview-key "C-o") ;;; set the preview key to C-o
+;   :config
+;
+;   ;; Load Sources Core code
+;   (require 'consult-omni-sources)
+;   ;; Load Embark Actions
+;   (require 'consult-omni-embark)
+;
+;   (consult-omni-sources-load-modules)
+;   ;; (setq consult-omni-default-interactive-command #'consult-omni-wikipedia)
+;
+;   (setq consult-omni-multi-sources '("calc"
+;                                     ;; "File"
+;                                     ;; "Buffer"
+;                                     ;; "Bookmark"
+;                                     "Apps"
+;                                     ;; "gptel"
+;                                     ;; "Brave"
+;                                     "Dictionary"
+;                                     "Google"
+;                                     "Wikipedia"
+;                                     "elfeed"
+;                                     ;; "mu4e"
+;                                     ;; "buffers text search"
+;                                     "Notes Search"
+;                                     "Org Agenda"
+;                                     ;; "GitHub"
+;                                     ;; "YouTube"
+;                                     "Invidious"
+;                                     )
+;   )
+; )
+
 (use-package counsel
   :ensure t
   :config
@@ -545,7 +804,18 @@
   (setq xref-show-xrefs-function #'ivy-xref-show-xrefs)
 )
 
-;;
+;; treesitter
+(use-package tree-sitter
+  :config
+  (global-tree-sitter-mode)
+)
+(use-package tree-sitter-langs)
+(use-package ts-fold
+  :after tree-sitter
+  :straight (ts-fold :type git :host github :repo "emacs-tree-sitter/ts-fold")
+  :config (global-ts-fold-mode)
+)
+
 
 ;; (flyspell-mode) this is a test on comments
 (use-package flyspell
@@ -558,10 +828,17 @@
              flyspell-prog-text-faces))
 )
 
-(use-package company-posframe :config (company-posframe-mode 1))
-
 ;; ui
 ;; (use-package nord-theme :init (load-theme 'nord t))
+(use-package doom-modeline
+  :ensure t
+  :hook (after-init . doom-modeline-mode)
+  :config
+  (setq doom-modeline-icon t)
+  (setq doom-modeline-major-mode-color-icon t)
+  (setq doom-modeline-minor-modes t)
+)
+
 (use-package doom-themes
   :ensure t
   :config
@@ -572,7 +849,7 @@
   ;; (load-theme 'doom-nord t)
   ;; (load-theme 'doom-opera-light t)
   ;; (load-theme 'doom-flatwhite t)
-  (load-theme 'doom-plain t)
+  (load-theme 'doom-one-light t)
 
   ;; Enable flashing mode-line on errors
   (doom-themes-visual-bell-config)
@@ -626,7 +903,12 @@
 	:global-prefix "C-SPC")
 )
 
-(my/leader-keys "b" '(my/compile :which-key "compile"))
+(define-key evil-normal-state-map (kbd "M-p") 'counsel-fzf)
+(define-key evil-insert-state-map (kbd "M-p") 'counsel-fzf)
+(my/leader-keys "[" '(flymake-goto-prev-error :which-key "prev error"))
+(my/leader-keys "]" '(flymake-goto-next-error :which-key "next error"))
+(my/leader-keys "b" '(compile :which-key "compile"))
+(my/leader-keys "c" '(my/compile :which-key "compile"))
 (my/leader-keys "r" '(my/run-app :which-key "run"))
 ;;(my/leader-keys "t" '(my/run-current-test :which-key "run current test"))
 ;; todo
@@ -634,7 +916,7 @@
 
 (my/leader-keys "Z" '(my/write-mode :which-key "zen mode"))
 (my/leader-keys "z" '(my/write-mode-no-zoom :which-key "zen mode no zoom"))
-(my/leader-keys "c" '(my/default-mode :which-key "code mode"))
+(my/leader-keys "v" '(my/default-mode :which-key "code mode"))
 
 (my/leader-keys "/" '(comment-or-uncomment-region :which-key "toggle comment"))
 
@@ -642,14 +924,15 @@
 
 (my/leader-keys "," '(counsel-switch-buffer :which-key "switch buffer"))
 (my/leader-keys "<" '(counsel-switch-buffer :which-key "switch buffer"))
-(my/leader-keys "f" '(counsel-find-file :which-key "find a file"))
-;;(my/leader-keys "," '(helm-buffers-list :which-key "switch buffer"))
-;;(my/leader-keys "<" '(helm-buffers-list :which-key "switch buffer"))
-;;(my/leader-keys "g" '(helm-find-files :which-key "find a file"))
+(my/leader-keys "p" '(counsel-find-file :which-key "find a file"))
 (my/leader-keys "e" '(org-set-effort :which-key "set effort for org-mode"))
 (my/leader-keys "x" '(org-capture :which-key "capture task"))
 (my/leader-keys "n" '(org-roam-node-find :which-key "roam files"))
 (my/leader-keys "j" '(my/goto-journal :which-key "goto journal"))
+
+(my/leader-keys "oc" '(org-table-recalculate-buffer-tables :which-key "recaclc tables in buffer"))
+(my/leader-keys "on" '(org-id-get-create :which-key "create node"))
+(my/leader-keys "ot" '(cousnel-org-tag :which-key "add tags"))
 
 (my/leader-keys "wz" '(delete-other-windows :which-key "zoom window"))
 (my/leader-keys "wj" '(evil-window-down :which-key "win down"))
@@ -667,6 +950,7 @@
 (my/leader-keys "f" '(org-narrow-to-subtree :which-key "narrow to subtree"))
 (my/leader-keys "F" '(widen :which-key "widen narrow"))
 
+(my/leader-keys "E" '(eglot :which-key "start eglot/LSP"))
 
 (my/leader-keys "L" '(org-insert-link :which-key "insert link in org-mode"))
 (my/leader-keys "l" '(display-line-numbers-mode :which-key "toggle line numbers"))
@@ -678,6 +962,8 @@
 (my/leader-keys "mT" '(org-roam-tag-remove :which-key "remove tag"))
 
 (my/leader-keys "k" '(describe-key :which-key "describe key"))
+
+; gptel bindings
 
 
 (require 'tramp)
@@ -691,10 +977,11 @@
            ;; tramp config for async emacs process
            (setq tramp-completion-reread-directory-timeout nil)
            (setq tramp-default-method "sshx")
-           (setq tramp-use-ssh-controlmaster-options nil)
-           (setq server-port "1492")
-           (setq server-use-tcp t))
+           (setq tramp-use-ssh-controlmaster-options nil))
 )
+
+;; (setq server-use-tcp t)
+;; (setq server-auth-dir (expand-file-name "~/.config/emacs/server"))
 
 
 ;; iterate over all bindings
@@ -731,17 +1018,33 @@
 (defun my/compile ()
   (interactive)
   (let ((default-directory (my/build-path)))
-    (compile "cmake --build .")))
+    (compile "cmake --build . -j")))
 
 (defun my/run-app ()
   (interactive)
   (let ((default-directory (my/build-path)))
-    (shell-command "./build/test.app/Contents/MacOS/test")))
+    (eshell-command "ctest")))
 
 ;; https://yiming.dev/blog/2018/03/02/my-org-refile-workflow/
 ;; (defun org-search-heading ()
 ;;   (interactive)
 ;;   (org-refile '(4)))
+
+;; source: http://steve.yegge.googlepages.com/my-dot-emacs-file
+(defun rename-file-and-buffer (new-name)
+  "Renames both current buffer and file it's visiting to NEW-NAME."
+  (interactive "sNew name: ")
+  (let ((name (buffer-name))
+        (filename (buffer-file-name)))
+    (if (not filename)
+        (message "Buffer '%s' is not visiting a file!" name)
+      (if (get-buffer new-name)
+          (message "A buffer named '%s' already exists!" new-name)
+        (progn
+          (rename-file filename new-name 1)
+          (rename-buffer new-name)
+          (set-visited-file-name new-name)
+          (set-buffer-modified-p nil))))))
 
 (defun delete-file-and-buffer ()
   "Deletes the current buffer and file"
@@ -762,6 +1065,15 @@
     )
   )
 
+(defun copy-current-file-path ()
+  "Copy the full path of the current buffer's file to the kill ring."
+  (interactive)
+  (let ((file-path (buffer-file-name)))
+    (if file-path
+        (progn
+          (kill-new file-path)
+          (message "Copied file path: %s" file-path))
+      (message "Current buffer is not associated with a file."))))
 
 (defun org-get-logbook-notes ()
   (save-excursion
@@ -833,22 +1145,32 @@
 )
 
 
-(defvar my/default-font-size 130)
-(defvar my/default-variable-font-size 130)
+(defvar my/default-font-size 13)
+(defvar my/default-variable-font-size 13)
+(setq my/default-font-size 13.5)
+(setq my/default-variable-font-size 13.5)
 
-(set-face-attribute 'default nil :font "Menlo" :height my/default-font-size)
-(set-face-attribute 'fixed-pitch nil :font "Menlo" :height my/default-font-size)
-(set-face-attribute 'variable-pitch nil :font "Helvetica" :height my/default-variable-font-size :weight 'regular)
+(set-face-attribute 'default nil
+  :font (font-spec :family "JetBrains Mono"
+                   :size my/default-font-size
+                   :fallback '("Apple Color Emoji"
+                              "Apple Symbols"
+                              "Menlo")))
+;; Use 'prepend for the NS and Mac ports or Emacs will crash.
+(set-fontset-font t 'unicode (font-spec :family "all-the-icons") nil 'append)
+(set-fontset-font t 'unicode (font-spec :family "file-icons") nil 'append)
+(set-fontset-font t 'unicode (font-spec :family "Material Icons") nil 'append)
+(set-fontset-font t 'unicode (font-spec :family "github-octicons") nil 'append)
+(set-fontset-font t 'unicode (font-spec :family "FontAwesome") nil 'append)
+(set-fontset-font t 'unicode (font-spec :family "Weather Icons") nil 'append)
 
 (show-paren-mode 1)
-
 (tool-bar-mode -1)          ; Disable the toolbar
 (scroll-bar-mode -1)        ; Disable visible scrollbar
 (set-fringe-mode 10)        ; Give some breathing room
 (menu-bar-mode -1)          ; Disable the menu bar
 (blink-cursor-mode 0)
 (setq ring-bell-function 'ignore)
-
 (winner-mode 1)
 
 (setq mac-control-modifier 'control)
@@ -875,9 +1197,9 @@
 
 
 (defun my/write-mode() (interactive)
-   (setq olivetti-body-width 80)
+   (setq olivetti-body-width 60)
    (olivetti-mode 1)
-   (text-scale-set 4.0)
+   (text-scale-set 3.0)
    (display-line-numbers-mode 0)
    (company-mode 0)
 )
@@ -907,57 +1229,17 @@
     (global-set-key (kbd "C-x C") (lambda () (interactive) (find-file "~/.config/emacs/init.el")))
     (global-set-key (kbd "C-x R") (lambda () (interactive) (my/soft-reload)))
     (global-set-key (kbd "C-c C-c") 'eval-region)
+
+    (global-set-key (kbd "s-1") (lambda () (interactive) (tab-select 1)))
+    (global-set-key (kbd "s-2") (lambda () (interactive) (tab-select 2)))
+    (global-set-key (kbd "s-3") (lambda () (interactive) (tab-select 3)))
+    (global-set-key (kbd "s-4") (lambda () (interactive) (tab-select 4)))
+    (global-set-key (kbd "s-5") (lambda () (interactive) (tab-select 5)))
+    (global-set-key (kbd "s-6") (lambda () (interactive) (tab-select 6)))
+    (global-set-key (kbd "s-7") (lambda () (interactive) (tab-select 7)))
+    (global-set-key (kbd "s-8") (lambda () (interactive) (tab-select 8)))
+    (global-set-key (kbd "s-9") (lambda () (interactive) (tab-select 9)))
 )
-
-;; work / configurations
-(defun my/connect-dev1 () (interactive)
-  ;; TODO, actually connect
-  (vterm "dev1")
-)
-
-(defun my/connect-dev2 () (interactive)
-  (vterm "dev2")
-)
-
-(defun my/connect-dev-fair () (interactive)
-  (vterm "devfair")
-)
-
-(defun my/connect-local () (interactive)
-  (vterm "local")
-)
-
-;; TODO: graphql
-;; - remove all keybindings excluding evil..?
-;; - detect duplicate keybindings..?
-
-;; TODO
-;; (load "~/.config/emacs/graphql.el")
-
-;;;(setq lc/mytasks-query "{\"query\": \"{'key':'AND','children':[{'key':'EQUALS_ANY_OF_TASK_STATUSES','field':'TASK_STATUS','value':['OPEN']},{'key':'EQUALS_ME','field':'TASK_OWNER_FBID','value':null}]}\"}")
-;;;
-;;;(setq gql-queries-folder "/Users/miguelmartin/repos/tasks")
-;;;
-;;;(defun my/tasks ()
-;;;  (json-parse-string
-;;;   (lc/gql
-;;;    :sync t
-;;;    :variables lc/mytasks-query
-;;;    :query-file "all_tasks")))
-;;;
-;;;(defun format-task-node (n)
-;;;  `(:id ,(number-to-string (ht-get n "task_number"))
-;;;    :url ,(ht-get n "url")
-;;;    :title ,(ht-get n "task_title")))
-;;;
-;;;(defun tasks-nodes ()
-;;;  (let* ((raw (lc/mytasks))
-;;;         (edges (ht-get* raw "task_search_query" "search_items" "edges")))
-;;;    (cl-loop for n across edges collect (format-task-node (ht-get n "node")))))
-
-;;(lc/gql :sync t :query-file "all_tasks_temp")
-;;(lc/gql :sync t :query-string lc/mytasks-query)
-;;(require graphql "~/.config/emacs/graphql.el")
 
 ;; editing basics
 (defun my/cut () (interactive)
@@ -974,6 +1256,39 @@
     )
 )
 
+(defun region-to-some-buffer (beg end)
+  (interactive "r")
+  (let ((input (buffer-substring beg end))
+        (new-buffer (get-buffer-create "*my-buffer*")))
+    (pop-to-buffer new-buffer)
+    (fundamental-mode)  ;; replace with desired mod
+    (insert input)))
+
+(defun org-copy-to-datetree (&optional file)
+  "Refile a subtree to a datetree corresponding to it's timestamp.
+
+The current time is used if the entry has no timestamp. If FILE
+is nil, refile in the current file."
+  (interactive "f")
+  (let* ((datetree-date (or (org-entry-get nil "TIMESTAMP" t)
+                            (org-read-date t nil "now")))
+         (date (org-date-to-gregorian datetree-date))
+         )
+    (with-current-buffer (current-buffer)
+      (save-excursion
+        (org-copy-subtree)
+        (if file (find-file file))
+        (org-datetree-find-date-create date)
+        (org-narrow-to-subtree)
+        (show-subtree)
+        (org-end-of-subtree t)
+        (newline)
+        (goto-char (point-max))
+        (org-paste-subtree 4)
+        (widen)
+        ))
+    )
+)
 ;; https://emacs.stackexchange.com/questions/10597/how-to-refile-into-a-datetree
 (defun org-refile-to-datetree (&optional file)
   "Refile a subtree to a datetree corresponding to it's timestamp.
@@ -1015,22 +1330,15 @@ is nil, refile in the current file."
 (global-set-key (kbd "TAB") 'my/tab-key)
 (setq indent-tabs-mode nil)
 
-
-
-(setq org-confirm-babel-evaluate nil)
-
-;;(use-package ob-ipython :ensure t)
-(require 'org-autolist "~/.config/emacs/backup/better-ret.el")
+(require 'org-autolist "~/.config/emacs/better-ret.el")
 (add-hook 'org-mode-hook (lambda () (org-autolist-mode)))
 
-(org-babel-do-load-languages 'org-babel-load-languages
-    '(
-        (shell . t)
-        (python . t)
-        ;;(ipython . t)
-        (emacs-lisp . t)
-        (C . t)
-    )
-)
+(setq-default indent-tabs-mode nil)  ; Use spaces instead of tabs
+(setq-default tab-width 2)           ; Set tab width to 2
+(setq-default standard-indent 2)     ; Set standard indent to 2
 
-(setq org-adapt-indentation nil)
+(setq-default lisp-indent-offset 2)  ; lisp
+(setq-default c-basic-offset 4)      ; C/C++/Java
+(setq-default js-indent-level 2)     ; JavaScript
+(setq-default css-indent-offset 2)   ; CSS
+(setq-default python-indent-offset 4) ; Python
