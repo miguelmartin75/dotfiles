@@ -172,3 +172,4 @@ export LDFLAGS="-L/opt/homebrew/opt/llvm/lib/unwind -lunwind"
 export PATH="/nix/var/nix/profiles/default/bin:$PATH"
 
 # export EMACS_SOCKET_NAME=
+export ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
