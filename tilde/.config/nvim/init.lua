@@ -7,10 +7,10 @@ require('packer').startup(function()
     use 'wbthomason/packer.nvim'
     use { 'nvim-treesitter/nvim-treesitter', run = ':TSUpdate' }
     use { 'nvim-treesitter/nvim-treesitter-context' }
-    --use { 'lewis6991/spellsitter.nvim' }
     use { 'glacambre/firenvim', run = function() vim.fn['firenvim#install'](0) end }
 
     -- UI/colors
+    use { 'nvim-mini/mini.icons', config = function() require('mini.icons').setup({ style = 'ascii' }) end }
     use {
         "mcchrish/zenbones.nvim",
         -- Optionally install Lush. Allows for more configuration or extending the colorscheme
@@ -55,78 +55,22 @@ require('packer').startup(function()
     }
     use 'christoomey/vim-tmux-navigator'
 
-    -- completion
-    -- use 
-    -- use 'hrsh7th/nvim-cmp'
-    -- use 'hrsh7th/cmp-nvim-lsp'
-    -- use 'hrsh7th/cmp-buffer'
-    -- use 'hrsh7th/cmp-path'
-    -- use 'hrsh7th/cmp-cmdline'
-
     use {
     	'nvim-telescope/telescope.nvim', requires = { {'nvim-lua/plenary.nvim'} }
     }
     use {'nvim-telescope/telescope-fzf-native.nvim', run = 'make' }
-    -- use 'L3MON4D3/LuaSnip' -- TODO
-    --
+    -- use 'L3MON4D3/LuaSnip' -- TODO: maybe?
     
     use {
         'folke/which-key.nvim',
         commit = "6c1584eb76b55629702716995cca4ae2798a9cca"
     }
-
-    -- use { "OXY2DEV/markview.nvim" }
-
-    -- use 'stevearc/dressing.nvim'
-    -- use 'MunifTanjim/nui.nvim'
-    -- use 'MeanderingProgrammer/render-markdown.nvim'
-
-    -- use {
-    --   'yetone/avante.nvim',
-    --   branch = 'main',
-    --   run = 'make',
-    --   config = function()
-    --     require('avante').setup({
-    --         provider = "ollama",
-    --         ollama = {
-    --           model = "qwen2.5-coder:32b",
-    --           options = {
-    --             num_ctx = 4096, -- TODO get exact
-    --           };
-    --         },
-    --         -- TODO
-    --         -- behaviour = {
-    --         --   enable_cursor_planning_mode = true, -- enable cursor planning mode!
-    --         -- },
-    --         vendors = {
-    --           ["gemma3-27b"] = {
-    --              __inherited_from = "ollama",
-    --              model = "hf.co/unsloth/gemma-3-27b-it-GGUF:Q4_K_M",
-    --              options = {
-    --                temperature = 0.1,
-    --              };
-    --           }
-    --        }
-    --     })
-    --   end
-    -- }
-
-    use {
-        "olimorris/codecompanion.nvim",
-        -- config = function()
-        -- end,
-        requires = {
-            "nvim-lua/plenary.nvim",
-            "nvim-treesitter/nvim-treesitter",
-        }
-    }
+    use { 'folke/sidekick.nvim' }
+    use { 'folke/snacks.nvim' }
 
     use {
       "echasnovski/mini.diff",
     }
-    --   config = function()
-    --   end,
-    -- },
 
     use {
         'saghen/blink.cmp',
@@ -141,9 +85,17 @@ local function t(str)
     return vim.api.nvim_replace_termcodes(str, true, true, true)
 end
 
-local function telescope_cmd(cmd)
-    vim.api.nvim_command("Telescope " .. cmd)
-end
+local Snacks = require('snacks')
+Snacks.setup({
+    styles = {},
+    picker = {
+        layout = {
+            preview = "main",
+            preset = "ivy",
+            position = "bottom",
+        },
+    }
+})
 
 ops = {
     insert_now = function()
@@ -168,73 +120,33 @@ ops = {
         set invrelativenumber
         ]])
     end,
-    find_files = function()
-        telescope_cmd("find_files")
-    end,
     rename_file = function()
         print("TODO")
-    end,
-    find_buffers = function()
-        telescope_cmd("buffers")
     end,
     toggle_inlay = function()
         vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled())
     end
 }
 
--- markdown preview
--- local presets = require("markview.presets");
--- 
--- require("markview").setup({
---     markdown = {
---         headings = presets.headings.slanted
---     },
---     preview = {
---       filetypes = { "markdown", "codecompanion" },
---       ignore_buftypes = {},
---     },
--- })
+
 
 -- diff
+-- TODO
 local diff = require("mini.diff")
 diff.setup({
   source = diff.gen_source.none(),
 })
 
 -- AI
-
-require("codecompanion").setup({
-    adapters = {
-        sonnet = function()
-            return require("codecompanion.adapters").extend("anthropic", {
-                env = {
-                    api_key = "ANTHROPIC_API_KEY",
-                },
-                schema = {
-                    model = { default = "claude-sonnet-4-20250514", },
-                },
-            })
-        end,
-        opus = function()
-            return require("codecompanion.adapters").extend("anthropic", {
-                env = {
-                    api_key = "ANTHROPIC_API_KEY",
-                },
-                schema = {
-                    model = { default = "claude-opus-4-20250514", },
-                },
-            })
-        end,
+local sidekick = require('sidekick')
+sidekick.setup {
+    cli = {
+      mux = {
+        backend = "tmux",
+        enabled = true,
+      },
     },
-    strategies = {
-        chat = { adapter = "sonnet" },
-        inline = { adapter = "sonnet" },
-        cmd = { adapter = "sonnet" }
-    },
-    opts = {
-        log_level = "DEBUG",
-    },
-})
+}
 
 local progress = require("fidget.progress")
 
@@ -322,10 +234,10 @@ require("blink.cmp").setup({
       nerd_font_variant = 'none'
     },
     sources = {
-      default = { 'lsp', 'path', 'snippets', 'buffer', 'codecompanion' },
-      per_filetype = {
-        codecompanion = { "codecompanion" },
-      }
+      default = { 'lsp', 'path', 'snippets', 'buffer', },
+      -- per_filetype = {
+      --   codecompanion = { "codecompanion" },
+      -- }
     },
 
     completion = {
@@ -354,6 +266,7 @@ require("blink.cmp").setup({
 })
 
 local cmp = require'blink.cmp'
+-- TODO
 -- cmp.setup({
 -- 	window = {
 --         -- TODO
@@ -401,47 +314,9 @@ require'fidget'.setup{}
 local M = {}
 
 local on_attach = function(client, bufnr)
-    --local function buf_set_keymap(...) vim.api.nvim_buf_set_keymap(bufnr, ...) end
     local function buf_set_option(...) vim.api.nvim_buf_set_option(bufnr, ...) end
 
     buf_set_option('omnifunc', 'v:lua.vim.lsp.omnifunc')
-
-    -- Mappings.
-    -- print("LSP attached: ", client.name)
-    local opts = {
-        mode="n",
-        silent=false,
-        buffer=bufnr,
-    }
-    wk.register({
-        ["gd"] = {'<Cmd>lua vim.lsp.buf.definition()<CR>', "goto definition"},
-        ["gD"] = {'<Cmd>lua vim.lsp.buf.declaration()<CR>', "goto declaration"},
-        ["gr" ] = { require('telescope.builtin').lsp_references, "[G]oto [R]eferences" },
-        ["<leader>D"] = { vim.lsp.buf.type_definition, 'Type [D]efinition'},
-        ["gi"] = {'<Cmd>lua vim.lsp.buf.implementation()<CR>', "goto implementation"},
-        ["K"] = {'<Cmd>lua vim.lsp.buf.hover()<CR>', "hover"},
-        ["<C-k>"] = {'<cmd>lua vim.lsp.buf.signature_help()<CR>', "signature help"},
-        ["<leader>c"] = {
-            w = {'<cmd>lua vim.lsp.buf.add_workspace_folder()<CR>', "add workspace folder"},
-            W = {'<cmd>lua vim.lsp.buf.remove_workspace_folder()<CR>', "remove workspace folder"},
-            l = {'<cmd>lua vim.lsp.buf.list_workspace_folders()<CR>', "list workspace folders"},
-            D = {'<cmd>lua vim.lsp.buf.type_definition()<CR>', "type definition"},
-            r = {'<cmd>lua vim.lsp.buf.rename()<CR>', "rename"},
-            a = {'<cmd>lua vim.lsp.buf.code_action()<CR>', "action"},
-            i = {ops.toggle_inlay, "toggle inlays"},
-        }
-    }, opts)
-    -- Set some keybinds conditional on server capabilities
-    if client.server_capabilities.document_formatting then
-        wk.register({
-            ["<space>cf"] = {"<cmd>lua vim.lsp.buf.formatting()<CR>", "format"},
-        }, opts)
-    end
-    if client.server_capabilities.document_range_formatting then
-        wk.register({
-            ["<space>cF"] = {"<cmd>lua vim.lsp.buf.range_formatting()<CR>", "range format"},
-        }, opts)
-    end
 
     -- Set autocommands conditional on server_capabilities
     if client.server_capabilities.document_highlight then
@@ -458,7 +333,6 @@ local on_attach = function(client, bufnr)
     end
 end
 
--- local capabilities = require('cmp_nvim_lsp').default_capabilities(vim.lsp.protocol.make_client_capabilities())
 local capabilities = require('blink.cmp').get_lsp_capabilities()
 
 local servers = { 
@@ -467,21 +341,35 @@ local servers = {
     'clangd',
     'zls',
     'jedi_language_server',
-    -- 'sourcekit',
     'nim_langserver',
     'lua_ls',
+    -- 'sourcekit',
 }
 for _, lsp in pairs(servers) do
-    require('lspconfig')[lsp].setup {
-        capabilities = capabilities,
-        on_attach = on_attach,
-    }
+    -- require('lspconfig')[lsp].setup {
+    --     capabilities = capabilities,
+    --     on_attach = on_attach,
+    -- }
 end
 
 -- TELESCOPE
 -- local actions = require"telescope-actions" -- TODO
 
 telescope.setup {
+    pickers = {
+        find_files = {
+            hidden = true
+        },
+    },
+    defaults = {
+      file_ignore_patterns = {
+        "node_modules",
+        "build",
+        "dist",
+        "yarn.lock",
+        ".git",
+      },
+    },
     mappings = {
         i = {
             -- map actions.which_key to <C-h> (default: <C-/>)
@@ -503,10 +391,6 @@ telescope.setup {
 }
 telescope.load_extension('fzf')
 
-
---vim.cmd([[
---nmap <Leader>, :Telescope
---]])
 require("nvim-treesitter.configs").setup{
     -- A list of parser names, or "all"
     ensure_installed = { "c", "cpp", "lua", "python" },
@@ -597,25 +481,19 @@ require'treesitter-context'.setup{
 }
 
 
+-- VIM OPTIONS
 vim.cmd([[
 set foldmethod=expr
 set foldexpr=nvim_treesitter#foldexpr()
-]])
 
--- REPL
--- slime config
-vim.cmd([[
+" REPL
+" slime config
 let g:slime_target = "tmux"
 let g:slime_default_config = {"socket_name": "default", "target_pane": "{last}"}
 let g:slime_python_ipython = 1
 let g:slime_dispatch_ipython_pause = 350
-]])
---let g:slime_paste_file = "/tmp/.slime_paste"
+" let g:slime_paste_file = "/tmp/.slime_paste"
 
--- TODO mdrunner or whatever it's called
-
--- VIM OPTIONS
-vim.cmd([[
 set rtp+=/usr/local/bin/
 
 " set command history to 500
@@ -688,9 +566,8 @@ augroup FileTypeSpecificAutocommands
 augroup END
 
 let g:markdown_folding = 1
-]])
--- UI
-vim.cmd([[
+
+" UI
 set mouse=
 
 " change cursor to line in insert mode
@@ -758,6 +635,36 @@ set tm=500
 
 " Always show the status line
 set laststatus=2
+
+" space as leader
+nnoremap <Space> <Nop>
+let mapleader=" "
+
+" for wrapped lines
+" map j gj
+" map k gk
+
+" normal re-map leader-p to 
+" paste from the system clipboard
+nmap <leader>p "+p
+
+" insert re-map CTRL-p to paste 
+" from the clipboard
+" imap <C-p> <C-r>+
+
+" yank re-map for system clipboard
+nmap Y "+y
+nmap YY "+yy
+vmap Y "+y
+
+nnoremap <F1> <nop>
+nnoremap Q <nop>
+nnoremap K <nop>
+vnoremap K <nop>
+
+" set hidden basically allows you to 
+" open another buffer without saving changes
+set hidden
 ]])
 
 -- KEY BINDINGS
@@ -783,38 +690,6 @@ set laststatus=2
 --     end
 -- end
 
-vim.cmd([[
-" space as leader
-nnoremap <Space> <Nop>
-let mapleader=" "
-
-" for wrapped lines
-" map j gj
-" map k gk
-
-" normal re-map leader-p to 
-" paste from the system clipboard
-nmap <leader>p "+p
-
-" insert re-map CTRL-p to paste 
-" from the clipboard
-imap <C-p> <C-r>+
-
-" yank re-map for system clipboard
-nmap Y "+y
-nmap YY "+yy
-vmap Y "+y
-
-nnoremap <F1> <nop>
-nnoremap Q <nop>
-nnoremap K <nop>
-vnoremap K <nop>
-
-" set hidden basically allows you to 
-" open another buffer without saving changes
-set hidden
-]])
-
 wk.setup {
     plugins = {
         marks = true, -- shows a list of your marks on ' and `
@@ -837,94 +712,159 @@ wk.setup {
     },
 }
 
-wk.register({
-    -- ["<Tab>"] = {"za", "Toggle fold"},
-    ["<C-p>"] = {ops.find_files, "Find files"},
-    ["<C-s>"] = {"<cmd>Telescope myles<cr>", "Myles"},
-    ["[d"] = {'<cmd>lua vim.diagnostic.goto_prev()<CR>', "prev diag"},
-    ["]d"] = {'<cmd>lua vim.diagnostic.goto_next()<CR>', "next diag"},
-    ["<leader>q"] = {'<cmd>lua vim.lsp.diagnostic.set_loclist()<CR>', "set diag loc"},
-    ["<leader>Q"] = {'<cmd>lua vim.lsp.diagnostic.open_float()<CR>', "open diag float"},
 
-}, {mode="n"})
+wk.add({
+    {"<C-p>", function() Snacks.picker.files() end, desc = "Find files"},
+    {"<C-s>", function() Snacks.picker.lines() end, desc = "line grep"},
+    {"[d", function() vim.diagnostic.goto_prev() end, desc = "prev diag"},
+    {"]d", function() vim.diagnostic.goto_next() end, desc = "next diag"},
+    {"gd", function() vim.lsp.buf.definition() end, desc = "goto definition"},
+    {"gD", function() vim.lsp.buf.declaration() end, desc = "goto declaration"},
+    {"gi", function() vim.lsp.buf.implementation() end, desc = "goto implementation"},
+    {"K", function() vim.lsp.buf.hover() end, desc = "hover"},
+    {"<leader>", group = "leader"},
+    {"<leader>f", group = "file"},
+    {"<leader>ff", function() Snacks.picker.files() end, desc = "Find File" },
+    {"<leader>fR", "<cmd>Telescope oldfiles<cr>", desc = "Open Recent File" },
+    -- {"<leader>fn", "<cmd>enew<cr>", desc = "New File" },
+    -- {"<leader>fc", "<cmd>cd %:p:h<cr>", desc = "cd (global)"},
+    -- {"<leader>fC", "<cmd>lcd %:p:h<cr>", desc = "cd (local)"},
 
--- TODO
--- wk.register({
---     -- ["<Tab>"] = {ops.super_tab, "Next completion", expr = true},
---     -- ["<S-Tab>"] = {ops.super_rev_tab, "Reverse completion", expr = true},
---     ["<Tab>"] = {ops.super_tab, "Next completion"},
---     ["<S-Tab>"] = {ops.super_rev_tab, "Reverse completion"},
--- }, {mode="i"})
+    {"<leader>b", group = "buffer"},
+    {"<leader>bd", "<cmd>bd<cr>", desc = "Delete Buffer" },
 
-wk.register({
-    -- groups
-    f = {
-        name = "+file",
-        f = { ops.find_files, "Find File" },
-        r = { ops.rename_file, "Rename file & buffer" },
-        R = { "<cmd>Telescope oldfiles<cr>", "Open Recent File" },
-        n = { "<cmd>enew<cr>", "New File" },
-        c = {"<cmd>cd %:p:h<cr>", "cd (global)"},
-        C = {"<cmd>lcd %:p:h<cr>", "cd (local)"},
+    {"<leader>w", group = "window"},
+    {"<leader>wh", "<C-W>h", desc = "Left" },
+    {"<leader>wl", "<C-W>l", desc = "Right" },
+    {"<leader>wj", "<C-W>j", desc = "Down" },
+    {"<leader>wk", "<C-W>k", desc = "Up" },
+    {"<leader>wq", "<C-W>q", desc = "Quit window" },
+    {"<leader>wx", "<C-W>x", desc = "Swap previous window" },
+    {"<leader>w=", "<C-W>=", desc = "Equal height&width" },
+    {"<leader>w|", "<C-W>|", desc = "Expand window" },
+    {"<leader>wz", "TODO", desc = "Focus" },
+    {"<leader>wu", "TODO", desc = "Undo window" },
+
+    {"<leader>t", group = "tab"},
+    {"<leader>tq", "<cmd>tabclose<cr>", desc = "close tab"},
+    {"<leader>tc", "<cmd>tabnew<cr>", desc = "create tab"},
+    {"<leader>t[", "<cmd>tabprevious<cr>", desc = "previous tab"},
+    {"<leader>t]", "<cmd>tabnext<cr>", desc = "next tab"},
+
+    {"<leader>/", function() Snacks.picker.lines() end, desc = "find line in buffer"},
+    {"<leader>?", function() Snacks.picker.search_history() end, desc = "Search history"},
+    {"<leader>m", function() Snacks.picker.marks() end, desc = "marks"},
+    {"<leader>j", function() Snacks.picker.jumps() end, desc = "Jump list"},
+    {"<leader>s", function() Snacks.picker.lsp_symbols() end, desc = "LSP Symbols"},
+    {"<leader>e", function() Snacks.picker.commands() end, desc = "Commands"},
+    {"<leader>.", function() Snacks.picker.files() end, desc = "Find File"},
+    {"<leader>,", function() Snacks.picker.buffers() end, desc = "Find Buffers"},
+    {"<leader>g", function() Snacks.picker.grep() end, desc = "grep"},
+
+    {"<leader>G", group = "grep"},
+    {"<leader>Gb", function() Snacks.picker.grep_buffers() end, desc = "grep buffers"},
+    {"<leader>Gw", function() Snacks.picker.grep_word() end, desc = "grep words"},
+    {"<leader>Gg", function() Snacks.picker.git_grep() end, desc = "git grep"},
+
+    {"<leader>p", group = "more pickers"},
+    {"<leader>pS", function() Snacks.picker.lsp_workspace_symbols() end, desc = "LSP Workspace Symbols" },
+    {"<leader>pr", function() Snacks.picker.lsp_references() end, desc = "References" },
+    {"<leader>pt", function() Snacks.picker.lsp_type_definitions() end, desc = "Find T[y]pe Definition" },
+    {"<leader>pi", function() Snacks.picker.lsp_implementations() end, desc = "Goto Implementation" },
+    {"<leader>pI", function() Snacks.picker.lsp_incoming_calls() end, desc = "C[a]lls Incoming" },
+    {"<leader>pO", function() Snacks.picker.lsp_outgoing_calls() end, desc = "C[a]lls Outgoing" },
+
+    {"<leader>c", group = "code/lsp"},
+    {"<leader>cf", function() vim.lsp.buf.formatting() end, desc = "format"},
+    {"<leader>cF", function() vim.lsp.buf.range_formatting() end, desc = "range format"},
+    {"<leader>cw", function() vim.lsp.buf.add_workspace_folder() end, desc = "add workspace folder"},
+    {"<leader>cW", function() vim.lsp.buf.remove_workspace_folder() end, desc = "remove workspace folder"},
+    {"<leader>cl", function() vim.lsp.buf.list_workspace_folders() end, desc = "list workspace folders"},
+    {"<leader>cD", function() vim.lsp.buf.type_definition() end, desc = "type definition"},
+    {"<leader>cr", function() vim.lsp.buf.rename() end, desc = "rename"},
+    {"<leader>ca", function() vim.lsp.buf.code_action() end, desc = "action"},
+    {"<leader>ci", function() ops.toggle_inlay() end, desc = "toggle inlays"},
+    {"<leader>cq", function() vim.lsp.diagnostic.set_loclist() end, desc = "set diag loc"},
+    {"<leader>cQ", function() vim.lsp.diagnostic.open_float() end, desc = "open diag float"},
+
+    {"<leader>h", group = "help/inspect"},
+    {"<leader>ho", "<cmd>Telescope vim_options<cr>", desc = "vim options"},
+    {"<leader>hh", function() Snacks.picker.help() end, desc = "help tags"},
+    {"<leader>hm", function() Snacks.picker.man() end, desc = "man pages"},
+
+    {"<leader><cr>",  "<cmd>set hls!<cr>", desc = "Toggle highlight"},
+    {"<leader>q",  "<cmd>bd<cr>", desc = "Delete buffer"},
+    {"<leader>Q",  "<cmd>%bd<cr>", desc = "Kill all buffers"},
+    -- {"<leader>a", "<cmd>bp<cr>", desc = "previous buffer"},
+    -- {"<leader>d", "<cmd>bn<cr>", desc = "next buffer"},
+    {"<leader>l", function() ops.toggle_line_numbers() end, desc = "toggle line numbers"},
+    {"<leader>n",  function() ops.insert_now() end, desc = "insert now" },
+
+    {mode="n"},
+})
+
+-- ai bindings
+wk.add({
+    {
+        "<tab>",
+        function()
+            if not require("sidekick").nes_jump_or_apply() then
+                return "<Tab>" -- fallback to normal tab
+            end
+        end,
+        expr = true,
+        desc = "Goto/Apply Next Edit Suggestion",
     },
-    b = {
-        name = "+buffer",
-        f = { "<cmd>Telescope buffers<cr>", "Find File" },
-        d = { "<cmd>bd<cr>", "Delete Buffer" },
+    {
+        "<c-.>",
+        function() require("sidekick.cli").toggle() end,
+        desc = "Sidekick Toggle",
+        mode = { "n", "t", "i", "x" },
     },
-    w = {
-        name = "+window",
-        h = { "<C-W>h", "Left" },
-        l = { "<C-W>l", "Right" },
-        j = { "<C-W>j", "Down" },
-        k = { "<C-W>k", "Up" },
-        q = { "<C-W>q", "Quit window" },
-        x = { "<C-W>x", "Swap previous window" },
-        ["="] = { "<C-W>=", "Equal height&width" },
-        ["|"] = { "<C-W>|", "Expand window" },
-        z = { "TODO", "Focus" },
-        u = { "TODO", "Undo window" },
+    {
+        "<leader>aa",
+        function() require("sidekick.cli").toggle() end,
+        desc = "Sidekick Toggle CLI",
     },
-    t = {
-        q = {"<cmd>tabclose<cr>", "close tab"},
-        c = {"<cmd>tabnew<cr>", "create tab"},
-        ["["] = {"<cmd>tabprevious<cr>", "previous tab"},
-        ["]"] = {"<cmd>tabnext<cr>", "next tab"},
-        -- TODO
+    {
+        "<leader>as",
+        function() require("sidekick.cli").select() end,
+        -- Or to select only installed tools:
+        -- require("sidekick.cli").select({ filter = { installed = true } })
+        desc = "Select CLI",
     },
-    h = {
-        name = "+help/inspect",
-        o = {"<cmd>Telescope vim_options<cr>", "vim options"},
-        h = {"<cmd>Telescope help_tags<cr>", "help tags"},
-        m = {"<cmd>Telescope man_pages<cr>", "man pages"},
+    {
+        "<leader>ad",
+        function() require("sidekick.cli").close() end,
+        desc = "Detach a CLI Session",
     },
-    t = {
-        name = "+telescope (more)",
-        r = {"<cmd>Telescope lsp_references<cr>", "type references"},
-        t = {"<cmd>Telescope lsp_type_definitions<cr>", "type definitions"},
-        i = {"<cmd>Telescope lsp_implementations<cr>", "type impls"},
-        w = {"<cmd>Telescope workspace_symbols<cr>", "workspace symbols"},
+    {
+        "<leader>at",
+        function() require("sidekick.cli").send({ msg = "{this}" }) end,
+        mode = { "x", "n" },
+        desc = "Send This",
     },
-
-    -- shortcuts
-    ["/"] = { "<cmd>Telescope current_buffer_fuzzy_find<cr>", "Fuzzy find buffer"},
-    ["?"] = { "<cmd>Telescope search_history<cr>", "Search history"},
-    ["m"] = { "<cmd>Telescope marks<cr>", "Marks"},
-    ["j"] = { "<cmd>Telescope jumplist<cr>", "Jump list"},
-    ["s"] = { "<cmd>Telescope lsp_document_symbols<cr>", "LSP Symbols"},
-    ["e"] = { "<cmd>Telescope commands<cr>", "Commands"},
-    ["."] = { ops.find_files, "Find File"},
-    [","] = { ops.find_buffers, "Find Buffers"},
-
-    ["<cr>"] = { "<cmd>set hls!<cr>", "Toggle highlight"},
-    ["q"] = { "<cmd>bd<cr>", "Delete buffer"},
-    ["qa"] = { "<cmd>%bd<cr>", "Kill all buffers"},
-    ["a"] = {"<cmd>bp<cr>", "previous buffer"},
-    ["d"] = {"<cmd>bn<cr>", "next buffer"},
-    ["l"] = {ops.toggle_line_numbers, "toggle line numbers"},
-
-    ["G"] = { ops.lldb_set_breakpoint_line, "LSP Symbols"},
-    ["g"] = { "<cmd>Telescope live_grep<CR>", "ripGrep"},
-    ["n"] = { ops.insert_now, "insert now" },
-
-}, {mode = "n", prefix="<leader>"})
+    {
+        "<leader>af",
+        function() require("sidekick.cli").send({ msg = "{file}" }) end,
+        desc = "Send File",
+    },
+    {
+        "<leader>av",
+        function() require("sidekick.cli").send({ msg = "{selection}" }) end,
+        mode = { "x" },
+        desc = "Send Visual Selection",
+    },
+    {
+        "<leader>ap",
+        function() require("sidekick.cli").prompt() end,
+        mode = { "n", "x" },
+        desc = "Sidekick Select Prompt",
+    },
+    -- Example of a keybinding to open Claude directly
+    {
+        "<leader>ac",
+        function() require("sidekick.cli").toggle({ name = "cursor", focus = true }) end,
+        desc = "Sidekick Toggle Cursor",
+    },
+})
