@@ -340,16 +340,16 @@ local servers = {
     'ts_ls',
     'clangd',
     'zls',
-    'jedi_language_server',
     'nim_langserver',
     'lua_ls',
-    -- 'sourcekit',
+    'ty',
 }
 for _, lsp in pairs(servers) do
-    -- require('lspconfig')[lsp].setup {
-    --     capabilities = capabilities,
-    --     on_attach = on_attach,
-    -- }
+    vim.lsp.config(lsp, {
+        capabilities = capabilities,
+        on_attach = on_attach,
+    })
+    vim.lsp.enable(lsp)
 end
 
 -- TELESCOPE
@@ -714,7 +714,7 @@ wk.setup {
 
 
 wk.add({
-    {"<C-p>", function() Snacks.picker.files() end, desc = "Find files"},
+    {"<C-p>", function() Snacks.picker.files({hidden = true, follow = true}) end, desc = "Find files"},
     {"<C-s>", function() Snacks.picker.lines() end, desc = "line grep"},
     {"[d", function() vim.diagnostic.goto_prev() end, desc = "prev diag"},
     {"]d", function() vim.diagnostic.goto_next() end, desc = "next diag"},
@@ -724,11 +724,11 @@ wk.add({
     {"K", function() vim.lsp.buf.hover() end, desc = "hover"},
     {"<leader>", group = "leader"},
     {"<leader>f", group = "file"},
-    {"<leader>ff", function() Snacks.picker.files() end, desc = "Find File" },
+    {"<leader>ff", function() Snacks.picker.files({hidden = true, follow = true, ignored = true}) end, desc = "Find File (incl. ignored)" },
     {"<leader>fR", "<cmd>Telescope oldfiles<cr>", desc = "Open Recent File" },
-    -- {"<leader>fn", "<cmd>enew<cr>", desc = "New File" },
-    -- {"<leader>fc", "<cmd>cd %:p:h<cr>", desc = "cd (global)"},
-    -- {"<leader>fC", "<cmd>lcd %:p:h<cr>", desc = "cd (local)"},
+    {"<leader>fn", "<cmd>enew<cr>", desc = "New File" },
+    {"<leader>fc", "<cmd>cd %:p:h<cr>", desc = "cd (global)"},
+    {"<leader>fC", "<cmd>lcd %:p:h<cr>", desc = "cd (local)"},
 
     {"<leader>b", group = "buffer"},
     {"<leader>bd", "<cmd>bd<cr>", desc = "Delete Buffer" },
