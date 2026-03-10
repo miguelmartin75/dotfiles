@@ -343,6 +343,7 @@ local servers = {
     'nim_langserver',
     'lua_ls',
     'ty',
+    'ols',
 }
 for _, lsp in pairs(servers) do
     vim.lsp.config(lsp, {
