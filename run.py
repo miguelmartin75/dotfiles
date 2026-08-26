@@ -614,32 +614,98 @@ def push(
 
 
 def collect_selected_paths(
-    mapping: list[ManagedFile], paths: list[str]
+    mapping: list[ManagedFile],
+    paths: list[str],
+    home_root: Path | PurePosixPath | None = None,
+    remote: bool = False,
 ) -> tuple[set[Path], list[str]]:
+    """Resolve exact paths first; relative nonmatches component-match or stay exact.
+
+    Absolute paths below home_root are normalized but always remain exact.
+    """
     result: set[Path] = set()
     errors: list[str] = []
+    exact_paths = {managed_file.relative_path for managed_file in mapping}
     if paths:
         for path_text in paths:
-            relative_path = Path(path_text)
-            if (
-                not path_text
-                or relative_path.is_absolute()
-                or any(part in {".", ".."} for part in path_text.split("/"))
+            if not path_text or any(
+                part in {".", ".."} for part in path_text.split("/")
             ):
-                errors.append(
-                    f"path must be home-relative without traversal: {path_text!r}"
-                )
-            elif GIT_DIR_NAME in relative_path.parts:
+                errors.append(f"path must not contain traversal: {path_text!r}")
+                continue
+
+            candidate_path: Path | PurePosixPath
+            if remote:
+                candidate_path = PurePosixPath(path_text)
+            else:
+                candidate_path = Path(path_text)
+
+            relative_path: Path | None = None
+            was_absolute = candidate_path.is_absolute()
+            if was_absolute:
+                if home_root is None:
+                    errors.append(
+                        "absolute paths require an explicit absolute --remote_home: "
+                        f"{path_text!r}"
+                    )
+                else:
+                    try:
+                        selected_relative_path = candidate_path.relative_to(home_root)
+                    except ValueError:
+                        errors.append(
+                            f"absolute path must be inside the home root: {path_text!r}"
+                        )
+                    else:
+                        if selected_relative_path == Path("."):
+                            errors.append(
+                                "path must select a file or directory below the home root: "
+                                f"{path_text!r}"
+                            )
+                        else:
+                            relative_path = Path(selected_relative_path.as_posix())
+            else:
+                relative_path = Path(candidate_path.as_posix())
+
+            if relative_path is None:
+                continue
+            if GIT_DIR_NAME in relative_path.parts:
                 errors.append(
                     f"selected path cannot include {GIT_DIR_NAME}: {relative_path}"
                 )
-            elif relative_path.name == PLACEHOLDER_FILE_NAME:
+            elif PLACEHOLDER_FILE_NAME in relative_path.parts:
                 errors.append(
                     "selected path cannot include "
                     f"{PLACEHOLDER_FILE_NAME}: {relative_path}"
                 )
-            else:
+            elif was_absolute:
                 result.add(relative_path)
+            else:
+                is_exact_selection = relative_path in exact_paths or any(
+                    relative_path in managed_file.relative_path.parents
+                    for managed_file in mapping
+                )
+                if is_exact_selection:
+                    result.add(relative_path)
+                else:
+                    partial_matches = [
+                        managed_file.relative_path
+                        for managed_file in mapping
+                        if any(
+                            managed_file.relative_path.parts[
+                                index : index + len(relative_path.parts)
+                            ]
+                            == relative_path.parts
+                            for index in range(
+                                len(managed_file.relative_path.parts)
+                                - len(relative_path.parts)
+                                + 1
+                            )
+                        )
+                    ]
+                    if partial_matches:
+                        result.update(partial_matches)
+                    else:
+                        result.add(relative_path)
     else:
         result.update(managed_file.relative_path for managed_file in mapping)
     return result, errors
@@ -764,6 +830,7 @@ def pull_local(
     dry_run: bool = False,
     diff: bool = False,
     source_label_root: str | None = None,
+    selected_paths: set[Path] | None = None,
 ) -> list[str]:
     result: list[str] = []
     source_paths: dict[Path, Path] = {}
@@ -777,8 +844,11 @@ def pull_local(
         result.append(f"home root must be a directory: {home_root}")
         can_read_home = False
 
-    selected_paths, selection_errors = collect_selected_paths(mapping, paths)
-    result.extend(selection_errors)
+    if selected_paths is None:
+        selected_paths, selection_errors = collect_selected_paths(
+            mapping, paths, home_root
+        )
+        result.extend(selection_errors)
 
     for relative_path in sorted(selected_paths, key=lambda path: path.as_posix()):
         if not can_read_home:
@@ -917,7 +987,12 @@ def pull_remote(
     dry_run: bool = False,
     diff: bool = False,
 ) -> list[str]:
-    selected_paths, result = collect_selected_paths(mapping, paths)
+    remote_home_root: PurePosixPath | None = None
+    if remote_home.startswith("/"):
+        remote_home_root = PurePosixPath(remote_home)
+    selected_paths, result = collect_selected_paths(
+        mapping, paths, remote_home_root, remote=True
+    )
     files_from_paths = sorted(selected_paths, key=lambda path: path.as_posix())
     if dry_run:
         source_paths: dict[Path, Path] = {}
@@ -957,6 +1032,7 @@ def pull_remote(
                     "--recursive",
                     "--files-from",
                     str(STAGING_PLACEHOLDER / "files-from"),
+                    "--from0",
                     f"{target}:{remote_home}",
                     f"{STAGING_PLACEHOLDER}/",
                 ],
@@ -967,9 +1043,9 @@ def pull_remote(
         with TemporaryDirectory() as staging_directory:
             staging_root = Path(staging_directory)
             files_from = staging_root / "files-from"
-            files_from.write_text(
-                "".join(
-                    f"{relative_path.as_posix()}\n"
+            files_from.write_bytes(
+                b"".join(
+                    relative_path.as_posix().encode() + b"\0"
                     for relative_path in files_from_paths
                 )
             )
@@ -979,6 +1055,7 @@ def pull_remote(
                     "--recursive",
                     "--files-from",
                     str(files_from),
+                    "--from0",
                     f"{target}:{remote_home}",
                     f"{staging_root}/",
                 ],
@@ -995,6 +1072,7 @@ def pull_remote(
                 False,
                 diff,
                 f"{target}:{remote_home}" if diff else None,
+                selected_paths,
             )
     return result
 
@@ -1028,7 +1106,7 @@ def pull(
     ] = None,
     path: Annotated[
         list[str] | None,
-        CliArg(help="home-relative files or directories to copy back"),
+        CliArg(help="home-relative, partial, or absolute files or directories"),
     ] = None,
     profile: Annotated[
         str, CliArg(help="public or private profile identifier")

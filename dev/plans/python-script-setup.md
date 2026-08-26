@@ -510,6 +510,44 @@ Phase success criteria:
 - The Python controller replaces useful current Bash behavior without absorbing provisioning or secret management.
 - Legacy files are removed only after replacement smoke checks pass.
 
+## Completed follow-up: pull path selection extension
+
+Status: complete (2/2 phases).
+
+The historical Phase 2 contract above records the original home-relative
+selection interface. This completed follow-up extends that interface without
+changing the historical implementation record.
+
+### Phase 1: Normalize and resolve selected paths
+
+Status: complete.
+
+Extend `collect_selected_paths()` in `run.py` to preserve exact managed files
+and managed directories, then resolve otherwise unmatched relative selections
+as contiguous whole path components within the effective mapping. Normalize an
+absolute local path against `Path.home()` without resolving symlinks. Normalize
+an absolute remote path against an explicit absolute POSIX `--remote_home`.
+Reject traversal, paths outside the active home root, remote absolute paths
+with the default `~/`, home-root selections, `.git`, and `.gitkeep`.
+
+### Phase 2: Apply the selection to local and remote pull
+
+Status: complete.
+
+Use the normalized selection for local pull, remote staged pull, and their
+`--diff` and `--dry_run` modes. Remote partial matching remains limited to the
+effective mapping, while an exact selected directory retains existing bounded
+recursive behavior. Document component matching, absolute-path boundaries,
+and exact-selection precedence in `README.md` and CLI help.
+
+Follow-up success criteria:
+
+- Exact files and directories retain their existing pull behavior, including directory recursion and explicit ownership for new files.
+- Partial selections match only complete path components of managed files and produce sorted, deduplicated results.
+- Local absolute paths are exact selections only below the active home root.
+- Remote absolute paths are exact selections only below an explicit absolute POSIX remote home.
+- Local and remote pull, diff, and dry-run share the same selection result without a remote-home sweep.
+
 ## References
 
 - `refs/run.py:1-31` and `refs/run.py:158-175`: uv runner, subprocess logging, and `msup` command mapping reference.

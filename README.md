@@ -133,16 +133,29 @@ current mapping.
 ```bash
 ./run.py pull --profile local --os macos
 ./run.py pull --path .config/nvim .vimrc --profile local --os macos --layer owner
+./run.py pull --path emacs/init.el --profile local --os macos
+./run.py pull --path "$HOME/.config/emacs/init.el" --profile local --os macos
 ./run.py pull user@host --path .config/nvim .vimrc --profile work/nv/aws --os ubuntu --layer profile
 ./run.py pull user@host --path .config/nvim --profile work/nv/aws --os ubuntu --layer profile --remote_home /home/user
+./run.py pull user@host --path /home/user/.config/emacs/init.el --profile work/nv/aws --os ubuntu --remote_home /home/user
 ./run.py pull --path .vimrc --profile local --os macos --diff
 ./run.py pull user@host --path .vimrc --profile work/nv/aws --os ubuntu --layer profile --diff
 ```
 
 Place the optional `TARGET` immediately after `pull`. `--path` is one native
-multi-value option: put all selected home-relative files or directories after
-that one flag, before the next option. Repeated `--path` flags are not
-supported.
+multi-value option: put all selections after that one flag, before the next
+option. Repeated `--path` flags are not supported. A home-relative selection
+first matches an exact managed file or managed directory. Otherwise it matches
+complete path components in managed paths, so `emacs/init.el` matches
+`.config/emacs/init.el`, while `mac` does not match `emacs`. A partial match
+selects only matching managed files. A no-match selection remains exact, so it
+can deliberately add a new file with `--layer common` or `--layer profile`.
+
+An absolute local path must be below the current home directory and is treated
+as its exact home-relative path. An absolute remote path requires an explicit
+absolute `--remote_home` and must be below that directory. Absolute selections
+never use partial matching. Paths containing traversal, `.git`, or `.gitkeep`
+are rejected. Selecting the home root itself is rejected.
 
 `--layer owner` is the default. Existing files return to the layer that owns
 the winning effective file. New files require `--layer common` or `--layer
