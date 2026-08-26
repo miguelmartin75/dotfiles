@@ -336,7 +336,7 @@ end
 local capabilities = require('blink.cmp').get_lsp_capabilities()
 
 local servers = { 
-    'rust_analyzer',
+    -- 'rust_analyzer',
     'ts_ls',
     'clangd',
     'zls',
@@ -352,6 +352,27 @@ for _, lsp in pairs(servers) do
     })
     vim.lsp.enable(lsp)
 end
+
+
+vim.lsp.config("rust_analyzer", {
+    cmd = { "rustup", "run", "1.95.0", "rust-analyzer" },
+    capabilities = capabilities,
+    on_attach = on_attach,
+    settings = {
+        ["rust-analyzer"] = {
+            check = {
+                command = "clippy",
+                extraArgs = { "--tests" },
+            },
+            rustfmt = {
+                extraArgs = { "--config", "imports_granularity=Item" },
+            },
+        },
+    },
+})
+
+vim.lsp.enable("rust_analyzer")
+
 
 -- TELESCOPE
 -- local actions = require"telescope-actions" -- TODO
@@ -715,7 +736,7 @@ wk.setup {
 
 
 wk.add({
-    {"<C-p>", function() Snacks.picker.files({hidden = true, follow = true}) end, desc = "Find files"},
+    {"<C-p>", function() Snacks.picker.files({hidden = true, ignored = true, follow = true}) end, desc = "Find files"},
     {"<C-s>", function() Snacks.picker.lines() end, desc = "line grep"},
     {"[d", function() vim.diagnostic.goto_prev() end, desc = "prev diag"},
     {"]d", function() vim.diagnostic.goto_next() end, desc = "next diag"},
@@ -760,7 +781,7 @@ wk.add({
     {"<leader>e", function() Snacks.picker.commands() end, desc = "Commands"},
     {"<leader>.", function() Snacks.picker.files() end, desc = "Find File"},
     {"<leader>,", function() Snacks.picker.buffers() end, desc = "Find Buffers"},
-    {"<leader>g", function() Snacks.picker.grep() end, desc = "grep"},
+    {"<leader>g", function() Snacks.picker.grep({ follow = true }) end, desc = "grep"},
 
     {"<leader>G", group = "grep"},
     {"<leader>Gb", function() Snacks.picker.grep_buffers() end, desc = "grep buffers"},
