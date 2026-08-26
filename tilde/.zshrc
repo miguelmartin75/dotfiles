@@ -7,7 +7,16 @@ export PATH="/usr/local/cuda/bin:/home/media/config/mxe/usr/bin:/usr/local/bin:/
 export GIT_EDITOR="nvim"
 # export EDITOR="/opt/homebrew/bin/emacsclient"
 export EDITOR="nvim"
-export HISTSIZE=100000000
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=1000000000
+SAVEHIST=$HISTSIZE
+
+setopt SHARE_HISTORY
+setopt EXTENDED_HISTORY
+setopt HIST_FCNTL_LOCK
+
+unsetopt INC_APPEND_HISTORY
+unsetopt INC_APPEND_HISTORY_TIME
 
 # -----------------
 # Misc
