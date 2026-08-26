@@ -54,6 +54,7 @@ class ManagedFile:
 
 HostOsDetector = Callable[[], tuple[str | None, list[str]]]
 Runner = Callable[[Sequence[str], bool, Path], None]
+ProvisionRunner = Callable[[Sequence[str], bool, Path, dict[str, str]], None]
 StagingDirectoryCreator = Callable[[], AbstractContextManager[str]]
 
 
@@ -311,14 +312,102 @@ def resolve_mapping(
     return result, errors
 
 
-def run(command: Sequence[str], dry_run: bool, cwd: Path = REPO_ROOT) -> None:
+def run(
+    command: Sequence[str],
+    dry_run: bool,
+    cwd: Path = REPO_ROOT,
+    context: dict[str, str] | None = None,
+) -> None:
     print("$ " + shlex.join(command), flush=True)
     if not dry_run:
         environment = os.environ.copy()
         environment.pop("VIRTUAL_ENV", None)
+        if context is not None:
+            environment.update(context)
         result = subprocess.run(command, cwd=cwd, env=environment, check=False)
         if result.returncode:
             sys.exit(result.returncode)
+
+
+def resolve_provisioner(
+    profile: Profile,
+    operating_system: str,
+    repo_root: Path = REPO_ROOT,
+) -> tuple[Path | None, Path, list[str]]:
+    public_entry_point = repo_root / "provision" / profile.cluster / operating_system
+    expected_entry_point = public_entry_point
+    candidates: list[Path] = [public_entry_point]
+    if profile.namespace is not None and profile.bundle is not None:
+        private_entry_point = (
+            repo_root
+            / PRIVATE_DIR_NAME
+            / profile.namespace
+            / profile.bundle
+            / "provision"
+            / profile.cluster
+            / operating_system
+        )
+        expected_entry_point = private_entry_point
+        candidates.insert(0, private_entry_point)
+
+    result: Path | None = None
+    errors: list[str] = []
+    for entry_point in candidates:
+        if repo_root.is_symlink():
+            errors.append(
+                f"provision entry point contains a symlinked path component: {repo_root}"
+            )
+            break
+        invalid_ancestor = find_invalid_ancestor(
+            repo_root, entry_point.relative_to(repo_root).parent
+        )
+        if invalid_ancestor is not None:
+            ancestor_path, is_symlink = invalid_ancestor
+            if is_symlink:
+                errors.append(
+                    "provision entry point contains a symlinked path component: "
+                    f"{ancestor_path}"
+                )
+            else:
+                errors.append(
+                    f"provision entry point parent must be a directory: {ancestor_path}"
+                )
+            break
+        if entry_point.is_symlink():
+            errors.append(f"provision entry point must not be a symlink: {entry_point}")
+            break
+        if entry_point.exists():
+            if entry_point.is_file() and os.access(entry_point, os.X_OK):
+                result = entry_point
+            else:
+                errors.append(
+                    "provision entry point must be a regular executable file: "
+                    f"{entry_point}"
+                )
+            break
+    return result, expected_entry_point, errors
+
+
+def run_provisioner(
+    entry_point: Path,
+    profile: Profile,
+    operating_system: str,
+    provision_args: list[str],
+    dry_run: bool = False,
+    repo_root: Path = REPO_ROOT,
+    runner: ProvisionRunner = run,
+) -> None:
+    context = {
+        "DOTFILES_REPO_ROOT": str(repo_root),
+        "DOTFILES_PROFILE": profile.identifier,
+        "DOTFILES_OS": operating_system,
+    }
+    runner(
+        [str(entry_point), *provision_args],
+        dry_run,
+        entry_point.parent,
+        context,
+    )
 
 
 def project_mapping(
@@ -375,6 +464,64 @@ def project_mapping(
                 destination.parent.mkdir(parents=True, exist_ok=True)
             runner(command, dry_run, cwd)
     return result
+
+
+def setup_local(
+    identifier: str,
+    requested_os: str | None,
+    provision_args: list[str],
+    home_root: Path,
+    repo_root: Path = REPO_ROOT,
+    detect_host_os: HostOsDetector = detect_os,
+    dry_run: bool = False,
+    runner: Runner = run,
+    provision_runner: ProvisionRunner = run,
+) -> list[str]:
+    profile, errors = parse_profile(identifier)
+    operating_system, os_errors = resolve_os(requested_os, detect_host_os)
+    errors.extend(os_errors)
+    if profile is not None and profile.cluster != LOCAL_CLUSTER_NAME:
+        errors.append("setup requires a profile whose cluster is 'local'")
+
+    mapping: list[ManagedFile] = []
+    entry_point: Path | None = None
+    expected_entry_point: Path | None = None
+    if (
+        profile is not None
+        and profile.cluster == LOCAL_CLUSTER_NAME
+        and operating_system is not None
+    ):
+        layers, layer_errors = resolve_profile_layers(
+            profile, operating_system, repo_root
+        )
+        errors.extend(layer_errors)
+        if not layer_errors:
+            mapping, mapping_errors = build_effective_mapping(layers)
+            errors.extend(mapping_errors)
+        entry_point, expected_entry_point, provision_errors = resolve_provisioner(
+            profile, operating_system, repo_root
+        )
+        errors.extend(provision_errors)
+
+    if not errors and profile is not None and operating_system is not None:
+        if entry_point is None:
+            print(f"setup: provisioning skipped: {expected_entry_point}")
+        else:
+            print(f"setup: provisioning {'would run' if dry_run else 'running'}")
+            run_provisioner(
+                entry_point,
+                profile,
+                operating_system,
+                provision_args,
+                dry_run,
+                repo_root,
+                provision_runner,
+            )
+        errors.extend(
+            project_mapping(mapping, home_root, dry_run, "push", runner, repo_root)
+        )
+    errors.sort()
+    return errors
 
 
 def resolve_remote_home(
@@ -1091,13 +1238,86 @@ def clean(
         sys.exit(1)
 
 
+def provision(
+    os: Annotated[str, CliArg(pos=True, opt=False, help="target operating system")],
+    profile: Annotated[
+        str, CliArg(help="public or private profile identifier")
+    ] = LOCAL_CLUSTER_NAME,
+    provision_args: Annotated[
+        list[str] | None, CliArg(pos=True, help="arguments for the provisioner")
+    ] = None,
+) -> None:
+    profile_value, errors = parse_profile(profile)
+    operating_system, os_errors = resolve_os(os)
+    errors.extend(os_errors)
+    entry_point: Path | None = None
+    expected_entry_point: Path | None = None
+    if profile_value is not None and operating_system is not None:
+        entry_point, expected_entry_point, provision_errors = resolve_provisioner(
+            profile_value, operating_system
+        )
+        errors.extend(provision_errors)
+        if entry_point is None and not provision_errors:
+            if profile_value.namespace is None:
+                errors.append(
+                    f"missing required provision entry point: {expected_entry_point}"
+                )
+            else:
+                errors.append(
+                    "missing required provision entry point: "
+                    f"{expected_entry_point}; clone or set up the private provision bundle"
+                )
+    if errors:
+        for error in sorted(errors):
+            print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)
+    if (
+        entry_point is not None
+        and profile_value is not None
+        and operating_system is not None
+    ):
+        run_provisioner(
+            entry_point,
+            profile_value,
+            operating_system,
+            [] if provision_args is None else provision_args,
+        )
+
+
+def setup(
+    profile: Annotated[
+        str, CliArg(help="public or private local profile identifier")
+    ] = LOCAL_CLUSTER_NAME,
+    os: Annotated[str | None, CliArg(help="operating system override")] = None,
+    dry_run: Annotated[
+        bool, CliArg(help="preview provisioning and copies without writing files")
+    ] = False,
+    provision_args: Annotated[
+        list[str] | None, CliArg(pos=True, help="arguments for the provisioner")
+    ] = None,
+) -> None:
+    errors = setup_local(
+        profile,
+        os,
+        [] if provision_args is None else provision_args,
+        Path.home(),
+        dry_run=dry_run,
+    )
+    if errors:
+        for error in errors:
+            print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli(
         {
+            setup: "provision and push the local profile overlay",
             push: "copy the selected profile overlay locally or to an SSH target",
             pull: "copy selected local or remote home files back to profile layers",
             clean: "remove only files in the current mapping; removed source paths remain",
             render: "project the selected overlay to an explicit output directory",
+            provision: "run one selected provisioning entry point",
         },
         description="Deterministic dotfile overlay controller.",
     )

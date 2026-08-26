@@ -70,9 +70,9 @@ Do not add private repositories as public submodules, record their URLs in the p
 
 ## Status
 
-- Plan state: 3/5 phases implemented.
-- Current phase: Phase 4.
-- Next up: add explicit provisioning and local setup orchestration.
+- Plan state: 4/5 phases implemented.
+- Current phase: Phase 5.
+- Next up: document the Python controller and remove replaced legacy Bash entry points.
 - During execution, update this section and each Phase status only after that phase's validation passes.
 - `refs/run.py` and `refs/mcu` are read-only references and must never be modified.
 
@@ -394,7 +394,7 @@ Phase success criteria:
 
 ## Phase 4: Provisioning and private bundle integration
 
-Status: not started.
+Status: complete.
 
 Add explicit provisioning and the local setup golden path while keeping remote orchestration explicit.
 
@@ -409,6 +409,14 @@ Work:
 7. Document the combined and split private repository layouts. Each private repository is cloned once, and both layouts expose identical controller paths.
 8. Keep MCU cluster setup, Teleport helpers, Lepton archive creation, pod creation, and secret injection in the private bundle when that repository is migrated. A private Lepton entry point may call the public generic `render` command, then perform its own tar/base64 delivery. Do not copy private infrastructure details into public files.
 9. Update this plan to `4/5 phases implemented` only after Phase 4 validation passes, then set the current phase to Phase 5.
+
+Implementation results:
+
+- Added explicit public/private provisioning resolution with deterministic private-first fallback, regular non-symlink executable validation, direct argument arrays, provisioner working directories, and non-secret context variables.
+- Added local-only setup orchestration. It detects or accepts the operating system, optionally runs the selected provisioner, stops on provisioning failure, and then projects the validated local profile mapping.
+- Added native `msup` provisioner argument forwarding after `--` for both provision and setup. The generated `--provision_args` help entry remains an unavoidable upstream parser artifact; product code does not rewrite arguments.
+- Migrated the six active macOS defaults operations to executable `provision/local/macos` with fail-fast shell behavior and omitted the obsolete Homebrew installer.
+- Temporary-directory validation covered combined and split private layouts, provision-only bundles, private override and public fallback, exact arguments, environment and working directory, executable and containment boundaries, setup ordering, failure propagation, dry-run isolation, native CLI help, Ruff, formatting, Bash syntax, and Git diff checks.
 
 Affected code pointers:
 
