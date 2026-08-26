@@ -43,31 +43,36 @@ instead of explaining why the value is absent.
 - A guard may use a separate `if` and return when it handles a degenerate input, such as `None` or empty data, before the main operation.
 - After guard handling, keep the successful path direct and minimally indented.
 - Within one decision chain, connect alternative branches with `elif` or `else`, even when an earlier branch exits. A branch is not a guard merely because it returns.
+- Collect independent errors in a variable and report them together; stop early only when continuing would be invalid or unsafe.
 
 ```py
 # Do: a genuine guard followed by the main logic.
-def select_source(is_cached: bool | None, can_fetch: bool) -> str | None:
-    if is_cached is None:
+def clamp_to_bounds(values: list[int], target: int) -> int | None:
+    if not values:
         return None
 
-    if is_cached:
-        return "cache"
-    elif can_fetch:
-        return "network"
+    lower = min(values)
+    upper = max(values)
+    if target < lower:
+        return lower
+    elif target > upper:
+        return upper
     else:
-        return "unavailable"
+        return target
 
 
 # Don't: related alternatives expressed as disconnected branches.
-def select_source(is_cached: bool | None, can_fetch: bool) -> str | None:
-    if is_cached is None:
+def clamp_to_bounds(values: list[int], target: int) -> int | None:
+    if not values:
         return None
 
-    if is_cached:
-        return "cache"
-    if can_fetch:
-        return "network"
-    return "unavailable"
+    lower = min(values)
+    upper = max(values)
+    if target < lower:
+        return lower
+    if target > upper:
+        return upper
+    return target
 ```
 
 ## Naming and API Semantics
@@ -82,6 +87,7 @@ def select_source(is_cached: bool | None, can_fetch: bool) -> str | None:
 - Distinguish copy-returning operations from mutating ones, such as `with_timeout` and `set_timeout`.
 - Prefer direct attributes. Use properties only for cheap, side-effect-free access and verb-named methods for work, side effects, or non-constant-time access.
 - Use `UpperCamelCase` for classes, dataclasses, enums, and exception types. Use `lower_snake_case` for modules, functions, methods, variables, and parameters. Use `UPPER_SNAKE_CASE` for module constants.
+- Use an `Enum` for a fixed set of choices; if integers are required, use integer constants with `Literal`.
 
 ```py
 class HttpRequestError(Exception):

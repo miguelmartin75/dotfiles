@@ -22,7 +22,7 @@
 ## Python Design Rules
 
 - Do not use leading underscores for repository-owned variables, fields, properties, methods, functions, classes, constants, or other declarations. Use public names directly instead of private backing fields with redundant properties. Python-required double-underscore hooks and private attributes required by third-party APIs are the only exceptions.
-- Use conditionals or return values for expected outcomes. Raise exceptions for invalid boundary input, violated preconditions, I/O failures, or external failures. Catch only to recover, add context, or translate at a boundary.
+- Use conditionals or return values for expected outcomes. Raise exceptions for invalid boundary input, violated preconditions, I/O failures, or external failures. Catch exceptions only when the error can be handled; do not catch them just to raise a different exception.
 - Use `list[T]` for variable-length homogeneous collections and fixed tuples for short-lived unpacked values. Use `dataclass` for named structured values stored, passed across boundaries, or used at multiple call sites.
 - Prefer branching to early returns. Use early returns only for guards, successful searches, or measurable runtime improvements. Return simple expressions directly.
 - When a return value must be assembled across multiple steps, use `result` as the default variable name and return it once.
