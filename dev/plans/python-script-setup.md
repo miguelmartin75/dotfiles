@@ -70,9 +70,9 @@ Do not add private repositories as public submodules, record their URLs in the p
 
 ## Status
 
-- Plan state: 0/5 phases implemented.
-- Current phase: Phase 1.
-- Next up: establish the public/private layout, profile resolution, and a working default local push.
+- Plan state: 1/5 phases implemented.
+- Current phase: Phase 2.
+- Next up: add local pull ownership and cleanup from the shared effective mapping.
 - During execution, update this section and each Phase status only after that phase's validation passes.
 - `refs/run.py` and `refs/mcu` are read-only references and must never be modified.
 
@@ -138,9 +138,9 @@ Provide these commands:
 - `render`: copy the effective overlay to an explicitly supplied output directory for another tool to consume.
 - `provision`: execute the selected cluster and operating system's provisioning entry point explicitly.
 
-Keep source, destination, private-root, and subprocess boundaries parameterized below the CLI so smoke validation can use temporary directories. Use argument arrays and `subprocess.run(..., check=True)` for external commands. Print commands with `shlex.join`, remove `VIRTUAL_ENV` from child environments as in `refs/run.py:22-31`, and never use `shell=True`.
+Keep source, destination, private-root, and subprocess boundaries parameterized below the CLI so smoke validation can use temporary directories. Use one logged `run` function modeled on `refs/run.py:22-31` for argument arrays and external commands. It prints commands with `shlex.join`, removes `VIRTUAL_ENV` from child environments, never uses `shell=True`, and skips `subprocess.run` when `dry_run` is true. Prefer `rsync` commands over Python file-copy APIs for projection.
 
-Add `--dry-run` to `setup`, `push`, `pull`, and `clean`. Dry-run mode performs normal parsing, profile resolution, mapping construction, collision checks, path validation, and command construction, then prints sorted affected paths and any external command without copying, removing, modifying profile files, executing provisioning, or starting a subprocess. It is an action preview, not content diff generation.
+Add `--dry_run` directly through `msup` to `setup`, `push`, `pull`, and `clean`; do not rewrite `sys.argv`. Dry-run mode performs normal parsing, profile resolution, mapping construction, collision checks, path validation, and command construction, then prints sorted affected paths and any external command without copying, removing, modifying profile files, executing provisioning, or starting a subprocess. It is an action preview, not content diff generation.
 
 Do not add atomic destination writes, backup files, content diff generation, conflict merging, rollback, templates, custom cryptography, or chezmoi. Normal file and subprocess failures may stop a command with a clear error.
 
@@ -158,7 +158,7 @@ Use this interface:
 
 When `--os` is omitted, use the shared local host detection defined for profile resolution. Keep OS detection and the home root injectable for validation.
 
-Resolve provisioning with the same private-first and public-fallback rules as `provision`. Provisioning is optional for `setup`: when no matching entry point exists, print that it was skipped and continue to push. If an entry point exists, run it first and stop without pushing if it fails. Forward arguments after `--` only to that entry point. `setup --dry-run` reports whether provisioning would run or be skipped and previews the subsequent local push without executing either operation.
+Resolve provisioning with the same private-first and public-fallback rules as `provision`. Provisioning is optional for `setup`: when no matching entry point exists, print that it was skipped and continue to push. If an entry point exists, run it first and stop without pushing if it fails. Forward arguments after `--` only to that entry point. `setup --dry_run` reports whether provisioning would run or be skipped and previews the subsequent local push without executing either operation.
 
 Do not extend `setup` to remote targets. Remote provisioning may create a target, discover its SSH address, or embed a rendered overlay during target creation, so it cannot be composed generically with `push` without introducing a target-discovery protocol. Keep remote workflows explicit with `provision` and `push`, or allow a private provisioner to call `render` and deliver the overlay when provisioning and initial projection are inseparable.
 
@@ -171,7 +171,7 @@ Use this interface:
 ./run.py push --profile local --os macos
 ```
 
-Local `push --profile local` is equivalent to omitting `--profile`. Both forms detect the current operating system unless `--os` is supplied. Local push creates parent directories and uses `shutil.copy2` to overwrite each effective file in `Path.home()`. It never deletes unrelated home files.
+Local `push --profile local` is equivalent to omitting `--profile`. Both forms detect the current operating system unless `--os` is supplied. Local push uses the shared logged `run` function to execute `rsync` commands that create parent directories and overwrite each effective file in `Path.home()`. It never deletes unrelated home files.
 
 `clean` unlinks only current effective file paths, tolerates missing files, and leaves directories in place. Because there is no manifest, files removed or renamed in a source profile are not remembered and may remain in a home directory after an earlier push. Document this limitation. Do not compensate with a broad home-directory scan or `rsync --delete`.
 
@@ -193,7 +193,7 @@ Without `--path`, pull every path in the current effective mapping. Repeatable `
 - For a private profile, `common` means the private bundle's common layer and `profile` means the private bundle's selected `<cluster>/<os>` directory.
 - If an explicit target layer would be hidden by a later existing layer, fail and explain which layer would still win.
 
-Resolve directory pull ownership independently per regular file in sorted order. Local pull reads from `Path.home()`, creates profile-layer parents, and uses `shutil.copy2`. It does not sweep the home directory, delete source files, infer new-path ownership, or rewrite another layer.
+Resolve directory pull ownership independently per regular file in sorted order. Local pull reads from `Path.home()`, creates profile-layer parents, and uses the shared logged `run` function with `rsync`. It does not sweep the home directory, delete source files, infer new-path ownership, or rewrite another layer.
 
 ### Generic render
 
@@ -204,7 +204,7 @@ Use this interface:
 ./run.py render OUTPUT_DIRECTORY --profile work/nv/lepton --os ubuntu
 ```
 
-`render` creates the output directory when needed, copies only the validated effective mapping with home-relative paths, and overwrites matching files with `shutil.copy2`. It does not clean unrelated output files. Callers that need an exact artifact should provide an empty temporary directory.
+`render` creates the output directory when needed, projects only the validated effective mapping with home-relative paths through the shared logged `run` function and `rsync`, and overwrites matching files. It does not clean unrelated output files. Callers that need an exact artifact should provide an empty temporary directory.
 
 `render` is intentionally generic. The public controller has no Lepton archive, base64, pod creation, or `LEPTON_DOTFILES_ARCHIVE` command. Private work provisioning may call `render` into a temporary directory and then own any work-specific tar, base64, and pod-delivery behavior.
 
@@ -232,7 +232,7 @@ For remote `pull`:
 
 1. With no explicit paths, generate a temporary sorted `--files-from` list containing every path in the current effective mapping. With explicit paths, fetch only those validated selections.
 2. Pull those paths from `<target>:<remote-home>/` into a temporary staging directory with rsync.
-3. Apply the same owner, explicit layer, new-path, directory recursion, and shadowing rules as local pull, then copy each staged regular file with `shutil.copy2` to its resolved layer.
+3. Apply the same owner, explicit layer, new-path, directory recursion, and shadowing rules as local pull, then project each staged regular file to its resolved layer through the shared logged `run` function and `rsync`.
 4. Do not discover or import unselected remote files, change ownership, delete source files, infer new-path ownership, or follow remote symlinks.
 
 Push and pull are intentionally one-way operations, not automatic two-way synchronization. Both overwrite their selected destination on the happy path. Pull fails if an expected selected remote file is missing. Temporary staging guarantees that remote operations use the same winning paths and exclusions as local push, local pull, and render. It is transient transport preparation, not atomic destination replacement or persistent state.
@@ -272,7 +272,7 @@ Private Git repositories are not secret stores. Keep credentials, tokens, privat
 
 ## Phase 1: Layout, resolution, and default local push
 
-Status: not started.
+Status: complete.
 
 Deliver the smallest working local overlay while preserving current local-machine behavior.
 
@@ -281,9 +281,17 @@ Work:
 1. Add `/.private/` to `.gitignore` without changing unrelated ignore entries.
 2. Add root `run.py` with the uv header, `msup` command mapping, repository constants, cluster parsing, injectable host OS detection, deterministic public/private `<cluster>/<os>` layer resolution, regular-file validation, collision checks, and the sorted effective mapping.
 3. Move the current `tilde/` tree unchanged to `profiles/local/macos/`. Do not promote any file to public common during the initial port.
-4. Implement local `push`, including `--dry-run`, with `Path.home()` at the production CLI boundary and injectable roots for temporary-directory validation.
+4. Implement local `push`, including `--dry_run`, with `Path.home()` at the production CLI boundary and injectable roots for temporary-directory validation.
 5. Run focused smoke checks for detected and explicit operating systems, default `local`, all four precedence layers for the same OS, strict separation between macOS and Ubuntu files, parent creation, overwrite behavior, dry-run action reporting without writes, symlink rejection, and file-versus-directory collisions.
 6. Update this plan to `1/5 phases implemented` only after Phase 1 validation passes, then set the current phase to Phase 2.
+
+Implementation results:
+
+- Added the executable `run.py` controller with native `msup` CLI mapping, collected boundary errors, deterministic public/private layer ownership, and sorted effective mappings.
+- Local push uses the shared logged `run` function with exact-path `rsync` commands. `--dry_run` prints those commands without creating parents or starting subprocesses.
+- Source layer ancestors and destination parents are validated without following symlinks. Destination preflight collects all errors before any projection command runs.
+- Migrated all 13 tracked `tilde/` files to `profiles/local/macos/` as byte-identical Git renames with their modes preserved.
+- Temporary-directory smoke validation covered the Phase 1 success criteria, source and destination boundary regressions, actual `msup` help, real `rsync` projection, Ruff, formatting, and Git diff checks.
 
 Affected code pointers:
 
@@ -299,7 +307,7 @@ Phase success criteria:
 - `./run.py push` and `./run.py push --profile local` resolve the same detected operating system and profile layers.
 - The default local push projects every file previously managed under `tilde/`.
 - Profile resolution never mixes files from different operating systems.
-- `push --dry-run` reports the same sorted local destinations as a real push without changing them.
+- `push --dry_run` reports the same sorted local destinations as a real push without changing them.
 - A private identifier resolves only beneath the deterministic `.private/<namespace>/<bundle>/` root.
 - Profile precedence and owner reporting are identical regardless of the current working directory.
 - Validation never reads from or writes to the real home directory.
@@ -313,8 +321,8 @@ Add explicit reverse flow without gradually forking common files into profile ov
 Work:
 
 1. Implement repeatable `--path PATH` selections for local pull through the real `msup` CLI boundary, including documented option placement. No paths selects the current effective mapping. Phase 3 adds the optional positional remote target.
-2. Implement local owner-based pull, explicit common/profile layers, directory recursion, new-path rules, shadowed-layer rejection, and `--dry-run` action reporting.
-3. Implement `clean` and its `--dry-run` mode from the same effective mapping used by push and pull.
+2. Implement local owner-based pull, explicit common/profile layers, directory recursion, new-path rules, shadowed-layer rejection, and `--dry_run` action reporting.
+3. Implement `clean` and its `--dry_run` mode from the same effective mapping used by push and pull.
 4. Smoke-check public and private owners, new paths, explicit layers, traversal rejection, clean selection, missing clean targets, and dry-run behavior with temporary roots.
 5. Document in CLI help that clean cannot remove paths no longer present in the current source mapping.
 6. Update this plan to `2/5 phases implemented` only after Phase 2 validation passes, then set the current phase to Phase 3.
@@ -342,7 +350,7 @@ Project the same validated mapping to explicit output directories and persistent
 
 Work:
 
-1. Add the logged subprocess helper derived from `refs/run.py:22-31`.
+1. Reuse and extend the logged subprocess helper established in Phase 1.
 2. Implement generic `render` from the effective mapping.
 3. Extend push so a positional `TARGET` selects remote mode, requires explicit `--os`, stages temporarily, and performs one rsync operation with no delete behavior. Preserve the existing no-target local push path.
 4. Extend pull so a positional `TARGET` selects remote mode, requires explicit `--os`, stages selected paths through rsync, and applies the same owner-layer rules as local pull. Preserve the existing no-target local pull path.
@@ -377,7 +385,7 @@ Work:
 
 1. Reuse the operating system component validation added in Phase 1 to implement public/private `<cluster>/<os>` provisioning resolution, private-first fallback, executable validation, working directory, environment handling, and argument forwarding after `--`.
 2. Move the six useful macOS `defaults write` operations from `scripts/osx` into the executable Bash script `provision/local/macos`. Use `#!/usr/bin/env bash` and do not carry forward the obsolete Homebrew installer.
-3. Implement local-only `setup` as optional provision followed by local push. Enforce a `local` profile cluster, reuse the injectable host OS detection and home boundaries established in Phase 1, accept explicit `--os`, forward provisioner arguments after `--`, and add `--dry-run`.
+3. Implement local-only `setup` as optional provision followed by local push. Enforce a `local` profile cluster, reuse the injectable host OS detection and home boundaries established in Phase 1, accept explicit `--os`, forward provisioner arguments after `--`, and add `--dry_run`.
 4. Validate both supported physical layouts with temporary directories: one combined bundle root, and separate profile/provision repository roots beneath the same ignored container. The controller does not inspect `.git/`.
 5. Smoke-check operating system validation, public fallback for the same cluster and operating system, private override, executable requirements, context variables, forwarded arguments, subprocess failure propagation, and a provision-only private repository with no profile directory.
 6. Smoke-check setup with detected and explicit operating systems, absent optional provisioners, provisioning failure before push, rejected non-local clusters, private local profiles, forwarded arguments, dry-run behavior, and successful provision-then-push ordering. Never use the real home or host provisioner during validation.
@@ -483,6 +491,6 @@ Use temporary directories and temporary fake executables for focused setup, loca
 - Dry-run modes perform full local validation and report sorted paths and commands without changing files, executing provisioners, starting subprocesses, or contacting remote systems.
 - Removed or renamed source paths are documented as non-convergent without an explicit current mapping.
 - Secrets, credentials, private keys, Vault values, and platform secret values remain outside profiles, rendered output, and the controller.
-- The implementation remains direct Python using the standard library plus `msup`, ordinary file copies, temporary transport staging, rsync, and SSH.
+- The implementation remains direct Python using the standard library plus `msup`, the shared logged `run` function, temporary transport staging, rsync, and SSH.
 - There are no templates, manifests, state databases, atomic destination writes, backups, custom cryptography, or chezmoi.
 - Focused smoke checks cover happy paths and bounded path validation without adding a permanent test module or touching real user, private, remote, or package-manager state.
