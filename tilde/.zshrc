@@ -1,12 +1,5 @@
-# ===== General =====
+# Interactive Zsh configuration
 
-export PATH="/usr/local/cuda/bin:/home/media/config/mxe/usr/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin:/usr/texbin:/usr/local/bin/depot_tools"
-
-# Preferred editor for local and remote sessions
-# export GIT_EDITOR="/opt/homebrew/bin/emacsclient"
-export GIT_EDITOR="nvim"
-# export EDITOR="/opt/homebrew/bin/emacsclient"
-export EDITOR="nvim"
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=1000000000
 SAVEHIST=$HISTSIZE
@@ -18,167 +11,114 @@ setopt HIST_FCNTL_LOCK
 unsetopt INC_APPEND_HISTORY
 unsetopt INC_APPEND_HISTORY_TIME
 
-# -----------------
-# Misc
+export VIRTUAL_ENV_DISABLE_PROMPT=1
 
-# Colors
-default=$(tput sgr0)
-red=$(tput setaf 1)
-green=$(tput setaf 2)
-purple=$(tput setaf 5)
-orange=$(tput setaf 9)
-
-# Less colors for man pages
+# Man-page colors
 export MANPAGER=less
-# Begin blinking
-export LESS_TERMCAP_mb=$red
-# Begin bold
-export LESS_TERMCAP_md=$orange
-# End mode
-export LESS_TERMCAP_me=$default
-# End standout-mode
-export LESS_TERMCAP_se=$default
-# Begin standout-mode - info box
-export LESS_TERMCAP_so=$purple
-# End underline
-export LESS_TERMCAP_ue=$default
-# Begin underline
-export LESS_TERMCAP_us=$green
 
-# ----------------------------
-# oh-my-zsh specifics
+if [[ -t 1 && -n ${TERM:-} && $TERM != dumb ]] && (( $+commands[tput] )); then
+    if man_reset="$(tput sgr0 2>/dev/null)"; then
+        man_red="$(tput setaf 1 2>/dev/null)"
+        man_green="$(tput setaf 2 2>/dev/null)"
+        man_purple="$(tput setaf 5 2>/dev/null)"
+        man_orange="$(tput setaf 9 2>/dev/null)"
 
-# Path to your oh-my-zsh installation.
-export ZSH=$HOME/.oh-my-zsh
-
-ZSH_THEME="minimal"
-
-# Example aliases
-# alias zshconfig="vim ~/.zshrc"
-# Uncomment the following line to disable bi-weekly auto-update checks.
-DISABLE_AUTO_UPDATE="true"
-
-# plugins for zsh
-source $ZSH/oh-my-zsh.sh
-
-# export CUDA_HOME="/usr/local/cuda"
-# export LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/lib:$LD_LIBRARY_PATH"
-
-{
-    eval "$(ssh-agent -s)"
-    ssh-add ~/.ssh/miguel
-} > /dev/null 2>&1
-
-export OPENCV_ROOT="$HOME/repos/config/opencv-3.2.0"
-export CAFFE_ROOT="$HOME/repos/config/caffe"
-# export PYTHONPATH="./:${CAFFE_ROOT}/python:$PYTHONPATH"
-
-if [ -f "$HOME/.cargo/env" ]; then
-    source "$HOME/.cargo/env"
+        export LESS_TERMCAP_mb="$man_red"
+        export LESS_TERMCAP_md="$man_orange"
+        export LESS_TERMCAP_me="$man_reset"
+        export LESS_TERMCAP_se="$man_reset"
+        export LESS_TERMCAP_so="$man_purple"
+        export LESS_TERMCAP_ue="$man_reset"
+        export LESS_TERMCAP_us="$man_green"
+    fi
 fi
 
+# Native Zsh completion
+typeset -U fpath
+if [[ -r "$HOME/.bun/_bun" ]]; then
+    fpath=("$HOME/.bun" $fpath)
+fi
 
-# export CPLUS_INCLUDE_PATH="${CPLUS_INCLUDE_PATH:+${CPLUS_INCLUDE_PATH}:}/usr/local/include"
-# export PATH=$HOME/.nimble/bin:/usr/local/opt/llvm/bin:/usr/local/cuda/bin:/home/media/config/mxe/usr/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/git/bin:/usr/texbin:/usr/local/bin/depot_tools:/usr/local/opt/fzf/bin
+autoload -Uz compinit
+compinit
 
-# export FZF_DEFAULT_COMMAND='fd --type f'
-# lldb_path=$(lldb --python-path)
-# export PYTHONPATH="$lldb_path:$PYTHONPATH"
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}'
+bindkey '^I' complete-word
 
-# export PYTHONPATH="/Applications/Xcode.app/Contents/SharedFrameworks/LLDB.framework/Resources/Python:$PYTHONPATH"
-# export PATH="/usr/local/opt/llvm@16/bin:$PATH"
-# export PATH="$HOME/repos/nim_playground/Nim/bin:$PATH"
+autoload -Uz add-zsh-hook
 
-# export LDFLAGS="-L/usr/local/opt/llvm/lib"
-# export CPPFLAGS="-I/usr/local/opt/llvm/include"
-# export LLVM_DIR="/usr/local/opt/llvm"
+set_prompt() {
+    local venv=none
+    local result
 
-function load_nvm() {
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-}
-
-# >>> conda initialize >>>
-# !! Contents within this block are managed by 'conda init' !!
-function load_conda() {
-    __conda_setup="$('/opt/homebrew/anaconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
-    if [ $? -eq 0 ]; then
-        eval "$__conda_setup"
-    else
-        if [ -f "" ]; then
-            . "/opt/homebrew/anaconda3/etc/profile.d/conda.sh"
-        else
-            export PATH="/opt/homebrew/anaconda3/bin/conda:$PATH"
-        fi
+    if [[ -n ${VIRTUAL_ENV:-} ]]; then
+        venv=${VIRTUAL_ENV:h:t}
     fi
-    unset __conda_setup
-    # <<< conda initialize <<<
+
+    result=$'\n'
+    result+="$(date '+[%m/%d] %H:%M:%S - %s'), venv: $venv"
+    result+=$'\nNode: %n@%m'
+    result+=$'\nCluster: Laptop'
+    result+=$'\n%~'
+    result+=$'\n%(!.#.$) '
+    PROMPT=$result
 }
 
-# Shopify Hydrogen alias to local projects
-alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'
+add-zsh-hook precmd set_prompt
 
-# . "$HOME/.cargo/env"
-# export PATH=$HOME/.cargo/bin:$PATH
+gl() {
+    git log --graph --pretty=format:'%C(yellow)%h%Creset -%C(auto)%d%Creset %s %Cgreen(%ad) %C(bold blue)<%an>%Creset' -- "$@"
+}
 
-# bun completions
-[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+clone-bare() {
+    git clone "$1" --bare .bare
+    print -r -- "gitdir: ./.bare" > .git
+    git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+}
 
-# bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
-eval "$(/usr/libexec/path_helper)"
+alias cursor-cli='NO_COLOR=1 cursor-agent'
 
-# . "$HOME/.local/bin/env"
-# export PATH="$HOME/Library/Python/3.9/bin:$PATH"
-# export PATH="$HOME/software/orca/:$PATH"
+load_nvm() {
+    export NVM_DIR="$HOME/.nvm"
+    if [[ -r "$NVM_DIR/nvm.sh" ]]; then
+        source "$NVM_DIR/nvm.sh"
+    else
+        print -u2 -- "load_nvm: $NVM_DIR/nvm.sh is unavailable"
+        return 1
+    fi
+}
 
-source ~/.secrets
-export PATH="$HOME/repos/zls/zig-out/bin:$PATH"
-export PATH="$HOME/repos/nimlangserver:$HOME/repos/nimlsp/build:$HOME/repos/atlas/src:$HOME/.nimble/bin/$PATH"
-export PATH="$HOME/.local/bin:$PATH"
+load_conda() {
+    local conda_command
+    local conda_setup
 
+    if (( $+commands[conda] )); then
+        conda_command=$commands[conda]
+    elif [[ -x /opt/homebrew/anaconda3/bin/conda ]]; then
+        conda_command=/opt/homebrew/anaconda3/bin/conda
+    else
+        print -u2 -- "load_conda: conda is unavailable"
+        return 1
+    fi
 
-# languages
-# nim
-export PATH="$HOME/repos/Nim/bin:$PATH"
-# export PATH="$HOME/repos/Nim-dev/bin:$PATH"
-export PATH="$HOME/.nimble/bin:$PATH"
+    if conda_setup="$("$conda_command" shell.zsh hook 2>/dev/null)"; then
+        eval "$conda_setup"
+    else
+        print -u2 -- "load_conda: failed to initialize conda"
+        return 1
+    fi
+}
 
-# rust
-export PATH="$HOME/.cargo/bin:$PATH"
+h2() {
+    "$(npm prefix -s)/node_modules/.bin/shopify" hydrogen "$@"
+}
 
-# odin
-export PATH="$HOME/repos/Odin:$PATH"
-
-# export LDFLAGS="-L/usr/local/opt/openblas/lib"
-# export CPPFLAGS="-I/usr/local/opt/openblas/include"
-# export SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-# export LLVM_PATH="/usr/local/opt/llvm/"
-# export LLVM_VERSION="20"
-# export LD_LIBRARY_PATH="$LLVM_PATH/lib/:$LD_LIBRARY_PATH"
-# export DYLD_LIBRARY_PATH="$LLVM_PATH/lib/:$DYLD_LIBRARY_PATH"
-# export CPATH="$LLVM_PATH/lib/clang/$LLVM_VERSION/include/"
-# export LDFLAGS="-L$LLVM_PATH/lib"
-# export CPPFLAGS="-I$LLVM_PATH/include"
-# export CC="$LLVM_PATH/bin/clang"
-# export CXX="$LLVM_PATH/bin/clang++"
-# export PATH="$LLVM_PATH/bin:$PATH"
-
-eval "$(/opt/homebrew/bin/brew shellenv)"
-
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-source <(fzf --zsh)
-
-export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
-export LDFLAGS="-L/opt/homebrew/opt/llvm/lib"
-export CPPFLAGS="-I/opt/homebrew/opt/llvm/include"
-
-export LDFLAGS="-L/opt/homebrew/opt/llvm/lib/unwind -lunwind"
-
-# add nix
-export PATH="/nix/var/nix/profiles/default/bin:$PATH"
-
-# export EMACS_SOCKET_NAME=
-export ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
+if [[ -r "$HOME/.fzf.zsh" ]]; then
+    source "$HOME/.fzf.zsh"
+elif (( $+commands[fzf] )); then
+    if fzf_setup="$(fzf --zsh 2>/dev/null)"; then
+        source <(print -r -- "$fzf_setup")
+    fi
+    unset fzf_setup
+fi
