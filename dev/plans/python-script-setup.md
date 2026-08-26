@@ -70,9 +70,9 @@ Do not add private repositories as public submodules, record their URLs in the p
 
 ## Status
 
-- Plan state: 2/5 phases implemented.
-- Current phase: Phase 3.
-- Next up: add generic render and remote push/pull transport.
+- Plan state: 3/5 phases implemented.
+- Current phase: Phase 4.
+- Next up: add explicit provisioning and local setup orchestration.
 - During execution, update this section and each Phase status only after that phase's validation passes.
 - `refs/run.py` and `refs/mcu` are read-only references and must never be modified.
 
@@ -353,7 +353,7 @@ Phase success criteria:
 
 ## Phase 3: Generic render and remote push/pull mode
 
-Status: not started.
+Status: complete.
 
 Project the same validated mapping to explicit output directories and persistent SSH targets.
 
@@ -367,6 +367,14 @@ Work:
 6. Smoke-check push and pull through a temporary fake `rsync` executable, covering exact argument arrays, staging contents, owner writes, missing remote files, subprocess failures, dry-run behavior, and absence of `--delete`.
 7. Compare temporary local push output, explicit render output, and staged remote push output for the same fixture.
 8. Update this plan to `3/5 phases implemented` only after Phase 3 validation passes, then set the current phase to Phase 4.
+
+Implementation results:
+
+- Added `render OUTPUT_DIRECTORY --os OS` through the same validated mapping and checksum-enabled rsync projection used by local push. Render creates its root, overwrites managed paths, and preserves unrelated output files.
+- Added optional positional raw SSH targets to push and pull. Remote mode requires explicit `--os`, defaults the remote home to `~/`, validates explicit absolute POSIX homes without dot traversal, and rejects remote-only options in local mode.
+- Remote push projects only managed files into a temporary staging root and performs one no-delete transport rsync. Remote pull uses a sorted `--files-from` list with explicit recursion, stages only selected paths, and reuses local ownership routing for repository writes.
+- Remote dry runs create no staging directory or files, start no subprocess, and use stable conceptual staging paths. They validate all locally available contracts and state that remote contents and directory expansion cannot be verified without contact.
+- Temporary fake-transport and real local-rsync validation covered exact argument arrays, winning staging contents, render/local/remote equivalence, recursive remote pull, owner writes, missing paths, failure propagation, dry-run isolation, no `--delete`, real CLI ordering, Ruff, formatting, and Git diff checks.
 
 Affected code pointers:
 

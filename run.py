@@ -12,8 +12,10 @@ import shlex
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 from typing import Annotated
 
 from msup.cli import CliArg, cli
@@ -26,6 +28,7 @@ LOCAL_CLUSTER_NAME = "local"
 GIT_DIR_NAME = ".git"
 PLACEHOLDER_FILE_NAME = ".gitkeep"
 COMPONENT_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
+STAGING_PLACEHOLDER = Path("<staging>")
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,7 @@ class ManagedFile:
 
 HostOsDetector = Callable[[], tuple[str | None, list[str]]]
 Runner = Callable[[Sequence[str], bool, Path], None]
+StagingDirectoryCreator = Callable[[], AbstractContextManager[str]]
 
 
 def find_invalid_ancestor(
@@ -286,10 +290,15 @@ def resolve_mapping(
     requested_os: str | None,
     repo_root: Path = REPO_ROOT,
     detect_host_os: HostOsDetector = detect_os,
+    require_explicit_os: bool = False,
 ) -> tuple[list[ManagedFile], list[str]]:
     profile, errors = parse_profile(identifier)
-    operating_system, os_errors = resolve_os(requested_os, detect_host_os)
-    errors.extend(os_errors)
+    operating_system: str | None = None
+    if require_explicit_os and requested_os is None:
+        errors.append("--os is required for render and remote targets")
+    else:
+        operating_system, os_errors = resolve_os(requested_os, detect_host_os)
+        errors.extend(os_errors)
     result: list[ManagedFile] = []
     if profile is not None and operating_system is not None:
         layers, layer_errors = resolve_profile_layers(
@@ -312,18 +321,25 @@ def run(command: Sequence[str], dry_run: bool, cwd: Path = REPO_ROOT) -> None:
             sys.exit(result.returncode)
 
 
-def push_local(
+def project_mapping(
     mapping: list[ManagedFile],
-    home_root: Path,
+    destination_root: Path,
     dry_run: bool,
+    action: str,
     runner: Runner = run,
     cwd: Path = REPO_ROOT,
+    create_root: bool = False,
 ) -> list[str]:
     result: list[str] = []
+    if destination_root.is_symlink():
+        result.append(f"destination root must not be a symlink: {destination_root}")
+    elif destination_root.exists() and not destination_root.is_dir():
+        result.append(f"destination root must be a directory: {destination_root}")
+
     for managed_file in mapping:
-        destination = home_root / managed_file.relative_path
+        destination = destination_root / managed_file.relative_path
         invalid_ancestor = find_invalid_ancestor(
-            home_root, managed_file.relative_path.parent
+            destination_root, managed_file.relative_path.parent
         )
         if invalid_ancestor is not None:
             ancestor_path, is_symlink = invalid_ancestor
@@ -335,12 +351,17 @@ def push_local(
                 result.append(
                     f"destination parent must be a directory: {ancestor_path}"
                 )
+        elif destination.is_symlink():
+            result.append(f"destination must not be a symlink: {destination}")
         elif destination.is_dir():
             result.append(f"destination must not be a directory: {destination}")
 
     if not result:
+        if create_root and not dry_run:
+            destination_root.mkdir(parents=True, exist_ok=True)
         for managed_file in mapping:
-            destination = home_root / managed_file.relative_path
+            destination = destination_root / managed_file.relative_path
+            print(f"{action}: {managed_file.relative_path.as_posix()}")
             command = [
                 "rsync",
                 "-a",
@@ -356,25 +377,283 @@ def push_local(
     return result
 
 
+def resolve_remote_home(
+    target: str | None, remote_home: str | None
+) -> tuple[str | None, list[str]]:
+    errors: list[str] = []
+    result: str | None = None
+    if target is None:
+        if remote_home is not None:
+            errors.append("--remote_home requires a positional TARGET")
+    else:
+        result = "~/"
+        if remote_home is not None:
+            if (
+                "\\" in remote_home
+                or not PurePosixPath(remote_home).is_absolute()
+                or any(part in {".", ".."} for part in remote_home.split("/"))
+            ):
+                errors.append("--remote_home must be an absolute POSIX path")
+                result = None
+            else:
+                result = remote_home.rstrip("/") + "/"
+    return result, errors
+
+
+def push_remote(
+    mapping: list[ManagedFile],
+    target: str,
+    remote_home: str,
+    dry_run: bool,
+    runner: Runner = run,
+    cwd: Path = REPO_ROOT,
+    create_staging_directory: StagingDirectoryCreator = TemporaryDirectory,
+) -> list[str]:
+    result: list[str] = []
+    if dry_run:
+        for managed_file in mapping:
+            destination = STAGING_PLACEHOLDER / managed_file.relative_path
+            print(f"push: {managed_file.relative_path.as_posix()}")
+            runner(
+                [
+                    "rsync",
+                    "-a",
+                    "--checksum",
+                    "--no-owner",
+                    "--no-group",
+                    str(managed_file.source_path),
+                    str(destination),
+                ],
+                True,
+                cwd,
+            )
+        runner(
+            [
+                "rsync",
+                "-a",
+                "--no-owner",
+                "--no-group",
+                f"{STAGING_PLACEHOLDER}/",
+                f"{target}:{remote_home}",
+            ],
+            True,
+            cwd,
+        )
+    else:
+        with create_staging_directory() as staging_directory:
+            staging_root = Path(staging_directory)
+            result = project_mapping(mapping, staging_root, False, "push", runner, cwd)
+            if not result:
+                runner(
+                    [
+                        "rsync",
+                        "-a",
+                        "--no-owner",
+                        "--no-group",
+                        f"{staging_root}/",
+                        f"{target}:{remote_home}",
+                    ],
+                    False,
+                    cwd,
+                )
+    return result
+
+
 def push(
+    target: Annotated[
+        str | None, CliArg(pos=True, opt=False, help="optional raw SSH target")
+    ] = None,
     profile: Annotated[
         str, CliArg(help="public or private profile identifier")
     ] = LOCAL_CLUSTER_NAME,
     os: Annotated[str | None, CliArg(help="operating system override")] = None,
+    remote_home: Annotated[
+        str | None, CliArg(help="remote home, as an absolute POSIX path")
+    ] = None,
     dry_run: Annotated[
         bool, CliArg(help="report copies without writing files")
     ] = False,
 ) -> None:
-    mapping, errors = resolve_mapping(profile, os)
+    mapping, errors = resolve_mapping(
+        profile, os, require_explicit_os=target is not None
+    )
+    effective_remote_home, remote_home_errors = resolve_remote_home(target, remote_home)
+    errors.extend(remote_home_errors)
     if errors:
-        for error in errors:
+        for error in sorted(errors):
             print(f"error: {error}", file=sys.stderr)
         sys.exit(1)
-    errors = push_local(mapping, Path.home(), dry_run)
+    if target is None:
+        errors = project_mapping(mapping, Path.home(), dry_run, "push")
+    else:
+        errors = push_remote(mapping, target, effective_remote_home, dry_run)
     if errors:
-        for error in errors:
+        for error in sorted(errors):
             print(f"error: {error}", file=sys.stderr)
         sys.exit(1)
+
+
+def collect_selected_paths(
+    mapping: list[ManagedFile], paths: list[str]
+) -> tuple[set[Path], list[str]]:
+    result: set[Path] = set()
+    errors: list[str] = []
+    if paths:
+        for path_text in paths:
+            relative_path = Path(path_text)
+            if (
+                not path_text
+                or relative_path.is_absolute()
+                or any(part in {".", ".."} for part in path_text.split("/"))
+            ):
+                errors.append(
+                    f"path must be home-relative without traversal: {path_text!r}"
+                )
+            elif GIT_DIR_NAME in relative_path.parts:
+                errors.append(
+                    f"selected path cannot include {GIT_DIR_NAME}: {relative_path}"
+                )
+            elif relative_path.name == PLACEHOLDER_FILE_NAME:
+                errors.append(
+                    "selected path cannot include "
+                    f"{PLACEHOLDER_FILE_NAME}: {relative_path}"
+                )
+            else:
+                result.add(relative_path)
+    else:
+        result.update(managed_file.relative_path for managed_file in mapping)
+    return result, errors
+
+
+def prepare_pull_targets(
+    mapping: list[ManagedFile],
+    source_paths: dict[Path, Path],
+    layer: str,
+    common_layer: ProfileLayer,
+    profile_layer: ProfileLayer,
+    repo_root: Path,
+) -> tuple[list[ManagedFile], list[str]]:
+    mapping_by_path = {
+        managed_file.relative_path: managed_file for managed_file in mapping
+    }
+    result: list[str] = []
+    targets: list[ManagedFile] = []
+    if layer not in {"owner", "common", "profile"}:
+        result.append("layer must be one of: owner, common, profile")
+
+    for relative_path, source_path in sorted(
+        source_paths.items(), key=lambda item: item[0].as_posix()
+    ):
+        managed_file = mapping_by_path.get(relative_path)
+        owner = managed_file.owner if managed_file is not None else None
+        if layer == "common":
+            owner = common_layer
+        elif layer == "profile":
+            owner = profile_layer
+
+        if managed_file is None:
+            collision_paths = [
+                existing_path
+                for existing_path in mapping_by_path
+                if (
+                    relative_path in existing_path.parents
+                    or existing_path in relative_path.parents
+                )
+            ]
+            for existing_path in sorted(
+                collision_paths, key=lambda path: path.as_posix()
+            ):
+                result.append(
+                    f"new path {relative_path} has a file-directory collision with "
+                    f"managed path {existing_path}"
+                )
+            if layer == "owner":
+                result.append(
+                    f"new path requires --layer common or --layer profile: {relative_path}"
+                )
+            elif not collision_paths and owner is not None:
+                targets.append(ManagedFile(relative_path, source_path, owner))
+        elif (
+            layer != "owner"
+            and owner is not None
+            and owner != managed_file.owner
+            and {
+                "public common": 0,
+                "public profile": 1,
+                "private common": 2,
+                "private profile": 3,
+            }.get(owner.name, 0)
+            < {
+                "public common": 0,
+                "public profile": 1,
+                "private common": 2,
+                "private profile": 3,
+            }.get(managed_file.owner.name, 0)
+        ):
+            result.append(
+                f"explicit {layer} layer for {relative_path} would be hidden by "
+                f"{managed_file.owner.name} layer"
+            )
+        elif owner is not None:
+            targets.append(ManagedFile(relative_path, source_path, owner))
+
+    validated_roots: set[Path] = set()
+    invalid_roots: set[Path] = set()
+    for managed_file in targets:
+        if managed_file.owner.root not in validated_roots:
+            validated_roots.add(managed_file.owner.root)
+            if not managed_file.owner.root.is_relative_to(repo_root):
+                result.append(
+                    "destination layer must be inside repository root: "
+                    f"{managed_file.owner.root}"
+                )
+                invalid_roots.add(managed_file.owner.root)
+            elif repo_root.is_symlink():
+                result.append(
+                    "destination layer contains a symlinked path component: "
+                    f"{repo_root}"
+                )
+                invalid_roots.add(managed_file.owner.root)
+            else:
+                invalid_ancestor = find_invalid_ancestor(
+                    repo_root, managed_file.owner.root.relative_to(repo_root)
+                )
+                if invalid_ancestor is not None:
+                    ancestor_path, is_symlink = invalid_ancestor
+                    if is_symlink:
+                        result.append(
+                            "destination layer contains a symlinked path component: "
+                            f"{ancestor_path}"
+                        )
+                    else:
+                        result.append(
+                            f"destination layer parent must be a directory: {ancestor_path}"
+                        )
+                    invalid_roots.add(managed_file.owner.root)
+
+        if managed_file.owner.root in invalid_roots:
+            continue
+        destination = managed_file.owner.root / managed_file.relative_path
+        invalid_ancestor = find_invalid_ancestor(
+            managed_file.owner.root, managed_file.relative_path.parent
+        )
+        if invalid_ancestor is not None:
+            ancestor_path, is_symlink = invalid_ancestor
+            if is_symlink:
+                result.append(
+                    f"destination parent must not be a symlink: {ancestor_path}"
+                )
+            else:
+                result.append(
+                    f"destination parent must be a directory: {ancestor_path}"
+                )
+        elif destination.is_symlink():
+            result.append(f"destination must not be a symlink: {destination}")
+        elif destination.exists() and not destination.is_file():
+            result.append(f"destination must be a regular file: {destination}")
+
+    result.sort()
+    return targets, result
 
 
 def pull_local(
@@ -389,17 +668,10 @@ def pull_local(
     runner: Runner = run,
     cwd: Path = REPO_ROOT,
 ) -> list[str]:
-    mapping_by_path = {
-        managed_file.relative_path: managed_file for managed_file in mapping
-    }
     result: list[str] = []
-    selected_paths: set[Path] = set()
     source_paths: dict[Path, Path] = {}
-    targets: list[ManagedFile] = []
     has_explicit_paths = bool(paths)
 
-    if layer not in {"owner", "common", "profile"}:
-        result.append("layer must be one of: owner, common, profile")
     can_read_home = True
     if home_root.is_symlink():
         result.append(f"home root must not be a symlink: {home_root}")
@@ -408,30 +680,8 @@ def pull_local(
         result.append(f"home root must be a directory: {home_root}")
         can_read_home = False
 
-    if has_explicit_paths:
-        for path_text in paths:
-            relative_path = Path(path_text)
-            if (
-                not path_text
-                or relative_path.is_absolute()
-                or any(part in {".", ".."} for part in path_text.split("/"))
-            ):
-                result.append(
-                    f"path must be home-relative without traversal: {path_text!r}"
-                )
-            elif GIT_DIR_NAME in relative_path.parts:
-                result.append(
-                    f"selected path cannot include {GIT_DIR_NAME}: {relative_path}"
-                )
-            elif relative_path.name == PLACEHOLDER_FILE_NAME:
-                result.append(
-                    "selected path cannot include "
-                    f"{PLACEHOLDER_FILE_NAME}: {relative_path}"
-                )
-            else:
-                selected_paths.add(relative_path)
-    else:
-        selected_paths.update(mapping_by_path)
+    selected_paths, selection_errors = collect_selected_paths(mapping, paths)
+    result.extend(selection_errors)
 
     for relative_path in sorted(selected_paths, key=lambda path: path.as_posix()):
         if not can_read_home:
@@ -508,117 +758,10 @@ def pull_local(
         else:
             result.append(f"managed home path does not exist: {source_path}")
 
-    for relative_path, source_path in sorted(
-        source_paths.items(), key=lambda item: item[0].as_posix()
-    ):
-        managed_file = mapping_by_path.get(relative_path)
-        owner = managed_file.owner if managed_file is not None else None
-        if layer == "common":
-            owner = common_layer
-        elif layer == "profile":
-            owner = profile_layer
-
-        if managed_file is None:
-            collision_paths = [
-                existing_path
-                for existing_path in mapping_by_path
-                if (
-                    relative_path in existing_path.parents
-                    or existing_path in relative_path.parents
-                )
-            ]
-            for existing_path in sorted(
-                collision_paths, key=lambda path: path.as_posix()
-            ):
-                result.append(
-                    f"new path {relative_path} has a file-directory collision with "
-                    f"managed path {existing_path}"
-                )
-            if layer == "owner":
-                result.append(
-                    f"new path requires --layer common or --layer profile: {relative_path}"
-                )
-            elif not collision_paths and owner is not None:
-                targets.append(ManagedFile(relative_path, source_path, owner))
-        elif (
-            managed_file is not None
-            and layer != "owner"
-            and owner is not None
-            and owner != managed_file.owner
-            and {
-                "public common": 0,
-                "public profile": 1,
-                "private common": 2,
-                "private profile": 3,
-            }.get(owner.name, 0)
-            < {
-                "public common": 0,
-                "public profile": 1,
-                "private common": 2,
-                "private profile": 3,
-            }.get(managed_file.owner.name, 0)
-        ):
-            result.append(
-                f"explicit {layer} layer for {relative_path} would be hidden by "
-                f"{managed_file.owner.name} layer"
-            )
-        elif owner is not None:
-            targets.append(ManagedFile(relative_path, source_path, owner))
-
-    validated_roots: set[Path] = set()
-    invalid_roots: set[Path] = set()
-    for managed_file in targets:
-        if managed_file.owner.root not in validated_roots:
-            validated_roots.add(managed_file.owner.root)
-            if not managed_file.owner.root.is_relative_to(repo_root):
-                result.append(
-                    f"destination layer must be inside repository root: {managed_file.owner.root}"
-                )
-                invalid_roots.add(managed_file.owner.root)
-            else:
-                if repo_root.is_symlink():
-                    result.append(
-                        f"destination layer contains a symlinked path component: {repo_root}"
-                    )
-                    invalid_roots.add(managed_file.owner.root)
-                else:
-                    invalid_ancestor = find_invalid_ancestor(
-                        repo_root, managed_file.owner.root.relative_to(repo_root)
-                    )
-                    if invalid_ancestor is not None:
-                        ancestor_path, is_symlink = invalid_ancestor
-                        if is_symlink:
-                            result.append(
-                                "destination layer contains a symlinked path component: "
-                                f"{ancestor_path}"
-                            )
-                        else:
-                            result.append(
-                                f"destination layer parent must be a directory: {ancestor_path}"
-                            )
-                        invalid_roots.add(managed_file.owner.root)
-
-        if managed_file.owner.root in invalid_roots:
-            continue
-        destination = managed_file.owner.root / managed_file.relative_path
-        invalid_ancestor = find_invalid_ancestor(
-            managed_file.owner.root, managed_file.relative_path.parent
-        )
-        if invalid_ancestor is not None:
-            ancestor_path, is_symlink = invalid_ancestor
-            if is_symlink:
-                result.append(
-                    f"destination parent must not be a symlink: {ancestor_path}"
-                )
-            else:
-                result.append(
-                    f"destination parent must be a directory: {ancestor_path}"
-                )
-        else:
-            if destination.is_symlink():
-                result.append(f"destination must not be a symlink: {destination}")
-            elif destination.exists() and not destination.is_file():
-                result.append(f"destination must be a regular file: {destination}")
+    targets, target_errors = prepare_pull_targets(
+        mapping, source_paths, layer, common_layer, profile_layer, repo_root
+    )
+    result.extend(target_errors)
 
     if not result:
         for managed_file in targets:
@@ -692,7 +835,148 @@ def clean_local(
     return result
 
 
+def pull_remote(
+    mapping: list[ManagedFile],
+    paths: list[str],
+    layer: str,
+    common_layer: ProfileLayer,
+    profile_layer: ProfileLayer,
+    target: str,
+    remote_home: str,
+    repo_root: Path = REPO_ROOT,
+    dry_run: bool = False,
+    runner: Runner = run,
+    cwd: Path = REPO_ROOT,
+    create_staging_directory: StagingDirectoryCreator = TemporaryDirectory,
+) -> list[str]:
+    selected_paths, result = collect_selected_paths(mapping, paths)
+    files_from_paths = sorted(selected_paths, key=lambda path: path.as_posix())
+    if layer not in {"owner", "common", "profile"}:
+        result.append("layer must be one of: owner, common, profile")
+    if dry_run:
+        source_paths: dict[Path, Path] = {}
+        for relative_path in files_from_paths:
+            matching_files = [
+                managed_file
+                for managed_file in mapping
+                if (
+                    managed_file.relative_path == relative_path
+                    or relative_path in managed_file.relative_path.parents
+                )
+            ]
+            if matching_files:
+                for managed_file in matching_files:
+                    source_paths[managed_file.relative_path] = (
+                        STAGING_PLACEHOLDER / managed_file.relative_path
+                    )
+            else:
+                source_paths[relative_path] = STAGING_PLACEHOLDER / relative_path
+        if layer in {"owner", "common", "profile"}:
+            targets, target_errors = prepare_pull_targets(
+                mapping, source_paths, layer, common_layer, profile_layer, repo_root
+            )
+            result.extend(target_errors)
+        else:
+            targets = []
+        if not result:
+            for managed_file in targets:
+                print(
+                    f"pull: {managed_file.relative_path.as_posix()} -> "
+                    f"{managed_file.owner.name}"
+                )
+            print(
+                "dry-run: remote contents and directory expansion cannot be "
+                "validated without contacting the target"
+            )
+            runner(
+                [
+                    "rsync",
+                    "-a",
+                    "--checksum",
+                    "--no-owner",
+                    "--no-group",
+                    "--recursive",
+                    "--files-from",
+                    str(STAGING_PLACEHOLDER / "files-from"),
+                    f"{target}:{remote_home}",
+                    f"{STAGING_PLACEHOLDER}/",
+                ],
+                True,
+                cwd,
+            )
+    elif not result:
+        with create_staging_directory() as staging_directory:
+            staging_root = Path(staging_directory)
+            files_from = staging_root / "files-from"
+            files_from.write_text(
+                "".join(
+                    f"{relative_path.as_posix()}\n"
+                    for relative_path in files_from_paths
+                )
+            )
+            runner(
+                [
+                    "rsync",
+                    "-a",
+                    "--checksum",
+                    "--no-owner",
+                    "--no-group",
+                    "--recursive",
+                    "--files-from",
+                    str(files_from),
+                    f"{target}:{remote_home}",
+                    f"{staging_root}/",
+                ],
+                False,
+                cwd,
+            )
+            result = pull_local(
+                mapping,
+                paths,
+                layer,
+                common_layer,
+                profile_layer,
+                staging_root,
+                repo_root,
+                False,
+                runner,
+                cwd,
+            )
+    result.sort()
+    return result
+
+
+def render(
+    output_directory: Annotated[
+        str, CliArg(pos=True, opt=False, help="output directory for the overlay")
+    ],
+    profile: Annotated[
+        str, CliArg(help="public or private profile identifier")
+    ] = LOCAL_CLUSTER_NAME,
+    os: Annotated[str | None, CliArg(help="operating system override")] = None,
+) -> None:
+    mapping, errors = resolve_mapping(profile, os, require_explicit_os=True)
+    if errors:
+        for error in sorted(errors):
+            print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)
+    errors = project_mapping(
+        mapping,
+        Path(output_directory),
+        False,
+        "render",
+        create_root=True,
+    )
+    if errors:
+        for error in sorted(errors):
+            print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)
+
+
 def pull(
+    target: Annotated[
+        str | None, CliArg(pos=True, opt=False, help="optional raw SSH target")
+    ] = None,
     path: Annotated[
         list[str] | None,
         CliArg(help="home-relative files or directories to copy back"),
@@ -701,6 +985,9 @@ def pull(
         str, CliArg(help="public or private profile identifier")
     ] = LOCAL_CLUSTER_NAME,
     os: Annotated[str | None, CliArg(help="operating system override")] = None,
+    remote_home: Annotated[
+        str | None, CliArg(help="remote home, as an absolute POSIX path")
+    ] = None,
     layer: Annotated[
         str, CliArg(help="destination layer: owner, common, or profile")
     ] = "owner",
@@ -709,8 +996,14 @@ def pull(
     ] = False,
 ) -> None:
     profile_value, errors = parse_profile(profile)
-    operating_system, os_errors = resolve_os(os)
-    errors.extend(os_errors)
+    operating_system: str | None = None
+    if target is not None and os is None:
+        errors.append("--os is required for render and remote targets")
+    else:
+        operating_system, os_errors = resolve_os(os)
+        errors.extend(os_errors)
+    effective_remote_home, remote_home_errors = resolve_remote_home(target, remote_home)
+    errors.extend(remote_home_errors)
     mapping: list[ManagedFile] = []
     common_layer: ProfileLayer | None = None
     profile_layer: ProfileLayer | None = None
@@ -750,15 +1043,27 @@ def pull(
             print(f"error: {error}", file=sys.stderr)
         sys.exit(1)
     if common_layer is not None and profile_layer is not None:
-        errors = pull_local(
-            mapping,
-            [] if path is None else path,
-            layer,
-            common_layer,
-            profile_layer,
-            Path.home(),
-            dry_run=dry_run,
-        )
+        if target is None:
+            errors = pull_local(
+                mapping,
+                [] if path is None else path,
+                layer,
+                common_layer,
+                profile_layer,
+                Path.home(),
+                dry_run=dry_run,
+            )
+        else:
+            errors = pull_remote(
+                mapping,
+                [] if path is None else path,
+                layer,
+                common_layer,
+                profile_layer,
+                target,
+                effective_remote_home,
+                dry_run=dry_run,
+            )
     if errors:
         for error in sorted(errors):
             print(f"error: {error}", file=sys.stderr)
@@ -789,9 +1094,10 @@ def clean(
 if __name__ == "__main__":
     cli(
         {
-            push: "copy the selected profile overlay to the local home directory",
-            pull: "copy selected home files back to their profile layers",
+            push: "copy the selected profile overlay locally or to an SSH target",
+            pull: "copy selected local or remote home files back to profile layers",
             clean: "remove only files in the current mapping; removed source paths remain",
+            render: "project the selected overlay to an explicit output directory",
         },
         description="Deterministic dotfile overlay controller.",
     )
