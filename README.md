@@ -110,12 +110,19 @@ home directory and never deletes unrelated files.
 ./run.py push --profile local --os macos
 ./run.py push user@host --profile work/nv/aws --os ubuntu
 ./run.py push user@host --profile work/nv/aws --os ubuntu --remote_home /home/user
+./run.py push --profile local --os macos --diff
+./run.py push user@host --profile work/nv/aws --os ubuntu --diff
 ```
 
 With `TARGET`, push stages the validated mapping and makes one `rsync` transfer
 to the target. A remote push requires explicit `--os`. `--remote_home` must be
 an absolute POSIX path; omitting it uses the target's `~/`. Push never uses
 `rsync --delete`.
+
+`--diff` prints a unified content diff without changing the local or remote
+destination. Removed lines show the current destination and added lines show
+the selected profile content. Remote diff fetches only the managed destination
+paths into temporary local staging before comparing them.
 
 ### Pull
 
@@ -128,6 +135,8 @@ current mapping.
 ./run.py pull --path .config/nvim .vimrc --profile local --os macos --layer owner
 ./run.py pull user@host --path .config/nvim .vimrc --profile work/nv/aws --os ubuntu --layer profile
 ./run.py pull user@host --path .config/nvim --profile work/nv/aws --os ubuntu --layer profile --remote_home /home/user
+./run.py pull --path .vimrc --profile local --os macos --diff
+./run.py pull user@host --path .vimrc --profile work/nv/aws --os ubuntu --layer profile --diff
 ```
 
 Place the optional `TARGET` immediately after `pull`. `--path` is one native
@@ -144,6 +153,23 @@ layer.
 Remote pull also requires explicit `--os`, transfers only the selected paths,
 and applies the same ownership rules locally. The controller does not discover
 SSH targets, Teleport routes, or infrastructure-specific connection rules.
+
+`--diff` resolves the same owner or explicit layer as pull, then prints a
+unified content diff without changing profile files. Removed lines show the
+current repository-layer destination and added lines show the selected home
+content. Remote diff uses the same selected-path staging fetch as remote pull.
+
+### Content diffs
+
+Push and pull accept `--diff` as a no-write content preview. They invoke the
+system `diff` command and treat both identical files and reported differences
+as successful outcomes. A missing action destination is compared as
+`/dev/null`. Binary-file reporting is whatever the installed `diff` provides.
+
+Diff and dry-run are separate modes and cannot be combined. Dry-run reports
+planned actions and external commands without contacting a remote. Diff reads
+actual source and destination contents, so a remote diff contacts its target
+and creates only transient local staging data.
 
 ### Clean
 

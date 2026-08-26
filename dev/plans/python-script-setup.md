@@ -76,6 +76,15 @@ Do not add private repositories as public submodules, record their URLs in the p
 - During execution, update this section and each Phase status only after that phase's validation passes.
 - `refs/run.py` and `refs/mcu` are read-only references and must never be modified.
 
+### Standalone content diff extension
+
+Status: complete (2/2 phases implemented).
+
+- Phase 1: Add local push and pull unified content diffs from the same resolved
+  mapping and pull ownership targets used by writes. Complete.
+- Phase 2: Add selected-path remote staging for push and pull diffs, document
+  the interface, and validate no-write behavior. Complete.
+
 ## Controller Contract
 
 ### Cluster identifiers, operating systems, and private bundle resolution
@@ -143,7 +152,19 @@ Use the resolved controller root directly below the CLI. Validate alternate layo
 
 Add `--dry_run` directly through `msup` to `setup`, `push`, `pull`, and `clean`; do not rewrite `sys.argv`. Dry-run mode performs normal parsing, profile resolution, mapping construction, collision checks, path validation, and command construction, then prints sorted affected paths and any external command without copying, removing, modifying profile files, executing provisioning, or starting a subprocess. It is an action preview, not content diff generation.
 
-Do not add atomic destination writes, backup files, content diff generation, conflict merging, rollback, templates, custom cryptography, or chezmoi. Normal file and subprocess failures may stop a command with a clear error.
+Push and pull also accept `--diff`. Diff and dry-run are mutually exclusive.
+Diff performs the same mapping, selection, ownership, and destination
+validation as its action, then invokes the system `diff` command without
+writing an action destination. Unified diff direction is always current action
+destination first and incoming source second. Missing destinations compare
+from `/dev/null`; return statuses zero and one are expected, while higher
+statuses fail the command. Remote diff may contact its target and use temporary
+local staging. Remote push diff fetches only the effective managed paths with
+rsync filters, while remote pull diff reuses its selected-path staging fetch.
+
+Do not add atomic destination writes, backup files, conflict merging, rollback,
+templates, custom cryptography, or chezmoi. Normal file and subprocess failures
+may stop a command with a clear error.
 
 ### Setup
 

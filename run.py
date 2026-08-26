@@ -296,6 +296,7 @@ def run(
     dry_run: bool,
     cwd: Path,
     context: dict[str, str] | None = None,
+    expected_returncodes: tuple[int, ...] = (0,),
 ) -> None:
     print("$ " + shlex.join(command), flush=True)
     if not dry_run:
@@ -304,7 +305,7 @@ def run(
         if context is not None:
             environment.update(context)
         result = subprocess.run(command, cwd=cwd, env=environment)  # noqa: PLW1510
-        if result.returncode:
+        if result.returncode not in expected_returncodes:
             sys.exit(result.returncode)
 
 
@@ -393,6 +394,8 @@ def project_mapping(
     dry_run: bool,
     action: str,
     create_root: bool = False,
+    diff: bool = False,
+    destination_label_root: str | None = None,
 ) -> list[str]:
     result: list[str] = []
     if destination_root.is_symlink():
@@ -417,8 +420,8 @@ def project_mapping(
                 )
         elif destination.is_symlink():
             result.append(f"destination must not be a symlink: {destination}")
-        elif destination.is_dir():
-            result.append(f"destination must not be a directory: {destination}")
+        elif destination.exists() and not destination.is_file():
+            result.append(f"destination must be a regular file: {destination}")
 
     if not result:
         if create_root and not dry_run:
@@ -426,14 +429,39 @@ def project_mapping(
         for managed_file in mapping:
             destination = destination_root / managed_file.relative_path
             print(f"{action}: {managed_file.relative_path.as_posix()}")
-            command = [
-                *EXACT_FILE_RSYNC_ARGS,
-                str(managed_file.source_path),
-                str(destination),
-            ]
-            if not dry_run:
-                destination.parent.mkdir(parents=True, exist_ok=True)
-            run(command, dry_run, REPO_ROOT)
+            if diff:
+                current_path = (
+                    destination if destination.exists() else Path("/dev/null")
+                )
+                destination_label = str(destination)
+                if destination_label_root is not None:
+                    destination_label = (
+                        destination_label_root + managed_file.relative_path.as_posix()
+                    )
+                run(
+                    [
+                        "diff",
+                        "-u",
+                        "--label",
+                        destination_label,
+                        "--label",
+                        str(managed_file.source_path),
+                        str(current_path),
+                        str(managed_file.source_path),
+                    ],
+                    False,
+                    REPO_ROOT,
+                    expected_returncodes=(0, 1),
+                )
+            else:
+                command = [
+                    *EXACT_FILE_RSYNC_ARGS,
+                    str(managed_file.source_path),
+                    str(destination),
+                ]
+                if not dry_run:
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                run(command, dry_run, REPO_ROOT)
     return result
 
 
@@ -465,6 +493,7 @@ def push_remote(
     target: str,
     remote_home: str,
     dry_run: bool,
+    diff: bool = False,
 ) -> list[str]:
     result: list[str] = []
     if dry_run:
@@ -492,6 +521,41 @@ def push_remote(
             True,
             REPO_ROOT,
         )
+    elif diff:
+        with TemporaryDirectory() as staging_directory:
+            staging_root = Path(staging_directory)
+            included_paths: set[Path] = set()
+            for managed_file in mapping:
+                included_paths.add(managed_file.relative_path)
+                included_paths.update(managed_file.relative_path.parents)
+            included_paths.discard(Path("."))
+            include_args: list[str] = []
+            for relative_path in sorted(
+                included_paths, key=lambda path: path.as_posix()
+            ):
+                escaped_path = relative_path.as_posix()
+                for character in ("\\", "*", "?", "["):
+                    escaped_path = escaped_path.replace(character, "\\" + character)
+                include_args.append(f"--include=/{escaped_path}")
+            run(
+                [
+                    *EXACT_FILE_RSYNC_ARGS,
+                    *include_args,
+                    "--exclude=*",
+                    f"{target}:{remote_home}",
+                    f"{staging_root}/",
+                ],
+                False,
+                REPO_ROOT,
+            )
+            result = project_mapping(
+                mapping,
+                staging_root,
+                False,
+                "diff",
+                diff=True,
+                destination_label_root=f"{target}:{remote_home}",
+            )
     else:
         with TemporaryDirectory() as staging_directory:
             staging_root = Path(staging_directory)
@@ -526,18 +590,25 @@ def push(
     dry_run: Annotated[
         bool, CliArg(help="report copies without writing files")
     ] = False,
+    diff: Annotated[
+        bool, CliArg(help="show unified content changes without writing files")
+    ] = False,
 ) -> None:
     mapping, errors = resolve_mapping(
         profile, os, require_explicit_os=target is not None
     )
     effective_remote_home, remote_home_errors = resolve_remote_home(target, remote_home)
     errors.extend(remote_home_errors)
+    if dry_run and diff:
+        errors.append("--dry_run and --diff cannot be combined")
     if errors:
         exit_on_errors(errors)
     if target is None:
-        errors = project_mapping(mapping, Path.home(), dry_run, "push")
+        errors = project_mapping(
+            mapping, Path.home(), dry_run, "diff" if diff else "push", diff=diff
+        )
     else:
-        errors = push_remote(mapping, target, effective_remote_home, dry_run)
+        errors = push_remote(mapping, target, effective_remote_home, dry_run, diff)
     if errors:
         exit_on_errors(errors)
 
@@ -691,6 +762,8 @@ def pull_local(
     profile_layer: ProfileLayer,
     home_root: Path,
     dry_run: bool = False,
+    diff: bool = False,
+    source_label_root: str | None = None,
 ) -> list[str]:
     result: list[str] = []
     source_paths: dict[Path, Path] = {}
@@ -791,19 +864,45 @@ def pull_local(
         for managed_file in targets:
             destination = managed_file.owner.root / managed_file.relative_path
             print(
-                f"pull: {managed_file.relative_path.as_posix()} -> {managed_file.owner.name}"
+                f"{'diff' if diff else 'pull'}: "
+                f"{managed_file.relative_path.as_posix()} -> {managed_file.owner.name}"
             )
-            if not dry_run:
+            if diff:
+                current_path = (
+                    destination if destination.exists() else Path("/dev/null")
+                )
+                source_label = str(managed_file.source_path)
+                if source_label_root is not None:
+                    source_label = (
+                        source_label_root + managed_file.relative_path.as_posix()
+                    )
+                run(
+                    [
+                        "diff",
+                        "-u",
+                        "--label",
+                        str(destination),
+                        "--label",
+                        source_label,
+                        str(current_path),
+                        str(managed_file.source_path),
+                    ],
+                    False,
+                    REPO_ROOT,
+                    expected_returncodes=(0, 1),
+                )
+            elif not dry_run:
                 destination.parent.mkdir(parents=True, exist_ok=True)
-            run(
-                [
-                    *EXACT_FILE_RSYNC_ARGS,
-                    str(managed_file.source_path),
-                    str(destination),
-                ],
-                dry_run,
-                REPO_ROOT,
-            )
+            if not diff:
+                run(
+                    [
+                        *EXACT_FILE_RSYNC_ARGS,
+                        str(managed_file.source_path),
+                        str(destination),
+                    ],
+                    dry_run,
+                    REPO_ROOT,
+                )
     return result
 
 
@@ -816,6 +915,7 @@ def pull_remote(
     target: str,
     remote_home: str,
     dry_run: bool = False,
+    diff: bool = False,
 ) -> list[str]:
     selected_paths, result = collect_selected_paths(mapping, paths)
     files_from_paths = sorted(selected_paths, key=lambda path: path.as_posix())
@@ -893,6 +993,8 @@ def pull_remote(
                 profile_layer,
                 staging_root,
                 False,
+                diff,
+                f"{target}:{remote_home}" if diff else None,
             )
     return result
 
@@ -941,6 +1043,9 @@ def pull(
     dry_run: Annotated[
         bool, CliArg(help="report copies without writing files")
     ] = False,
+    diff: Annotated[
+        bool, CliArg(help="show unified content changes without writing files")
+    ] = False,
 ) -> None:
     profile_value, errors = parse_profile(profile)
     if layer not in {"owner", "common", "profile"}:
@@ -953,6 +1058,8 @@ def pull(
         errors.extend(os_errors)
     effective_remote_home, remote_home_errors = resolve_remote_home(target, remote_home)
     errors.extend(remote_home_errors)
+    if dry_run and diff:
+        errors.append("--dry_run and --diff cannot be combined")
     mapping: list[ManagedFile] = []
     common_layer: ProfileLayer | None = None
     profile_layer: ProfileLayer | None = None
@@ -999,6 +1106,7 @@ def pull(
                 profile_layer,
                 Path.home(),
                 dry_run=dry_run,
+                diff=diff,
             )
         else:
             errors = pull_remote(
@@ -1010,6 +1118,7 @@ def pull(
                 target,
                 effective_remote_home,
                 dry_run=dry_run,
+                diff=diff,
             )
     if errors:
         exit_on_errors(errors)
