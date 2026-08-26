@@ -63,7 +63,7 @@
      "7a7b1d475b42c1a0b61f3b1d1225dd249ffa1abb1b7f726aec59ac7ca3bf4dae"
      "37768a79b479684b0756dec7c0fc7652082910c37d8863c35b702db3f16000f8"
      default))
- '(org-agenda-files '("/Users/mig/org/journal.org"))
+ '(org-agenda-files '("/Users/migmartin/org/journal.org"))
  '(package-selected-packages
    '(nim-mode org-autolist which-key vterm vi-tilde-fringe use-package
               undo-tree org-ref org-fragtog olivetti nord-theme
@@ -119,7 +119,7 @@
 (use-package load-env-vars
   :config
   (load-env-vars "~/.secrets")
-  ;; (load-env-vars "~/.zshrc")
+  (load-env-vars "~/.zshrc")
   ;; (setenv "TERM" "xterm-256")
   (setenv "TERM" "")
 )
@@ -150,6 +150,8 @@
 
 
 
+(use-package magit :ensure t)
+
 ;; (package-install 'magit)
 ;; (package-install 'magit-section)
 ;; (package-install 'transient)
@@ -159,7 +161,7 @@
 (use-package org
     :config
   (setq org-todo-keywords
-	'((sequence "PROJ(P!)" "TODO(t!)" "POST(p!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)"))
+	'((sequence "PROJ(P!)" "TODO(t!)" "REVIEW(r!)" "POST(p!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)"))
   )
   (setq org-capture-templates
 	'(
@@ -183,17 +185,19 @@
     ;; journal
 	  ("m" "Meeting" entry (file+datetree "~/org/journal.org")
 	   "* %T %? :meeting:work:" :empty-lines 1)
-	  ("t" "Add Task" entry (file+datetree "~/org/journal.org")
-	   "* TODO %? \n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
 	  ("l" "Log" entry (file+datetree "~/org/journal.org")
 	   "* %T %? :log:" :empty-lines 1)
+	  ("t" "Add Task" entry (file+datetree "~/org/journal.org")
+	   "* TODO %? \n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+	  ("T" "Add Work Task" entry (file+datetree "~/org/journal.org")
+	   "* TODO %? :work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
 	  ("j" "Journal Entry" entry (file+datetree "~/org/journal.org")
 	   "* %t :journal:\n%?" :empty-lines 1)
 
     ;; life
 	  ("b" "Task: Backlog" entry (file+olp "~/org/life.org" "Backlog" "Inbox")
 	   "* TODO %? :backlog:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-	  ("n" "Note" entry (file+olp+datetree "~/org/life.org" "Backlog" "Inbox")
+	  ("n" "Note" entry (file+olp "~/org/life.org" "Backlog" "Inbox")
 	   "* %T %? :note:" :empty-lines 1)
 
 	  ("i" "Idea" entry (file+olp "~/org/life.org" "Areas" "Ideas")
@@ -282,7 +286,7 @@
 
 )
 
-(use-package org-tempo)
+(require 'org-tempo)
 
 (use-package org-fragtog
     :ensure t
@@ -890,7 +894,8 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 
     (setq tab-bar-tab-hints t)
 )
-(use-package all-the-icons :if (display-graphic-p))
+; M-x nerd-icons-install-fonts
+(use-package all-the-icons :ensure t :if (display-graphic-p))
 
 
 ;; keybindings
@@ -902,6 +907,50 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 	:prefix "SPC"
 	:global-prefix "C-SPC")
 )
+
+(defun my/linear-load-api-key-from-auth-source ()
+  "Load Linear API key from auth-source."
+  (interactive)
+  (require 'auth-source)
+  (let* ((auth-info (auth-source-search :host "api.linear.app" :user "apikey" :max 1))
+         (secret (when auth-info
+                   (funcall (plist-get (car auth-info) :secret)))))
+    (if secret
+        (progn
+          (setq linear-emacs-api-key secret)
+          (message "Successfully loaded Linear API key from auth-source"))
+      (message "Failed to retrieve Linear API key from auth-source"))))
+
+;; (use-package
+;;   linear-emacs
+;;   :load-path "~/emacs/linear-emacs/"
+;;   :config
+;;   (setq linear-emacs-org-file-path (expand-file-name "work/linear.org" org-directory))
+;;   (linear-emacs-load-api-key-from-env)
+;;   (setq linear-emacs-issues-state-mapping
+;;         '(("Todo" . "TODO")
+;;           ("In Progress" . "DOING")
+;;           ("In Review" . "REVIEW")
+;;           ("Blocked" . "BLOCKED")
+;;           ("Done" . "DONE")))
+;;
+;;   (defun my/enable-linear-org-sync ()
+;;     "Enable Linear-org synchronization when linear.org is opened."
+;;     (when (and buffer-file-name
+;;                (string-match-p "linear\\.org$" buffer-file-name))
+;;       (linear-emacs-enable-org-sync)
+;;       (message "Linear-org synchronization enabled for this buffer")))
+;;
+;;   (add-hook 'find-file-hook #'my/enable-linear-org-sync)
+;;   (my/leader-keys "G"  '((lambda () (interactive) (find-file (expand-file-name "work/linear.org" org-directory)))  :which-key "goto linear file"))
+;;   (my/leader-keys "gl"  '(linear-emacs-list-issues          :which-key "List Linear issues"))
+;;   (my/leader-keys "gn"  '(linear-emacs-new-issue            :which-key "Create new issue"  ))
+;;   (my/leader-keys "gs"  '(linear-emacs-sync-org-to-linear   :which-key "Sync current issue"))
+;;   (my/leader-keys "ge"  '(linear-emacs-enable-org-sync      :which-key "Enable org sync"   ))
+;;   (my/leader-keys "gd"  '(linear-emacs-disable-org-sync     :which-key "Disable org sync"  ))
+;;   (my/leader-keys "gt"  '(linear-emacs-test-connection      :which-key "Test connection"   ))
+;;   (my/leader-keys "gd"  '(linear-emacs-toggle-debug         :which-key "Toggle debug mode" ))
+;; )
 
 (define-key evil-normal-state-map (kbd "M-p") 'counsel-fzf)
 (define-key evil-insert-state-map (kbd "M-p") 'counsel-fzf)
@@ -967,10 +1016,40 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 
 
 (require 'tramp)
+
+(tramp-set-completion-function "ssh"
+  '((tramp-parse-sconfig "/etc/ssh_config")
+    (tramp-parse-sconfig "~/.ssh/config")))
+
 (setq tramp-message-show-message nil)
 (add-to-list 'tramp-remote-path 'tramp-own-remote-path)
 
-;;(setq ob-async-inject-variables "\\(\\borg-babel.+\\|tramp-.+\\)")
+;; https://coredumped.dev/2025/06/18/making-tramp-go-brrrr./
+(setq remote-file-name-inhibit-locks t
+      tramp-use-scp-direct-remote-copying t
+      remote-file-name-inhibit-auto-save-visited t)
+
+(setq tramp-copy-size-limit (* 1024 1024) ;; 1MB
+      tramp-verbose 2)
+
+(add-to-list 'tramp-connection-properties
+  (list (regexp-quote "/sshx:aws-login1:")
+        "remote-shell" "/bin/bash"))
+
+(connection-local-set-profile-variables
+ 'remote-direct-async-process
+ '((tramp-direct-async-process . t)))
+
+(connection-local-set-profiles
+ '(:application tramp :protocol "scp")
+ 'remote-direct-async-process)
+
+(with-eval-after-load 'tramp
+  (with-eval-after-load 'compile
+    (remove-hook 'compilation-mode-hook #'tramp-compile-disable-ssh-controlmaster-options)))
+
+(setq magit-tramp-pipe-stty-settings 'pty)
+
 (setq ob-async-inject-variables "\\borg-babel.+")
 (add-hook 'ob-async-pre-execute-src-block-hook
         '(lambda ()
@@ -980,8 +1059,15 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
            (setq tramp-use-ssh-controlmaster-options nil))
 )
 
-;; (setq server-use-tcp t)
-;; (setq server-auth-dir (expand-file-name "~/.config/emacs/server"))
+;; Speed up TRAMP
+(setq tramp-auto-save-directory "~/tmp/tramp-autosave")
+(setq tramp-chunksize 2000)
+
+;; Disable version control for remote files (faster)
+(setq vc-ignore-dir-regexp
+      (format "\\(%s\\)\\|\\(%s\\)"
+              vc-ignore-dir-regexp
+              tramp-file-name-regexp))
 
 
 ;; iterate over all bindings
