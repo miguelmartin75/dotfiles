@@ -13,10 +13,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from leptonai.api.v1.types.job import LeptonJob
+    from app.models import Job
 
 
-def submit_batch_job(job: LeptonJob) -> str: ...
+def submit_job(job: Job) -> str: ...
 ```
 
 ## Comments and Docstrings
@@ -28,11 +28,46 @@ def submit_batch_job(job: LeptonJob) -> str: ...
 def calculate_total_size(object_sizes: list[int | None]) -> int:
     result = 0
     for object_size in object_sizes:
-        # S3 reports no object size for directory placeholders.
+        # The manifest uses None for directory entries.
         if object_size is None:
             continue
         result += object_size
     return result
+```
+
+A comment such as `# Skip None values.` would merely narrate the condition
+instead of explaining why the value is absent.
+
+## Returns and Control Flow
+
+- A guard may use a separate `if` and return when it handles a degenerate input, such as `None` or empty data, before the main operation.
+- After guard handling, keep the successful path direct and minimally indented.
+- Within one decision chain, connect alternative branches with `elif` or `else`, even when an earlier branch exits. A branch is not a guard merely because it returns.
+
+```py
+# Do: a genuine guard followed by the main logic.
+def select_source(is_cached: bool | None, can_fetch: bool) -> str | None:
+    if is_cached is None:
+        return None
+
+    if is_cached:
+        return "cache"
+    elif can_fetch:
+        return "network"
+    else:
+        return "unavailable"
+
+
+# Don't: related alternatives expressed as disconnected branches.
+def select_source(is_cached: bool | None, can_fetch: bool) -> str | None:
+    if is_cached is None:
+        return None
+
+    if is_cached:
+        return "cache"
+    if can_fetch:
+        return "network"
+    return "unavailable"
 ```
 
 ## Naming and API Semantics
@@ -64,4 +99,4 @@ def find_token(tokens: list[str], expected: str) -> int | None: ...
 
 ## Formatting
 
-- Follow the Ruff configuration in `pyproject.toml` for formatting, imports, indentation, quotes, and line length.
+- Use Ruff for formatting and import ordering. Follow repository Ruff configuration when present; otherwise use Ruff defaults.
