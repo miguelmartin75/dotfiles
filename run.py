@@ -23,6 +23,8 @@ PROFILES_DIR_NAME = "profiles"
 PRIVATE_DIR_NAME = ".private"
 COMMON_CLUSTER_NAME = "common"
 LOCAL_CLUSTER_NAME = "local"
+GIT_DIR_NAME = ".git"
+PLACEHOLDER_FILE_NAME = ".gitkeep"
 COMPONENT_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
 
 
@@ -49,6 +51,25 @@ class ManagedFile:
 
 HostOsDetector = Callable[[], tuple[str | None, list[str]]]
 Runner = Callable[[Sequence[str], bool, Path], None]
+
+
+def find_invalid_ancestor(
+    root: Path, relative_directory: Path
+) -> tuple[Path, bool] | None:
+    """Find the first symlinked or non-directory ancestor below a trusted root."""
+    ancestor_path = root
+    result: tuple[Path, bool] | None = None
+    for component in relative_directory.parts:
+        ancestor_path /= component
+        if ancestor_path.is_symlink():
+            result = ancestor_path, True
+            break
+        elif ancestor_path.exists() and not ancestor_path.is_dir():
+            result = ancestor_path, False
+            break
+        elif not ancestor_path.exists():
+            break
+    return result
 
 
 def parse_profile(identifier: str) -> tuple[Profile | None, list[str]]:
@@ -166,25 +187,26 @@ def resolve_profile_layers(
     errors: list[str] = []
     layers: list[ProfileLayer] = []
     for name, root, required in candidates:
-        path_has_symlink = False
-        component_path = repo_root
-        if component_path.is_symlink():
+        invalid_ancestor: tuple[Path, bool] | None = None
+        if repo_root.is_symlink():
             errors.append(
-                f"{name} layer contains a symlinked path component: {component_path}"
+                f"{name} layer contains a symlinked path component: {repo_root}"
             )
-            path_has_symlink = True
-        if not path_has_symlink:
-            for component in root.relative_to(repo_root).parts:
-                component_path /= component
-                if component_path.is_symlink():
-                    errors.append(
-                        f"{name} layer contains a symlinked path component: {component_path}"
-                    )
-                    path_has_symlink = True
-                    break
-                if not component_path.exists():
-                    break
-        if path_has_symlink:
+        else:
+            invalid_ancestor = find_invalid_ancestor(
+                repo_root, root.relative_to(repo_root)
+            )
+        if invalid_ancestor is not None:
+            ancestor_path, is_symlink = invalid_ancestor
+            if is_symlink:
+                errors.append(
+                    f"{name} layer contains a symlinked path component: {ancestor_path}"
+                )
+            else:
+                errors.append(
+                    f"{name} layer parent must be a directory: {ancestor_path}"
+                )
+        if repo_root.is_symlink() or invalid_ancestor is not None:
             continue
         if root.is_dir():
             layers.append(ProfileLayer(name, root))
@@ -217,7 +239,7 @@ def build_effective_mapping(
                     errors.append(
                         f"symlinked directory in {layer.name} layer: {candidate_path}"
                     )
-                elif dirname == ".git":
+                elif dirname == GIT_DIR_NAME:
                     continue
                 else:
                     next_dirnames.append(dirname)
@@ -229,7 +251,7 @@ def build_effective_mapping(
                     errors.append(
                         f"symlinked file in {layer.name} layer: {source_path}"
                     )
-                elif filename in {".git", ".gitkeep"}:
+                elif filename in {GIT_DIR_NAME, PLACEHOLDER_FILE_NAME}:
                     continue
                 elif not source_path.is_file():
                     errors.append(
@@ -300,21 +322,20 @@ def push_local(
     result: list[str] = []
     for managed_file in mapping:
         destination = home_root / managed_file.relative_path
-        parent_path = home_root
-        has_invalid_parent = False
-        for component in managed_file.relative_path.parts[:-1]:
-            parent_path /= component
-            if parent_path.is_symlink():
+        invalid_ancestor = find_invalid_ancestor(
+            home_root, managed_file.relative_path.parent
+        )
+        if invalid_ancestor is not None:
+            ancestor_path, is_symlink = invalid_ancestor
+            if is_symlink:
                 result.append(
-                    f"destination parent must not be a symlink: {parent_path}"
+                    f"destination parent must not be a symlink: {ancestor_path}"
                 )
-                has_invalid_parent = True
-                break
-            elif parent_path.exists() and not parent_path.is_dir():
-                result.append(f"destination parent must be a directory: {parent_path}")
-                has_invalid_parent = True
-                break
-        if not has_invalid_parent and destination.is_dir():
+            else:
+                result.append(
+                    f"destination parent must be a directory: {ancestor_path}"
+                )
+        elif destination.is_dir():
             result.append(f"destination must not be a directory: {destination}")
 
     if not result:
@@ -323,6 +344,7 @@ def push_local(
             command = [
                 "rsync",
                 "-a",
+                "--checksum",
                 "--no-owner",
                 "--no-group",
                 str(managed_file.source_path),
@@ -355,8 +377,421 @@ def push(
         sys.exit(1)
 
 
+def pull_local(
+    mapping: list[ManagedFile],
+    paths: list[str],
+    layer: str,
+    common_layer: ProfileLayer,
+    profile_layer: ProfileLayer,
+    home_root: Path,
+    repo_root: Path = REPO_ROOT,
+    dry_run: bool = False,
+    runner: Runner = run,
+    cwd: Path = REPO_ROOT,
+) -> list[str]:
+    mapping_by_path = {
+        managed_file.relative_path: managed_file for managed_file in mapping
+    }
+    result: list[str] = []
+    selected_paths: set[Path] = set()
+    source_paths: dict[Path, Path] = {}
+    targets: list[ManagedFile] = []
+    has_explicit_paths = bool(paths)
+
+    if layer not in {"owner", "common", "profile"}:
+        result.append("layer must be one of: owner, common, profile")
+    can_read_home = True
+    if home_root.is_symlink():
+        result.append(f"home root must not be a symlink: {home_root}")
+        can_read_home = False
+    elif home_root.exists() and not home_root.is_dir():
+        result.append(f"home root must be a directory: {home_root}")
+        can_read_home = False
+
+    if has_explicit_paths:
+        for path_text in paths:
+            relative_path = Path(path_text)
+            if (
+                not path_text
+                or relative_path.is_absolute()
+                or any(part in {".", ".."} for part in path_text.split("/"))
+            ):
+                result.append(
+                    f"path must be home-relative without traversal: {path_text!r}"
+                )
+            elif GIT_DIR_NAME in relative_path.parts:
+                result.append(
+                    f"selected path cannot include {GIT_DIR_NAME}: {relative_path}"
+                )
+            elif relative_path.name == PLACEHOLDER_FILE_NAME:
+                result.append(
+                    "selected path cannot include "
+                    f"{PLACEHOLDER_FILE_NAME}: {relative_path}"
+                )
+            else:
+                selected_paths.add(relative_path)
+    else:
+        selected_paths.update(mapping_by_path)
+
+    for relative_path in sorted(selected_paths, key=lambda path: path.as_posix()):
+        if not can_read_home:
+            continue
+        source_path = home_root / relative_path
+        invalid_ancestor = find_invalid_ancestor(home_root, relative_path.parent)
+        if invalid_ancestor is not None:
+            ancestor_path, is_symlink = invalid_ancestor
+            if is_symlink:
+                result.append(f"home parent must not be a symlink: {ancestor_path}")
+            else:
+                result.append(f"home parent must be a directory: {ancestor_path}")
+            continue
+        if source_path.is_symlink():
+            result.append(f"selected home path must not be a symlink: {source_path}")
+        elif source_path.is_file():
+            source_paths[relative_path] = source_path
+        elif source_path.is_dir() and not has_explicit_paths:
+            result.append(f"managed home path must be a regular file: {source_path}")
+        elif source_path.is_dir():
+            for directory, dirnames, filenames in os.walk(
+                source_path, topdown=True, followlinks=False
+            ):
+                directory_path = Path(directory)
+                next_dirnames: list[str] = []
+                for dirname in sorted(dirnames):
+                    candidate_path = directory_path / dirname
+                    candidate_relative_path = candidate_path.relative_to(home_root)
+                    if GIT_DIR_NAME in candidate_relative_path.parts:
+                        result.append(
+                            "selected path cannot include "
+                            f"{GIT_DIR_NAME}: {candidate_relative_path}"
+                        )
+                    elif candidate_relative_path.name == PLACEHOLDER_FILE_NAME:
+                        result.append(
+                            "selected path cannot include "
+                            f"{PLACEHOLDER_FILE_NAME}: {candidate_relative_path}"
+                        )
+                    elif candidate_path.is_symlink():
+                        result.append(
+                            f"symlinked directory in selected home path: {candidate_path}"
+                        )
+                    else:
+                        next_dirnames.append(dirname)
+                dirnames[:] = next_dirnames
+
+                for filename in sorted(filenames):
+                    candidate_path = directory_path / filename
+                    candidate_relative_path = candidate_path.relative_to(home_root)
+                    if GIT_DIR_NAME in candidate_relative_path.parts:
+                        result.append(
+                            "selected path cannot include "
+                            f"{GIT_DIR_NAME}: {candidate_relative_path}"
+                        )
+                    elif candidate_relative_path.name == PLACEHOLDER_FILE_NAME:
+                        result.append(
+                            "selected path cannot include "
+                            f"{PLACEHOLDER_FILE_NAME}: {candidate_relative_path}"
+                        )
+                    elif candidate_path.is_symlink():
+                        result.append(
+                            f"symlinked file in selected home path: {candidate_path}"
+                        )
+                    elif candidate_path.is_file():
+                        source_paths[candidate_relative_path] = candidate_path
+                    else:
+                        result.append(
+                            f"non-regular file in selected home path: {candidate_path}"
+                        )
+        elif source_path.exists():
+            result.append(f"selected home path must be a regular file: {source_path}")
+        elif has_explicit_paths:
+            result.append(f"selected home path does not exist: {source_path}")
+        else:
+            result.append(f"managed home path does not exist: {source_path}")
+
+    for relative_path, source_path in sorted(
+        source_paths.items(), key=lambda item: item[0].as_posix()
+    ):
+        managed_file = mapping_by_path.get(relative_path)
+        owner = managed_file.owner if managed_file is not None else None
+        if layer == "common":
+            owner = common_layer
+        elif layer == "profile":
+            owner = profile_layer
+
+        if managed_file is None:
+            collision_paths = [
+                existing_path
+                for existing_path in mapping_by_path
+                if (
+                    relative_path in existing_path.parents
+                    or existing_path in relative_path.parents
+                )
+            ]
+            for existing_path in sorted(
+                collision_paths, key=lambda path: path.as_posix()
+            ):
+                result.append(
+                    f"new path {relative_path} has a file-directory collision with "
+                    f"managed path {existing_path}"
+                )
+            if layer == "owner":
+                result.append(
+                    f"new path requires --layer common or --layer profile: {relative_path}"
+                )
+            elif not collision_paths and owner is not None:
+                targets.append(ManagedFile(relative_path, source_path, owner))
+        elif (
+            managed_file is not None
+            and layer != "owner"
+            and owner is not None
+            and owner != managed_file.owner
+            and {
+                "public common": 0,
+                "public profile": 1,
+                "private common": 2,
+                "private profile": 3,
+            }.get(owner.name, 0)
+            < {
+                "public common": 0,
+                "public profile": 1,
+                "private common": 2,
+                "private profile": 3,
+            }.get(managed_file.owner.name, 0)
+        ):
+            result.append(
+                f"explicit {layer} layer for {relative_path} would be hidden by "
+                f"{managed_file.owner.name} layer"
+            )
+        elif owner is not None:
+            targets.append(ManagedFile(relative_path, source_path, owner))
+
+    validated_roots: set[Path] = set()
+    invalid_roots: set[Path] = set()
+    for managed_file in targets:
+        if managed_file.owner.root not in validated_roots:
+            validated_roots.add(managed_file.owner.root)
+            if not managed_file.owner.root.is_relative_to(repo_root):
+                result.append(
+                    f"destination layer must be inside repository root: {managed_file.owner.root}"
+                )
+                invalid_roots.add(managed_file.owner.root)
+            else:
+                if repo_root.is_symlink():
+                    result.append(
+                        f"destination layer contains a symlinked path component: {repo_root}"
+                    )
+                    invalid_roots.add(managed_file.owner.root)
+                else:
+                    invalid_ancestor = find_invalid_ancestor(
+                        repo_root, managed_file.owner.root.relative_to(repo_root)
+                    )
+                    if invalid_ancestor is not None:
+                        ancestor_path, is_symlink = invalid_ancestor
+                        if is_symlink:
+                            result.append(
+                                "destination layer contains a symlinked path component: "
+                                f"{ancestor_path}"
+                            )
+                        else:
+                            result.append(
+                                f"destination layer parent must be a directory: {ancestor_path}"
+                            )
+                        invalid_roots.add(managed_file.owner.root)
+
+        if managed_file.owner.root in invalid_roots:
+            continue
+        destination = managed_file.owner.root / managed_file.relative_path
+        invalid_ancestor = find_invalid_ancestor(
+            managed_file.owner.root, managed_file.relative_path.parent
+        )
+        if invalid_ancestor is not None:
+            ancestor_path, is_symlink = invalid_ancestor
+            if is_symlink:
+                result.append(
+                    f"destination parent must not be a symlink: {ancestor_path}"
+                )
+            else:
+                result.append(
+                    f"destination parent must be a directory: {ancestor_path}"
+                )
+        else:
+            if destination.is_symlink():
+                result.append(f"destination must not be a symlink: {destination}")
+            elif destination.exists() and not destination.is_file():
+                result.append(f"destination must be a regular file: {destination}")
+
+    if not result:
+        for managed_file in targets:
+            destination = managed_file.owner.root / managed_file.relative_path
+            print(
+                f"pull: {managed_file.relative_path.as_posix()} -> {managed_file.owner.name}"
+            )
+            if not dry_run:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+            runner(
+                [
+                    "rsync",
+                    "-a",
+                    "--checksum",
+                    "--no-owner",
+                    "--no-group",
+                    str(managed_file.source_path),
+                    str(destination),
+                ],
+                dry_run,
+                cwd,
+            )
+    result.sort()
+    return result
+
+
+def clean_local(
+    mapping: list[ManagedFile],
+    home_root: Path,
+    dry_run: bool,
+) -> list[str]:
+    result: list[str] = []
+    targets: list[Path] = []
+    can_clean_home = True
+    if home_root.is_symlink():
+        result.append(f"home root must not be a symlink: {home_root}")
+        can_clean_home = False
+    elif home_root.exists() and not home_root.is_dir():
+        result.append(f"home root must be a directory: {home_root}")
+        can_clean_home = False
+
+    for managed_file in mapping:
+        if not can_clean_home:
+            continue
+        destination = home_root / managed_file.relative_path
+        invalid_ancestor = find_invalid_ancestor(
+            home_root, managed_file.relative_path.parent
+        )
+        if invalid_ancestor is not None:
+            ancestor_path, is_symlink = invalid_ancestor
+            if is_symlink:
+                result.append(f"home parent must not be a symlink: {ancestor_path}")
+            else:
+                result.append(f"home parent must be a directory: {ancestor_path}")
+            continue
+        if destination.is_symlink():
+            result.append(f"clean target must not be a symlink: {destination}")
+        elif not destination.exists():
+            continue
+        elif destination.is_file():
+            targets.append(destination)
+        elif not destination.is_dir():
+            result.append(f"clean target must be a regular file: {destination}")
+
+    if not result:
+        for destination in targets:
+            print(f"clean: {destination.relative_to(home_root).as_posix()}")
+            if not dry_run:
+                destination.unlink()
+    result.sort()
+    return result
+
+
+def pull(
+    path: Annotated[
+        list[str] | None,
+        CliArg(help="home-relative files or directories to copy back"),
+    ] = None,
+    profile: Annotated[
+        str, CliArg(help="public or private profile identifier")
+    ] = LOCAL_CLUSTER_NAME,
+    os: Annotated[str | None, CliArg(help="operating system override")] = None,
+    layer: Annotated[
+        str, CliArg(help="destination layer: owner, common, or profile")
+    ] = "owner",
+    dry_run: Annotated[
+        bool, CliArg(help="report copies without writing files")
+    ] = False,
+) -> None:
+    profile_value, errors = parse_profile(profile)
+    operating_system, os_errors = resolve_os(os)
+    errors.extend(os_errors)
+    mapping: list[ManagedFile] = []
+    common_layer: ProfileLayer | None = None
+    profile_layer: ProfileLayer | None = None
+    if profile_value is not None and operating_system is not None:
+        layers, layer_errors = resolve_profile_layers(profile_value, operating_system)
+        errors.extend(layer_errors)
+        if profile_value.namespace is None:
+            profiles_root = REPO_ROOT / PROFILES_DIR_NAME
+            common_layer = ProfileLayer(
+                "public common", profiles_root / COMMON_CLUSTER_NAME
+            )
+            profile_layer = ProfileLayer(
+                "public profile",
+                profiles_root / profile_value.cluster / operating_system,
+            )
+        else:
+            profiles_root = (
+                REPO_ROOT
+                / PRIVATE_DIR_NAME
+                / profile_value.namespace
+                / profile_value.bundle
+                / PROFILES_DIR_NAME
+            )
+            common_layer = ProfileLayer(
+                "private common", profiles_root / COMMON_CLUSTER_NAME
+            )
+            profile_layer = ProfileLayer(
+                "private profile",
+                profiles_root / profile_value.cluster / operating_system,
+            )
+        if not layer_errors:
+            mapping, mapping_errors = build_effective_mapping(layers)
+            errors.extend(mapping_errors)
+
+    if errors:
+        for error in sorted(errors):
+            print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)
+    if common_layer is not None and profile_layer is not None:
+        errors = pull_local(
+            mapping,
+            [] if path is None else path,
+            layer,
+            common_layer,
+            profile_layer,
+            Path.home(),
+            dry_run=dry_run,
+        )
+    if errors:
+        for error in sorted(errors):
+            print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)
+
+
+def clean(
+    profile: Annotated[
+        str, CliArg(help="public or private profile identifier")
+    ] = LOCAL_CLUSTER_NAME,
+    os: Annotated[str | None, CliArg(help="operating system override")] = None,
+    dry_run: Annotated[
+        bool, CliArg(help="report removals without changing files")
+    ] = False,
+) -> None:
+    mapping, errors = resolve_mapping(profile, os)
+    if errors:
+        for error in sorted(errors):
+            print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)
+    errors = clean_local(mapping, Path.home(), dry_run)
+    if errors:
+        for error in sorted(errors):
+            print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli(
-        {push: "copy the selected profile overlay to the local home directory"},
+        {
+            push: "copy the selected profile overlay to the local home directory",
+            pull: "copy selected home files back to their profile layers",
+            clean: "remove only files in the current mapping; removed source paths remain",
+        },
         description="Deterministic dotfile overlay controller.",
     )

@@ -70,9 +70,9 @@ Do not add private repositories as public submodules, record their URLs in the p
 
 ## Status
 
-- Plan state: 1/5 phases implemented.
-- Current phase: Phase 2.
-- Next up: add local pull ownership and cleanup from the shared effective mapping.
+- Plan state: 2/5 phases implemented.
+- Current phase: Phase 3.
+- Next up: add generic render and remote push/pull transport.
 - During execution, update this section and each Phase status only after that phase's validation passes.
 - `refs/run.py` and `refs/mcu` are read-only references and must never be modified.
 
@@ -180,10 +180,10 @@ Local `push --profile local` is equivalent to omitting `--profile`. Both forms d
 Use this interface:
 
 ```text
-./run.py pull [TARGET] [--path PATH]... [--profile local] [--os macos] [--layer owner|common|profile]
+./run.py pull [TARGET] [--path PATH [PATH ...]] [--profile local] [--os macos] [--layer owner|common|profile]
 ```
 
-Without `--path`, pull every path in the current effective mapping. Repeatable `--path PATH` options select home-relative files or directories and allow new files to be added deliberately. Keeping selections behind `--path` leaves the optional positional `TARGET` unambiguous. Reject absolute paths, traversal, special files, final symlinks, and symlinked parents that could escape the supplied home root.
+Without `--path`, pull every path in the current effective mapping. One native multi-value `msup` option, `--path PATH [PATH ...]`, selects home-relative files or directories and allows new files to be added deliberately. The installed `msup` collection mapping uses `nargs="*"` and does not expose an append action, so repeated `--path` occurrences are not supported; do not patch its parser or rewrite `sys.argv`. Keeping selections behind `--path` leaves the optional positional `TARGET` unambiguous. Reject absolute paths, traversal, special files, final symlinks, and symlinked parents that could escape the supplied home root.
 
 `--layer` defaults to `owner`:
 
@@ -314,18 +314,27 @@ Phase success criteria:
 
 ## Phase 2: Local pull ownership and cleanup
 
-Status: not started.
+Status: complete.
 
 Add explicit reverse flow without gradually forking common files into profile overrides.
 
 Work:
 
-1. Implement repeatable `--path PATH` selections for local pull through the real `msup` CLI boundary, including documented option placement. No paths selects the current effective mapping. Phase 3 adds the optional positional remote target.
+1. Implement native multi-value `--path PATH [PATH ...]` selections for local pull through the real `msup` CLI boundary, including documented option placement. No paths selects the current effective mapping. Phase 3 adds the optional positional remote target.
 2. Implement local owner-based pull, explicit common/profile layers, directory recursion, new-path rules, shadowed-layer rejection, and `--dry_run` action reporting.
 3. Implement `clean` and its `--dry_run` mode from the same effective mapping used by push and pull.
 4. Smoke-check public and private owners, new paths, explicit layers, traversal rejection, clean selection, missing clean targets, and dry-run behavior with temporary roots.
 5. Document in CLI help that clean cannot remove paths no longer present in the current source mapping.
 6. Update this plan to `2/5 phases implemented` only after Phase 2 validation passes, then set the current phase to Phase 3.
+
+Implementation results:
+
+- Added local pull with native multi-value `--path PATH [PATH ...]`, owner/common/profile routing, sorted directory expansion, and real `msup` option placement. Repeated `--path` flags remain unsupported because `msup` exposes no append action and argument rewriting is prohibited.
+- Existing files update their actual winning public or private owner by default. Explicit private common/profile selections resolve only beneath the deterministic ignored private bundle roots.
+- New files require explicit ownership and are rejected when excluded from the mapping or when they would create a file/directory collision. Explicit lower-layer writes are rejected when a later layer would still win.
+- Pull uses exact-path checksum-enabled `rsync` commands through the shared logged runner. All selections, source paths, destination layers, and errors are preflighted before any command runs.
+- Added mapping-only clean with full preflight, missing-target tolerance, directory preservation, and `--dry_run` action reporting.
+- Temporary-directory validation covered public/private ownership, new and explicit layers, directory recursion, traversal and symlink boundaries, exclusions, collisions, clean behavior, dry-run equivalence, real rsync, native CLI help, Ruff, formatting, and Git diff checks.
 
 Affected code pointers:
 
@@ -337,7 +346,7 @@ Phase success criteria:
 
 - Existing paths pull back to their winning owner by default.
 - New paths require explicit common or profile ownership.
-- Pulling a private profile writes only inside its ignored private bundle.
+- Explicit `common` or `profile` pulls for a private profile write only inside its ignored private bundle. Owner-mode pulls continue to update each effective file's actual public or private winning owner.
 - Push, pull, and clean use the exact same effective mapping.
 - Pull cannot escape the supplied home or repository layer roots.
 - Pull and clean dry runs perform full validation and report actions without changing home or profile files.
