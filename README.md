@@ -53,6 +53,9 @@ dotfiles/
 |-- README.md
 |-- run.py
 |-- profiles/
+|   |-- common/                       # optional files shared by every host
+|   |-- platform/
+|   |   `-- linux/                    # optional files shared by Linux profiles
 |   `-- local/
 |       `-- macos/                 # files mirrored below a home directory
 |-- provision/
@@ -69,8 +72,10 @@ dotfiles/
 ```
 
 `profiles/common/` is optional. Add only files deliberately audited to be
-shared across operating systems. Every profile directory directly mirrors
-paths below the destination home, with no `files/` wrapper.
+shared across operating systems. `profiles/platform/<platform>/` is also
+optional and shares files across profiles on one platform. Every profile
+directory directly mirrors paths below the destination home, with no `files/`
+wrapper.
 
 ## Profiles and overlays
 
@@ -81,22 +86,26 @@ A profile is either a public cluster or a private bundle cluster:
 <namespace>/<bundle>/<cluster>
 ```
 
-Each component must match `[a-z0-9][a-z0-9_-]*`. The `common` cluster name is
-reserved. Examples are `local` and `work/nv/aws`. Operating-system values use
-the same component grammar.
+Each component must match `[a-z0-9][a-z0-9_-]*`. The `common` and `platform`
+cluster names are reserved. Examples are `local` and `work/nv/aws`.
+Operating-system values use the same component grammar.
 
 For a private profile such as `work/nv/aws`, files resolve only beneath
 `.private/work/nv/`. Later layers win for the same home-relative path:
 
 1. `profiles/common/`
-2. `profiles/<cluster>/<os>/`
-3. `.private/<namespace>/<bundle>/profiles/common/`
-4. `.private/<namespace>/<bundle>/profiles/<cluster>/<os>/`
+2. `profiles/platform/<platform>/`
+3. `profiles/<cluster>/<os>/`
+4. `.private/<namespace>/<bundle>/profiles/common/`
+5. `.private/<namespace>/<bundle>/profiles/platform/<platform>/`
+6. `.private/<namespace>/<bundle>/profiles/<cluster>/<os>/`
 
 Projection commands require the selected public or private profile directory.
-Private profiles may reuse public common and public cluster files. Regular
-files are the only managed content; symlinks, special files, and conflicting
-file-versus-directory paths are rejected.
+Private profiles may reuse public common, platform, and cluster files. The
+platform is `macos` when `--os macos` is selected. Every other supported
+operating-system value is a Linux distribution ID and uses platform `linux`.
+Regular files are the only managed content; symlinks, special files, and
+conflicting file-versus-directory paths are rejected.
 
 ## Commands
 
@@ -133,6 +142,7 @@ current mapping.
 ```bash
 ./run.py pull --profile local --os macos
 ./run.py pull --path .config/nvim .vimrc --profile local --os macos --layer owner
+./run.py pull --path .config/termite/config --profile local --os ubuntu --layer platform
 ./run.py pull --path emacs/init.el --profile local --os macos
 ./run.py pull --path "$HOME/.config/emacs/init.el" --profile local --os macos
 ./run.py pull user@host --path .config/nvim .vimrc --profile work/nv/aws --os ubuntu --layer profile
@@ -149,7 +159,8 @@ first matches an exact managed file or managed directory. Otherwise it matches
 complete path components in managed paths, so `emacs/init.el` matches
 `.config/emacs/init.el`, while `mac` does not match `emacs`. A partial match
 selects only matching managed files. A no-match selection remains exact, so it
-can deliberately add a new file with `--layer common` or `--layer profile`.
+can deliberately add a new file with `--layer common`, `--layer platform`, or
+`--layer profile`.
 
 An absolute local path must be below the current home directory and is treated
 as its exact home-relative path. An absolute remote path requires an explicit
@@ -158,10 +169,10 @@ never use partial matching. Paths containing traversal, `.git`, or `.gitkeep`
 are rejected. Selecting the home root itself is rejected.
 
 `--layer owner` is the default. Existing files return to the layer that owns
-the winning effective file. New files require `--layer common` or `--layer
-profile`. For private profiles, those explicit layers point into the private
-bundle. A pull fails when an explicit lower layer would be hidden by a later
-layer.
+the winning effective file. New files require `--layer common`, `--layer
+platform`, or `--layer profile`. For private profiles, those explicit layers
+point into the private bundle. A pull fails when an explicit lower layer would
+be hidden by a later layer.
 
 Remote pull also requires explicit `--os`, transfers only the selected paths,
 and applies the same ownership rules locally. The controller does not discover
@@ -274,9 +285,9 @@ git clone <private-provision-url> .private/work/nv/provision
 ```
 
 Both layouts expose the same controller paths. In the split layout, the profile
-repository root contains `common/` and cluster directories such as `aws/`,
-while the provisioning repository root contains matching `<cluster>/<os>`
-executables.
+repository root contains `common/`, `platform/<platform>/`, and cluster
+directories such as `aws/`, while the provisioning repository root contains
+matching `<cluster>/<os>` executables.
 
 ## Remote Ubuntu targets
 

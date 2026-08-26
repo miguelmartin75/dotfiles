@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent
 PROFILES_DIR_NAME = "profiles"
 PRIVATE_DIR_NAME = ".private"
 COMMON_CLUSTER_NAME = "common"
+PLATFORM_CLUSTER_NAME = "platform"
 LOCAL_CLUSTER_NAME = "local"
 GIT_DIR_NAME = ".git"
 PLACEHOLDER_FILE_NAME = ".gitkeep"
@@ -89,10 +90,8 @@ def parse_profile(identifier: str) -> tuple[Profile | None, list[str]]:
         for component in parts:
             if COMPONENT_PATTERN.fullmatch(component) is None:
                 errors.append(f"invalid profile component: {component!r}")
-        if parts[-1] == COMMON_CLUSTER_NAME:
-            errors.append(
-                f"{COMMON_CLUSTER_NAME!r} is reserved and cannot be a profile cluster"
-            )
+        if parts[-1] in {COMMON_CLUSTER_NAME, PLATFORM_CLUSTER_NAME}:
+            errors.append(f"{parts[-1]!r} is reserved and cannot be a profile cluster")
 
     result: Profile | None = None
     if not errors:
@@ -153,8 +152,14 @@ def resolve_profile_layers(
     operating_system: str,
 ) -> tuple[list[ProfileLayer], list[str]]:
     public_profiles_root = REPO_ROOT / PROFILES_DIR_NAME
+    platform_name = "macos" if operating_system == "macos" else "linux"
     candidates: list[tuple[str, Path, bool]] = [
         ("public common", public_profiles_root / COMMON_CLUSTER_NAME, False),
+        (
+            "public platform",
+            public_profiles_root / PLATFORM_CLUSTER_NAME / platform_name,
+            False,
+        ),
         (
             "public profile",
             public_profiles_root / profile.cluster / operating_system,
@@ -172,6 +177,11 @@ def resolve_profile_layers(
         candidates.extend(
             [
                 ("private common", private_profiles_root / COMMON_CLUSTER_NAME, False),
+                (
+                    "private platform",
+                    private_profiles_root / PLATFORM_CLUSTER_NAME / platform_name,
+                    False,
+                ),
                 (
                     "private profile",
                     private_profiles_root / profile.cluster / operating_system,
@@ -716,6 +726,7 @@ def prepare_pull_targets(
     source_paths: dict[Path, Path],
     layer: str,
     common_layer: ProfileLayer,
+    platform_layer: ProfileLayer,
     profile_layer: ProfileLayer,
 ) -> tuple[list[ManagedFile], list[str]]:
     mapping_by_path = {
@@ -725,9 +736,11 @@ def prepare_pull_targets(
     targets: list[ManagedFile] = []
     layer_precedence = {
         "public common": 0,
-        "public profile": 1,
-        "private common": 2,
-        "private profile": 3,
+        "public platform": 1,
+        "public profile": 2,
+        "private common": 3,
+        "private platform": 4,
+        "private profile": 5,
     }
 
     for relative_path, source_path in sorted(
@@ -737,6 +750,8 @@ def prepare_pull_targets(
         owner = managed_file.owner if managed_file is not None else None
         if layer == "common":
             owner = common_layer
+        elif layer == "platform":
+            owner = platform_layer
         elif layer == "profile":
             owner = profile_layer
 
@@ -758,7 +773,8 @@ def prepare_pull_targets(
                 )
             if layer == "owner":
                 result.append(
-                    f"new path requires --layer common or --layer profile: {relative_path}"
+                    "new path requires --layer common, platform, or profile: "
+                    f"{relative_path}"
                 )
             elif not collision_paths and owner is not None:
                 targets.append(ManagedFile(relative_path, source_path, owner))
@@ -825,6 +841,7 @@ def pull_local(
     paths: list[str],
     layer: str,
     common_layer: ProfileLayer,
+    platform_layer: ProfileLayer,
     profile_layer: ProfileLayer,
     home_root: Path,
     dry_run: bool = False,
@@ -926,7 +943,7 @@ def pull_local(
             result.append(f"managed home path does not exist: {source_path}")
 
     targets, target_errors = prepare_pull_targets(
-        mapping, source_paths, layer, common_layer, profile_layer
+        mapping, source_paths, layer, common_layer, platform_layer, profile_layer
     )
     result.extend(target_errors)
 
@@ -981,6 +998,7 @@ def pull_remote(
     paths: list[str],
     layer: str,
     common_layer: ProfileLayer,
+    platform_layer: ProfileLayer,
     profile_layer: ProfileLayer,
     target: str,
     remote_home: str,
@@ -1013,7 +1031,12 @@ def pull_remote(
             else:
                 source_paths[relative_path] = STAGING_PLACEHOLDER / relative_path
         targets, target_errors = prepare_pull_targets(
-            mapping, source_paths, layer, common_layer, profile_layer
+            mapping,
+            source_paths,
+            layer,
+            common_layer,
+            platform_layer,
+            profile_layer,
         )
         result.extend(target_errors)
         if not result:
@@ -1067,6 +1090,7 @@ def pull_remote(
                 paths,
                 layer,
                 common_layer,
+                platform_layer,
                 profile_layer,
                 staging_root,
                 False,
@@ -1116,7 +1140,7 @@ def pull(
         str | None, CliArg(help="remote home, as an absolute POSIX path")
     ] = None,
     layer: Annotated[
-        str, CliArg(help="destination layer: owner, common, or profile")
+        str, CliArg(help="destination layer: owner, common, platform, or profile")
     ] = "owner",
     dry_run: Annotated[
         bool, CliArg(help="report copies without writing files")
@@ -1126,8 +1150,8 @@ def pull(
     ] = False,
 ) -> None:
     profile_value, errors = parse_profile(profile)
-    if layer not in {"owner", "common", "profile"}:
-        errors.append("layer must be one of: owner, common, profile")
+    if layer not in {"owner", "common", "platform", "profile"}:
+        errors.append("layer must be one of: owner, common, platform, profile")
     operating_system: str | None = None
     if target is not None and os is None:
         errors.append("--os is required for render and remote targets")
@@ -1140,14 +1164,20 @@ def pull(
         errors.append("--dry_run and --diff cannot be combined")
     mapping: list[ManagedFile] = []
     common_layer: ProfileLayer | None = None
+    platform_layer: ProfileLayer | None = None
     profile_layer: ProfileLayer | None = None
     if profile_value is not None and operating_system is not None:
         layers, layer_errors = resolve_profile_layers(profile_value, operating_system)
         errors.extend(layer_errors)
         if profile_value.namespace is None:
             profiles_root = REPO_ROOT / PROFILES_DIR_NAME
+            platform_name = "macos" if operating_system == "macos" else "linux"
             common_layer = ProfileLayer(
                 "public common", profiles_root / COMMON_CLUSTER_NAME
+            )
+            platform_layer = ProfileLayer(
+                "public platform",
+                profiles_root / PLATFORM_CLUSTER_NAME / platform_name,
             )
             profile_layer = ProfileLayer(
                 "public profile",
@@ -1161,8 +1191,13 @@ def pull(
                 / profile_value.bundle
                 / PROFILES_DIR_NAME
             )
+            platform_name = "macos" if operating_system == "macos" else "linux"
             common_layer = ProfileLayer(
                 "private common", profiles_root / COMMON_CLUSTER_NAME
+            )
+            platform_layer = ProfileLayer(
+                "private platform",
+                profiles_root / PLATFORM_CLUSTER_NAME / platform_name,
             )
             profile_layer = ProfileLayer(
                 "private profile",
@@ -1174,13 +1209,18 @@ def pull(
 
     if errors:
         exit_on_errors(errors)
-    if common_layer is not None and profile_layer is not None:
+    if (
+        common_layer is not None
+        and platform_layer is not None
+        and profile_layer is not None
+    ):
         if target is None:
             errors = pull_local(
                 mapping,
                 [] if path is None else path,
                 layer,
                 common_layer,
+                platform_layer,
                 profile_layer,
                 Path.home(),
                 dry_run=dry_run,
@@ -1192,6 +1232,7 @@ def pull(
                 [] if path is None else path,
                 layer,
                 common_layer,
+                platform_layer,
                 profile_layer,
                 target,
                 effective_remote_home,

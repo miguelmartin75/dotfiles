@@ -548,6 +548,64 @@ Follow-up success criteria:
 - Remote absolute paths are exact selections only below an explicit absolute POSIX remote home.
 - Local and remote pull, diff, and dry-run share the same selection result without a remote-home sweep.
 
+## Completed follow-up: shared platform layers
+
+Status: complete (2/2 phases).
+
+The historical overlay contract above records the original common and profile
+layers. This completed follow-up adds a shared platform tier without changing
+that implementation record.
+
+### Phase 1: Resolve platform layers and pull ownership
+
+Status: complete.
+
+Add optional platform roots below `profiles/platform/<platform>/` and
+`.private/<namespace>/<bundle>/profiles/platform/<platform>/`. The effective
+mapping now applies layers from lowest to highest precedence:
+
+1. Public common.
+2. Public platform.
+3. Public profile.
+4. Private common.
+5. Private platform.
+6. Private profile.
+
+Map `macos` operating-system values to platform `macos`. All other supported
+operating-system values are Linux distribution IDs and map to platform `linux`.
+Reserve `platform` as a cluster name because the platform roots share that
+directory name. Extend owner-based pull and explicit `--layer platform` pull
+destinations, including public/private root selection, precedence shadowing,
+local and remote staging, diffs, and dry runs.
+
+### Phase 2: Move Linux terminal configuration and document the layer
+
+Status: complete.
+
+Move the Termite configuration unchanged from the macOS profile path to
+`profiles/platform/linux/.config/termite/config`. Update the README layout,
+platform mapping, six-tier precedence, explicit pull ownership, and private
+bundle layout. Native `msup` CLI inspection confirmed that its argument parser
+does not support Enum annotations, so the fixed pull-layer strings remain
+directly validated instead of adding parser adaptation.
+
+Follow-up validation covered native command help, Ruff, Python loading, Bash
+syntax, Git whitespace checks, isolated public/private six-tier overlays for
+macOS and Ubuntu, Termite's Linux-only inclusion, local and remote owner and
+explicit platform pulls, remote staging, diff and dry-run no-write behavior,
+and push, setup, render, and clean regression paths.
+
+Follow-up success criteria:
+
+- Shared platform files resolve for every matching profile while profile and
+  private layers retain their existing higher precedence.
+- Linux distribution profiles include `profiles/platform/linux/`; macOS
+  profiles exclude it and may use `profiles/platform/macos/`.
+- Pull returns platform-owned files to their owning platform root and supports
+  explicit public or private platform ownership for new paths.
+- Every projection, cleanup, pull, diff, dry-run, and remote staging path uses
+  the same six-tier effective mapping.
+
 ## References
 
 - `refs/run.py:1-31` and `refs/run.py:158-175`: uv runner, subprocess logging, and `msup` command mapping reference.
