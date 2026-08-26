@@ -70,9 +70,9 @@ Do not add private repositories as public submodules, record their URLs in the p
 
 ## Status
 
-- Plan state: 4/5 phases implemented.
-- Current phase: Phase 5.
-- Next up: document the Python controller and remove replaced legacy Bash entry points.
+- Plan state: complete (5/5 phases implemented).
+- Current phase: N/A.
+- Next up: N/A.
 - During execution, update this section and each Phase status only after that phase's validation passes.
 - `refs/run.py` and `refs/mcu` are read-only references and must never be modified.
 
@@ -441,7 +441,7 @@ Phase success criteria:
 
 ## Phase 5: Documentation and legacy Bash removal
 
-Status: not started.
+Status: complete.
 
 Make `run.py` the maintained public interface after all replacement behavior is validated.
 
@@ -455,6 +455,15 @@ Work:
 6. Search tracked files for stale active references to legacy commands and `tilde/`. Preserve historical migration references in this plan.
 7. Keep all of `refs/`, including `refs/mcu`, unchanged.
 8. Update plan status to `complete (5/5 phases implemented)` and `Next up: N/A` only after final validation passes.
+
+Implementation results:
+
+- Rewrote `README.md` around the uv-driven Python controller, setup-first onboarding, exact native command ordering, deterministic overlays, owner-aware pull, clean limitations, render, provisioning, remote rsync, private bundle layouts, and the secrets boundary.
+- Documented native one-option multi-value `--path` selection and provisioner argument forwarding after `--` without recommending generated upstream parser artifacts.
+- Documented direct migration from the removed local Bash workflows and the public/private boundary for remote MCU and Lepton orchestration.
+- Smoke-checked all command help surfaces and replacement workflows with isolated homes, outputs, transports, and provisioners before removing the legacy entry points.
+- Deleted `install`, `clean`, and the five legacy scripts after validation. The empty `scripts/` directory was removed, and all of `refs/` remained unchanged.
+- Final validation covered native CLI parsing, local and remote dry runs, real isolated local rsync projection, overlay ownership, render, provisioning, Ruff, formatting, Python and Bash syntax, deletion scope, stale-reference gates, and Git diff checks.
 
 Affected code pointers:
 
@@ -494,7 +503,13 @@ Run only non-mutating validation against real user and remote state:
 ./run.py --help
 git diff --check
 git status --short
-! git grep -nE 'scripts/(mv_dotfiles|self_update|osx|linux|variables\.sh)|\./install|\./clean|tilde/' -- . ':(exclude)dev/plans/python-script-setup.md'
+! git grep -nE 'scripts/(mv_dotfiles|self_update|osx|linux|variables\.sh)|\./install|\./clean|tilde/' -- . ':(exclude)dev/plans/python-script-setup.md' ':(exclude)README.md'
+awk '
+  /^## Migration$/ { in_migration = 1; next }
+  /^## / { in_migration = 0 }
+  !in_migration && /scripts\/(mv_dotfiles|self_update|osx|linux|variables\.sh)|\.\/install|\.\/clean|tilde\// { found = 1; print }
+  END { exit found }
+' README.md
 ```
 
 Use temporary directories and temporary fake executables for focused setup, local and remote push, local and remote pull, clean, render, provisioning, dry-run, and CLI smoke checks. Keep these checks in the execution transcript rather than adding a permanent test module. Do not run those commands against the real home, remote hosts, Teleport, private repositories, or the host package manager during validation.
