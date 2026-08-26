@@ -11,8 +11,7 @@ import re
 import shlex
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
@@ -29,6 +28,13 @@ GIT_DIR_NAME = ".git"
 PLACEHOLDER_FILE_NAME = ".gitkeep"
 COMPONENT_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
 STAGING_PLACEHOLDER = Path("<staging>")
+EXACT_FILE_RSYNC_ARGS = (
+    "rsync",
+    "-a",
+    "--checksum",
+    "--no-owner",
+    "--no-group",
+)
 
 
 @dataclass(frozen=True)
@@ -50,12 +56,6 @@ class ManagedFile:
     relative_path: Path
     source_path: Path
     owner: ProfileLayer
-
-
-HostOsDetector = Callable[[], tuple[str | None, list[str]]]
-Runner = Callable[[Sequence[str], bool, Path], None]
-ProvisionRunner = Callable[[Sequence[str], bool, Path, dict[str, str]], None]
-StagingDirectoryCreator = Callable[[], AbstractContextManager[str]]
 
 
 def find_invalid_ancestor(
@@ -103,20 +103,17 @@ def parse_profile(identifier: str) -> tuple[Profile | None, list[str]]:
     return result, errors
 
 
-def detect_os(
-    system_name: str | None = None,
-    os_release_path: Path = Path("/etc/os-release"),
-) -> tuple[str | None, list[str]]:
+def detect_os() -> tuple[str | None, list[str]]:
     errors: list[str] = []
-    system = platform.system() if system_name is None else system_name
+    system = platform.system()
     result: str | None = None
     if system == "Darwin":
         result = "macos"
     elif system == "Linux":
         try:
-            os_release = os_release_path.read_text()
+            os_release = Path("/etc/os-release").read_text()
         except OSError:
-            errors.append(f"cannot read {os_release_path}; pass --os explicitly")
+            errors.append("cannot read /etc/os-release; pass --os explicitly")
         else:
             for line in os_release.splitlines():
                 if line.startswith("ID="):
@@ -126,9 +123,7 @@ def detect_os(
                     result = value.lower()
                     break
             if result is None:
-                errors.append(
-                    f"{os_release_path} has no ID entry; pass --os explicitly"
-                )
+                errors.append("/etc/os-release has no ID entry; pass --os explicitly")
     else:
         errors.append(
             f"unsupported host operating system {system!r}; pass --os explicitly"
@@ -142,14 +137,11 @@ def detect_os(
     return result, errors
 
 
-def resolve_os(
-    requested_os: str | None,
-    detect_host_os: HostOsDetector = detect_os,
-) -> tuple[str | None, list[str]]:
+def resolve_os(requested_os: str | None) -> tuple[str | None, list[str]]:
     errors: list[str] = []
     result = requested_os
     if result is None:
-        result, errors = detect_host_os()
+        result, errors = detect_os()
     elif COMPONENT_PATTERN.fullmatch(result) is None:
         errors.append(f"invalid operating system component: {result!r}")
         result = None
@@ -159,9 +151,8 @@ def resolve_os(
 def resolve_profile_layers(
     profile: Profile,
     operating_system: str,
-    repo_root: Path = REPO_ROOT,
 ) -> tuple[list[ProfileLayer], list[str]]:
-    public_profiles_root = repo_root / PROFILES_DIR_NAME
+    public_profiles_root = REPO_ROOT / PROFILES_DIR_NAME
     candidates: list[tuple[str, Path, bool]] = [
         ("public common", public_profiles_root / COMMON_CLUSTER_NAME, False),
         (
@@ -172,7 +163,7 @@ def resolve_profile_layers(
     ]
     if profile.namespace is not None and profile.bundle is not None:
         private_profiles_root = (
-            repo_root
+            REPO_ROOT
             / PRIVATE_DIR_NAME
             / profile.namespace
             / profile.bundle
@@ -192,15 +183,7 @@ def resolve_profile_layers(
     errors: list[str] = []
     layers: list[ProfileLayer] = []
     for name, root, required in candidates:
-        invalid_ancestor: tuple[Path, bool] | None = None
-        if repo_root.is_symlink():
-            errors.append(
-                f"{name} layer contains a symlinked path component: {repo_root}"
-            )
-        else:
-            invalid_ancestor = find_invalid_ancestor(
-                repo_root, root.relative_to(repo_root)
-            )
+        invalid_ancestor = find_invalid_ancestor(REPO_ROOT, root.relative_to(REPO_ROOT))
         if invalid_ancestor is not None:
             ancestor_path, is_symlink = invalid_ancestor
             if is_symlink:
@@ -211,7 +194,7 @@ def resolve_profile_layers(
                 errors.append(
                     f"{name} layer parent must be a directory: {ancestor_path}"
                 )
-        if repo_root.is_symlink() or invalid_ancestor is not None:
+        if invalid_ancestor is not None:
             continue
         if root.is_dir():
             layers.append(ProfileLayer(name, root))
@@ -289,8 +272,6 @@ def build_effective_mapping(
 def resolve_mapping(
     identifier: str,
     requested_os: str | None,
-    repo_root: Path = REPO_ROOT,
-    detect_host_os: HostOsDetector = detect_os,
     require_explicit_os: bool = False,
 ) -> tuple[list[ManagedFile], list[str]]:
     profile, errors = parse_profile(identifier)
@@ -298,13 +279,11 @@ def resolve_mapping(
     if require_explicit_os and requested_os is None:
         errors.append("--os is required for render and remote targets")
     else:
-        operating_system, os_errors = resolve_os(requested_os, detect_host_os)
+        operating_system, os_errors = resolve_os(requested_os)
         errors.extend(os_errors)
     result: list[ManagedFile] = []
     if profile is not None and operating_system is not None:
-        layers, layer_errors = resolve_profile_layers(
-            profile, operating_system, repo_root
-        )
+        layers, layer_errors = resolve_profile_layers(profile, operating_system)
         errors.extend(layer_errors)
         if not layer_errors:
             result, mapping_errors = build_effective_mapping(layers)
@@ -315,7 +294,7 @@ def resolve_mapping(
 def run(
     command: Sequence[str],
     dry_run: bool,
-    cwd: Path = REPO_ROOT,
+    cwd: Path,
     context: dict[str, str] | None = None,
 ) -> None:
     print("$ " + shlex.join(command), flush=True)
@@ -324,22 +303,27 @@ def run(
         environment.pop("VIRTUAL_ENV", None)
         if context is not None:
             environment.update(context)
-        result = subprocess.run(command, cwd=cwd, env=environment, check=False)
+        result = subprocess.run(command, cwd=cwd, env=environment)  # noqa: PLW1510
         if result.returncode:
             sys.exit(result.returncode)
+
+
+def exit_on_errors(errors: list[str]) -> None:
+    for error in sorted(errors):
+        print(f"error: {error}", file=sys.stderr)
+    sys.exit(1)
 
 
 def resolve_provisioner(
     profile: Profile,
     operating_system: str,
-    repo_root: Path = REPO_ROOT,
 ) -> tuple[Path | None, Path, list[str]]:
-    public_entry_point = repo_root / "provision" / profile.cluster / operating_system
+    public_entry_point = REPO_ROOT / "provision" / profile.cluster / operating_system
     expected_entry_point = public_entry_point
     candidates: list[Path] = [public_entry_point]
     if profile.namespace is not None and profile.bundle is not None:
         private_entry_point = (
-            repo_root
+            REPO_ROOT
             / PRIVATE_DIR_NAME
             / profile.namespace
             / profile.bundle
@@ -353,13 +337,8 @@ def resolve_provisioner(
     result: Path | None = None
     errors: list[str] = []
     for entry_point in candidates:
-        if repo_root.is_symlink():
-            errors.append(
-                f"provision entry point contains a symlinked path component: {repo_root}"
-            )
-            break
         invalid_ancestor = find_invalid_ancestor(
-            repo_root, entry_point.relative_to(repo_root).parent
+            REPO_ROOT, entry_point.relative_to(REPO_ROOT).parent
         )
         if invalid_ancestor is not None:
             ancestor_path, is_symlink = invalid_ancestor
@@ -394,15 +373,13 @@ def run_provisioner(
     operating_system: str,
     provision_args: list[str],
     dry_run: bool = False,
-    repo_root: Path = REPO_ROOT,
-    runner: ProvisionRunner = run,
 ) -> None:
     context = {
-        "DOTFILES_REPO_ROOT": str(repo_root),
+        "DOTFILES_REPO_ROOT": str(REPO_ROOT),
         "DOTFILES_PROFILE": profile.identifier,
         "DOTFILES_OS": operating_system,
     }
-    runner(
+    run(
         [str(entry_point), *provision_args],
         dry_run,
         entry_point.parent,
@@ -415,8 +392,6 @@ def project_mapping(
     destination_root: Path,
     dry_run: bool,
     action: str,
-    runner: Runner = run,
-    cwd: Path = REPO_ROOT,
     create_root: bool = False,
 ) -> list[str]:
     result: list[str] = []
@@ -452,76 +427,14 @@ def project_mapping(
             destination = destination_root / managed_file.relative_path
             print(f"{action}: {managed_file.relative_path.as_posix()}")
             command = [
-                "rsync",
-                "-a",
-                "--checksum",
-                "--no-owner",
-                "--no-group",
+                *EXACT_FILE_RSYNC_ARGS,
                 str(managed_file.source_path),
                 str(destination),
             ]
             if not dry_run:
                 destination.parent.mkdir(parents=True, exist_ok=True)
-            runner(command, dry_run, cwd)
+            run(command, dry_run, REPO_ROOT)
     return result
-
-
-def setup_local(
-    identifier: str,
-    requested_os: str | None,
-    provision_args: list[str],
-    home_root: Path,
-    repo_root: Path = REPO_ROOT,
-    detect_host_os: HostOsDetector = detect_os,
-    dry_run: bool = False,
-    runner: Runner = run,
-    provision_runner: ProvisionRunner = run,
-) -> list[str]:
-    profile, errors = parse_profile(identifier)
-    operating_system, os_errors = resolve_os(requested_os, detect_host_os)
-    errors.extend(os_errors)
-    if profile is not None and profile.cluster != LOCAL_CLUSTER_NAME:
-        errors.append("setup requires a profile whose cluster is 'local'")
-
-    mapping: list[ManagedFile] = []
-    entry_point: Path | None = None
-    expected_entry_point: Path | None = None
-    if (
-        profile is not None
-        and profile.cluster == LOCAL_CLUSTER_NAME
-        and operating_system is not None
-    ):
-        layers, layer_errors = resolve_profile_layers(
-            profile, operating_system, repo_root
-        )
-        errors.extend(layer_errors)
-        if not layer_errors:
-            mapping, mapping_errors = build_effective_mapping(layers)
-            errors.extend(mapping_errors)
-        entry_point, expected_entry_point, provision_errors = resolve_provisioner(
-            profile, operating_system, repo_root
-        )
-        errors.extend(provision_errors)
-
-    if not errors and profile is not None and operating_system is not None:
-        if entry_point is None:
-            print(f"setup: provisioning skipped: {expected_entry_point}")
-        else:
-            print(f"setup: provisioning {'would run' if dry_run else 'running'}")
-            run_provisioner(
-                entry_point,
-                profile,
-                operating_system,
-                provision_args,
-                dry_run,
-                repo_root,
-                provision_runner,
-            )
-        errors.extend(
-            project_mapping(mapping, home_root, dry_run, "push", runner, repo_root)
-        )
-    errors.sort()
-    return errors
 
 
 def resolve_remote_home(
@@ -531,7 +444,7 @@ def resolve_remote_home(
     result: str | None = None
     if target is None:
         if remote_home is not None:
-            errors.append("--remote_home requires a positional TARGET")
+            errors.append("--remote_home requires a remote target")
     else:
         result = "~/"
         if remote_home is not None:
@@ -552,29 +465,22 @@ def push_remote(
     target: str,
     remote_home: str,
     dry_run: bool,
-    runner: Runner = run,
-    cwd: Path = REPO_ROOT,
-    create_staging_directory: StagingDirectoryCreator = TemporaryDirectory,
 ) -> list[str]:
     result: list[str] = []
     if dry_run:
         for managed_file in mapping:
             destination = STAGING_PLACEHOLDER / managed_file.relative_path
             print(f"push: {managed_file.relative_path.as_posix()}")
-            runner(
+            run(
                 [
-                    "rsync",
-                    "-a",
-                    "--checksum",
-                    "--no-owner",
-                    "--no-group",
+                    *EXACT_FILE_RSYNC_ARGS,
                     str(managed_file.source_path),
                     str(destination),
                 ],
                 True,
-                cwd,
+                REPO_ROOT,
             )
-        runner(
+        run(
             [
                 "rsync",
                 "-a",
@@ -584,14 +490,14 @@ def push_remote(
                 f"{target}:{remote_home}",
             ],
             True,
-            cwd,
+            REPO_ROOT,
         )
     else:
-        with create_staging_directory() as staging_directory:
+        with TemporaryDirectory() as staging_directory:
             staging_root = Path(staging_directory)
-            result = project_mapping(mapping, staging_root, False, "push", runner, cwd)
+            result = project_mapping(mapping, staging_root, False, "push")
             if not result:
-                runner(
+                run(
                     [
                         "rsync",
                         "-a",
@@ -601,7 +507,7 @@ def push_remote(
                         f"{target}:{remote_home}",
                     ],
                     False,
-                    cwd,
+                    REPO_ROOT,
                 )
     return result
 
@@ -627,17 +533,13 @@ def push(
     effective_remote_home, remote_home_errors = resolve_remote_home(target, remote_home)
     errors.extend(remote_home_errors)
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
     if target is None:
         errors = project_mapping(mapping, Path.home(), dry_run, "push")
     else:
         errors = push_remote(mapping, target, effective_remote_home, dry_run)
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
 
 
 def collect_selected_paths(
@@ -678,15 +580,18 @@ def prepare_pull_targets(
     layer: str,
     common_layer: ProfileLayer,
     profile_layer: ProfileLayer,
-    repo_root: Path,
 ) -> tuple[list[ManagedFile], list[str]]:
     mapping_by_path = {
         managed_file.relative_path: managed_file for managed_file in mapping
     }
     result: list[str] = []
     targets: list[ManagedFile] = []
-    if layer not in {"owner", "common", "profile"}:
-        result.append("layer must be one of: owner, common, profile")
+    layer_precedence = {
+        "public common": 0,
+        "public profile": 1,
+        "private common": 2,
+        "private profile": 3,
+    }
 
     for relative_path, source_path in sorted(
         source_paths.items(), key=lambda item: item[0].as_posix()
@@ -724,18 +629,7 @@ def prepare_pull_targets(
             layer != "owner"
             and owner is not None
             and owner != managed_file.owner
-            and {
-                "public common": 0,
-                "public profile": 1,
-                "private common": 2,
-                "private profile": 3,
-            }.get(owner.name, 0)
-            < {
-                "public common": 0,
-                "public profile": 1,
-                "private common": 2,
-                "private profile": 3,
-            }.get(managed_file.owner.name, 0)
+            and layer_precedence[owner.name] < layer_precedence[managed_file.owner.name]
         ):
             result.append(
                 f"explicit {layer} layer for {relative_path} would be hidden by "
@@ -749,34 +643,21 @@ def prepare_pull_targets(
     for managed_file in targets:
         if managed_file.owner.root not in validated_roots:
             validated_roots.add(managed_file.owner.root)
-            if not managed_file.owner.root.is_relative_to(repo_root):
-                result.append(
-                    "destination layer must be inside repository root: "
-                    f"{managed_file.owner.root}"
-                )
+            invalid_ancestor = find_invalid_ancestor(
+                REPO_ROOT, managed_file.owner.root.relative_to(REPO_ROOT)
+            )
+            if invalid_ancestor is not None:
+                ancestor_path, is_symlink = invalid_ancestor
+                if is_symlink:
+                    result.append(
+                        "destination layer contains a symlinked path component: "
+                        f"{ancestor_path}"
+                    )
+                else:
+                    result.append(
+                        f"destination layer parent must be a directory: {ancestor_path}"
+                    )
                 invalid_roots.add(managed_file.owner.root)
-            elif repo_root.is_symlink():
-                result.append(
-                    "destination layer contains a symlinked path component: "
-                    f"{repo_root}"
-                )
-                invalid_roots.add(managed_file.owner.root)
-            else:
-                invalid_ancestor = find_invalid_ancestor(
-                    repo_root, managed_file.owner.root.relative_to(repo_root)
-                )
-                if invalid_ancestor is not None:
-                    ancestor_path, is_symlink = invalid_ancestor
-                    if is_symlink:
-                        result.append(
-                            "destination layer contains a symlinked path component: "
-                            f"{ancestor_path}"
-                        )
-                    else:
-                        result.append(
-                            f"destination layer parent must be a directory: {ancestor_path}"
-                        )
-                    invalid_roots.add(managed_file.owner.root)
 
         if managed_file.owner.root in invalid_roots:
             continue
@@ -799,7 +680,6 @@ def prepare_pull_targets(
         elif destination.exists() and not destination.is_file():
             result.append(f"destination must be a regular file: {destination}")
 
-    result.sort()
     return targets, result
 
 
@@ -810,10 +690,7 @@ def pull_local(
     common_layer: ProfileLayer,
     profile_layer: ProfileLayer,
     home_root: Path,
-    repo_root: Path = REPO_ROOT,
     dry_run: bool = False,
-    runner: Runner = run,
-    cwd: Path = REPO_ROOT,
 ) -> list[str]:
     result: list[str] = []
     source_paths: dict[Path, Path] = {}
@@ -906,7 +783,7 @@ def pull_local(
             result.append(f"managed home path does not exist: {source_path}")
 
     targets, target_errors = prepare_pull_targets(
-        mapping, source_paths, layer, common_layer, profile_layer, repo_root
+        mapping, source_paths, layer, common_layer, profile_layer
     )
     result.extend(target_errors)
 
@@ -918,67 +795,15 @@ def pull_local(
             )
             if not dry_run:
                 destination.parent.mkdir(parents=True, exist_ok=True)
-            runner(
+            run(
                 [
-                    "rsync",
-                    "-a",
-                    "--checksum",
-                    "--no-owner",
-                    "--no-group",
+                    *EXACT_FILE_RSYNC_ARGS,
                     str(managed_file.source_path),
                     str(destination),
                 ],
                 dry_run,
-                cwd,
+                REPO_ROOT,
             )
-    result.sort()
-    return result
-
-
-def clean_local(
-    mapping: list[ManagedFile],
-    home_root: Path,
-    dry_run: bool,
-) -> list[str]:
-    result: list[str] = []
-    targets: list[Path] = []
-    can_clean_home = True
-    if home_root.is_symlink():
-        result.append(f"home root must not be a symlink: {home_root}")
-        can_clean_home = False
-    elif home_root.exists() and not home_root.is_dir():
-        result.append(f"home root must be a directory: {home_root}")
-        can_clean_home = False
-
-    for managed_file in mapping:
-        if not can_clean_home:
-            continue
-        destination = home_root / managed_file.relative_path
-        invalid_ancestor = find_invalid_ancestor(
-            home_root, managed_file.relative_path.parent
-        )
-        if invalid_ancestor is not None:
-            ancestor_path, is_symlink = invalid_ancestor
-            if is_symlink:
-                result.append(f"home parent must not be a symlink: {ancestor_path}")
-            else:
-                result.append(f"home parent must be a directory: {ancestor_path}")
-            continue
-        if destination.is_symlink():
-            result.append(f"clean target must not be a symlink: {destination}")
-        elif not destination.exists():
-            continue
-        elif destination.is_file():
-            targets.append(destination)
-        elif not destination.is_dir():
-            result.append(f"clean target must be a regular file: {destination}")
-
-    if not result:
-        for destination in targets:
-            print(f"clean: {destination.relative_to(home_root).as_posix()}")
-            if not dry_run:
-                destination.unlink()
-    result.sort()
     return result
 
 
@@ -990,16 +815,10 @@ def pull_remote(
     profile_layer: ProfileLayer,
     target: str,
     remote_home: str,
-    repo_root: Path = REPO_ROOT,
     dry_run: bool = False,
-    runner: Runner = run,
-    cwd: Path = REPO_ROOT,
-    create_staging_directory: StagingDirectoryCreator = TemporaryDirectory,
 ) -> list[str]:
     selected_paths, result = collect_selected_paths(mapping, paths)
     files_from_paths = sorted(selected_paths, key=lambda path: path.as_posix())
-    if layer not in {"owner", "common", "profile"}:
-        result.append("layer must be one of: owner, common, profile")
     if dry_run:
         source_paths: dict[Path, Path] = {}
         for relative_path in files_from_paths:
@@ -1018,13 +837,10 @@ def pull_remote(
                     )
             else:
                 source_paths[relative_path] = STAGING_PLACEHOLDER / relative_path
-        if layer in {"owner", "common", "profile"}:
-            targets, target_errors = prepare_pull_targets(
-                mapping, source_paths, layer, common_layer, profile_layer, repo_root
-            )
-            result.extend(target_errors)
-        else:
-            targets = []
+        targets, target_errors = prepare_pull_targets(
+            mapping, source_paths, layer, common_layer, profile_layer
+        )
+        result.extend(target_errors)
         if not result:
             for managed_file in targets:
                 print(
@@ -1035,13 +851,9 @@ def pull_remote(
                 "dry-run: remote contents and directory expansion cannot be "
                 "validated without contacting the target"
             )
-            runner(
+            run(
                 [
-                    "rsync",
-                    "-a",
-                    "--checksum",
-                    "--no-owner",
-                    "--no-group",
+                    *EXACT_FILE_RSYNC_ARGS,
                     "--recursive",
                     "--files-from",
                     str(STAGING_PLACEHOLDER / "files-from"),
@@ -1049,10 +861,10 @@ def pull_remote(
                     f"{STAGING_PLACEHOLDER}/",
                 ],
                 True,
-                cwd,
+                REPO_ROOT,
             )
     elif not result:
-        with create_staging_directory() as staging_directory:
+        with TemporaryDirectory() as staging_directory:
             staging_root = Path(staging_directory)
             files_from = staging_root / "files-from"
             files_from.write_text(
@@ -1061,13 +873,9 @@ def pull_remote(
                     for relative_path in files_from_paths
                 )
             )
-            runner(
+            run(
                 [
-                    "rsync",
-                    "-a",
-                    "--checksum",
-                    "--no-owner",
-                    "--no-group",
+                    *EXACT_FILE_RSYNC_ARGS,
                     "--recursive",
                     "--files-from",
                     str(files_from),
@@ -1075,7 +883,7 @@ def pull_remote(
                     f"{staging_root}/",
                 ],
                 False,
-                cwd,
+                REPO_ROOT,
             )
             result = pull_local(
                 mapping,
@@ -1084,12 +892,8 @@ def pull_remote(
                 common_layer,
                 profile_layer,
                 staging_root,
-                repo_root,
                 False,
-                runner,
-                cwd,
             )
-    result.sort()
     return result
 
 
@@ -1104,9 +908,7 @@ def render(
 ) -> None:
     mapping, errors = resolve_mapping(profile, os, require_explicit_os=True)
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
     errors = project_mapping(
         mapping,
         Path(output_directory),
@@ -1115,9 +917,7 @@ def render(
         create_root=True,
     )
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
 
 
 def pull(
@@ -1143,6 +943,8 @@ def pull(
     ] = False,
 ) -> None:
     profile_value, errors = parse_profile(profile)
+    if layer not in {"owner", "common", "profile"}:
+        errors.append("layer must be one of: owner, common, profile")
     operating_system: str | None = None
     if target is not None and os is None:
         errors.append("--os is required for render and remote targets")
@@ -1186,9 +988,7 @@ def pull(
             errors.extend(mapping_errors)
 
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
     if common_layer is not None and profile_layer is not None:
         if target is None:
             errors = pull_local(
@@ -1212,9 +1012,7 @@ def pull(
                 dry_run=dry_run,
             )
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
 
 
 def clean(
@@ -1228,14 +1026,42 @@ def clean(
 ) -> None:
     mapping, errors = resolve_mapping(profile, os)
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
-    errors = clean_local(mapping, Path.home(), dry_run)
+        exit_on_errors(errors)
+
+    home_root = Path.home()
+    targets: list[Path] = []
+    if home_root.is_symlink():
+        errors.append(f"home root must not be a symlink: {home_root}")
+    elif home_root.exists() and not home_root.is_dir():
+        errors.append(f"home root must be a directory: {home_root}")
+
+    if not errors:
+        for managed_file in mapping:
+            destination = home_root / managed_file.relative_path
+            invalid_ancestor = find_invalid_ancestor(
+                home_root, managed_file.relative_path.parent
+            )
+            if invalid_ancestor is not None:
+                ancestor_path, is_symlink = invalid_ancestor
+                if is_symlink:
+                    errors.append(f"home parent must not be a symlink: {ancestor_path}")
+                else:
+                    errors.append(f"home parent must be a directory: {ancestor_path}")
+            elif destination.is_symlink():
+                errors.append(f"clean target must not be a symlink: {destination}")
+            elif not destination.exists():
+                continue
+            elif destination.is_file():
+                targets.append(destination)
+            elif not destination.is_dir():
+                errors.append(f"clean target must be a regular file: {destination}")
+
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
+    for destination in targets:
+        print(f"clean: {destination.relative_to(home_root).as_posix()}")
+        if not dry_run:
+            destination.unlink()
 
 
 def provision(
@@ -1268,9 +1094,7 @@ def provision(
                     f"{expected_entry_point}; clone or set up the private provision bundle"
                 )
     if errors:
-        for error in sorted(errors):
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
     if (
         entry_point is not None
         and profile_value is not None
@@ -1285,10 +1109,16 @@ def provision(
 
 
 def setup(
+    target: Annotated[
+        str, CliArg(help="local or a raw SSH target")
+    ] = LOCAL_CLUSTER_NAME,
     profile: Annotated[
-        str, CliArg(help="public or private local profile identifier")
+        str, CliArg(help="public or private profile identifier")
     ] = LOCAL_CLUSTER_NAME,
     os: Annotated[str | None, CliArg(help="operating system override")] = None,
+    remote_home: Annotated[
+        str | None, CliArg(help="remote home, as an absolute POSIX path")
+    ] = None,
     dry_run: Annotated[
         bool, CliArg(help="preview provisioning and copies without writing files")
     ] = False,
@@ -1296,23 +1126,66 @@ def setup(
         list[str] | None, CliArg(pos=True, help="arguments for the provisioner")
     ] = None,
 ) -> None:
-    errors = setup_local(
-        profile,
-        os,
-        [] if provision_args is None else provision_args,
-        Path.home(),
-        dry_run=dry_run,
+    profile_value, errors = parse_profile(profile)
+    is_local = target == LOCAL_CLUSTER_NAME
+    operating_system: str | None = None
+    if not is_local and os is None:
+        errors.append("--os is required for render and remote targets")
+    else:
+        operating_system, os_errors = resolve_os(os)
+        errors.extend(os_errors)
+    effective_remote_home, remote_home_errors = resolve_remote_home(
+        None if is_local else target, remote_home
     )
+    errors.extend(remote_home_errors)
+    if (
+        is_local
+        and profile_value is not None
+        and profile_value.cluster != LOCAL_CLUSTER_NAME
+    ):
+        errors.append("local setup requires a profile whose cluster is 'local'")
+
+    mapping: list[ManagedFile] = []
+    entry_point: Path | None = None
+    expected_entry_point: Path | None = None
+    if profile_value is not None and operating_system is not None:
+        layers, layer_errors = resolve_profile_layers(profile_value, operating_system)
+        errors.extend(layer_errors)
+        if not layer_errors:
+            mapping, mapping_errors = build_effective_mapping(layers)
+            errors.extend(mapping_errors)
+        entry_point, expected_entry_point, provision_errors = resolve_provisioner(
+            profile_value, operating_system
+        )
+        errors.extend(provision_errors)
+
     if errors:
-        for error in errors:
-            print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
+        exit_on_errors(errors)
+    if profile_value is not None and operating_system is not None:
+        if entry_point is None:
+            print(f"setup: provisioning skipped: {expected_entry_point}")
+        else:
+            print(f"setup: provisioning {'would run' if dry_run else 'running'}")
+            run_provisioner(
+                entry_point,
+                profile_value,
+                operating_system,
+                [] if provision_args is None else provision_args,
+                dry_run,
+            )
+
+        if is_local:
+            errors = project_mapping(mapping, Path.home(), dry_run, "push")
+        else:
+            errors = push_remote(mapping, target, effective_remote_home, dry_run)
+    if errors:
+        exit_on_errors(errors)
 
 
 if __name__ == "__main__":
     cli(
         {
-            setup: "provision and push the local profile overlay",
+            setup: "optionally provision, then push locally or to an SSH target",
             push: "copy the selected profile overlay locally or to an SSH target",
             pull: "copy selected local or remote home files back to profile layers",
             clean: "remove only files in the current mapping; removed source paths remain",

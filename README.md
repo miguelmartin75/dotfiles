@@ -22,19 +22,28 @@ detection.
 
 ## Start here
 
-On a new local machine, use setup:
+On a new machine, use setup locally or give it a raw SSH target:
 
 ```bash
 ./run.py setup
 ./run.py setup --profile local --os macos
 ./run.py setup --profile work/nv/local --os macos -- --provision-argument
+./run.py setup --target user@host --profile work/nv/aws --os ubuntu
+./run.py setup --target user@host --profile work/nv/aws --os ubuntu --remote_home /home/user -- --provision-argument
 ```
 
-`setup` targets only the current machine's home directory. It optionally runs
-the selected `provision/<cluster>/<os>` entry point first, then performs a
-local push. If no matching provisioner exists, it reports that provisioning was
-skipped and still pushes the profile. Arguments after `--` are forwarded
-unchanged only to that provisioner.
+`setup` optionally runs the selected local
+`provision/<cluster>/<os>` entry point first, then performs the corresponding
+local or remote push. `--target` defaults to the literal value `local`; that
+value detects the operating system unless `--os` is supplied, accepts only a
+profile whose cluster is `local`, writes to the current home, and rejects
+`--remote_home`. Any other target is treated as a raw SSH target, requires
+explicit `--os`, accepts any valid profile, and uses the same `--remote_home`
+rules as push. If no matching
+provisioner exists, setup reports that provisioning was skipped and still
+pushes the profile. Provisioners always run on the controller in their existing
+working directory and context. Arguments after `--` are forwarded unchanged
+only to the provisioner; the target is not forwarded implicitly.
 
 ## Repository layout
 
@@ -180,7 +189,7 @@ point takes precedence and the public entry point is the fallback.
 `provision` never infers the operating system and never projects profiles.
 Provisioners own package installation, target creation, operating-system
 defaults, mounts, and target discovery. `setup` is the only command that
-combines optional local provisioning with a local push.
+combines optional provisioning with a local or remote push.
 
 ## Dry runs
 
@@ -191,14 +200,17 @@ a provisioner, or contacting a remote target.
 
 ```bash
 ./run.py setup --profile local --os macos --dry_run -- --provision-argument
+./run.py setup --target user@host --profile work/nv/aws --os ubuntu --dry_run -- --provision-argument
 ./run.py push user@host --profile work/nv/aws --os ubuntu --dry_run
 ./run.py pull user@host --path .config/nvim .vimrc --profile work/nv/aws --os ubuntu --layer profile --dry_run
 ./run.py clean --profile local --os macos --dry_run
 ```
 
 Remote dry runs cannot verify remote file contents or directory expansion
-without contacting the target. `render` and `provision` are explicit actions
-and do not have a dry-run mode.
+without contacting the target. Setup dry runs preview both provisioning and
+projection without creating staging files, executing a provisioner, starting a
+subprocess, writing locally, or contacting the target. `render` and `provision`
+are explicit actions and do not have a dry-run mode.
 
 ## Private bundles
 
@@ -256,7 +268,7 @@ controller never reads or writes secret values.
 | `scripts/self_update` | `./run.py pull --profile local --os macos` to update the owning profile layer from the local home. |
 | Broken `./clean` script | `./run.py clean --profile local --os macos`. |
 | MCU sync flows | Explicit remote `push` and `pull` with a raw SSH target and explicit `--os`. |
-| MCU provisioning flows | Explicit `provision` and any required private-bundle orchestration. |
+| MCU provisioning flows | Remote `setup` when local provisioning plus generic push is sufficient, or explicit `provision` and private-bundle orchestration. |
 | Lepton archive and pod workflows | Keep private. A private provisioner may render an overlay and perform its own archive and delivery steps. |
 
 ## License

@@ -4,7 +4,7 @@
 
 Build one thin repository-local Python controller for deterministic dotfile overlays. The public repository owns the controller and public profiles. Optional private Git repositories are cloned once beneath an ignored `.private/` root and may provide profile files, provisioning entry points, or both.
 
-The controller resolves literal files only. It does not implement templates, a manifest, persistent state, secret storage, custom encryption, package management, or a general plugin system. Git synchronizes source repositories. Python selects and projects files. `rsync` and SSH provide generic remote push and pull. Provisioning remains an explicit primitive, while `setup` provides the one-command local bootstrap workflow.
+The controller resolves literal files only. It does not implement templates, a manifest, persistent state, secret storage, custom encryption, package management, or a general plugin system. Git synchronizes source repositories. Python selects and projects files. `rsync` and SSH provide generic remote push and pull. Provisioning remains an explicit primitive, while `setup` composes optional local provisioning with a local or remote push.
 
 Use one ignored private container per namespace and bundle. When one private repository owns profiles and provisioning, clone it once at the container root. When profiles and provisioning are genuinely separate repositories, clone each once at its corresponding resolved subdirectory. The controller consumes the same paths in either layout and never inspects Git metadata.
 
@@ -93,12 +93,13 @@ Resolve `local` from the public repository. Parse `work/nv/lepton` into `.privat
 
 Projection commands also select an operating system:
 
-- `setup` and `clean` operate on the current machine. Their optional `--os` overrides host detection; otherwise map Darwin to `macos` and use the lowercase Linux `ID` from `/etc/os-release`.
+- `setup` accepts a named `--target TARGET` that defaults to the literal value `local`. That value uses the optional local `--os` override or host detection; otherwise map Darwin to `macos` and use the lowercase Linux `ID` from `/etc/os-release`. Any other value is a raw SSH target and requires explicit `--os` because the remote target may differ from the controller host.
+- `clean` operates on the current machine with the same optional `--os` behavior as local setup.
 - `push` and `pull` accept an optional positional `TARGET`. When it is omitted, they use the current machine with the same optional `--os` behavior as other local commands. When it is present, they require explicit `--os` because the remote target may differ from the controller host.
 - `render` may target a different system, so it requires explicit `--os`.
 - `provision` keeps its required positional operating system argument and never infers it from the controller host.
 
-An explicit or detected operating system follows the same component grammar. Keep host detection injectable for validation. If detection is unsupported, `/etc/os-release` is missing or malformed, or its result is invalid, fail with a request for explicit `--os`.
+An explicit or detected operating system follows the same component grammar. `resolve_os` calls host detection directly when no operating system is requested. If detection is unsupported, `/etc/os-release` is missing or malformed, or its result is invalid, fail with a request for explicit `--os`.
 
 Layer precedence is lowest to highest:
 
@@ -107,9 +108,9 @@ Layer precedence is lowest to highest:
 3. `.private/<namespace>/<bundle>/profiles/common/`, for private profiles, when it exists.
 4. `.private/<namespace>/<bundle>/profiles/<cluster>/<os>/`, required for a private profile.
 
-Projection commands (`push`, `pull`, `clean`, and `render`) require `profiles/<cluster>/<os>/` for a public profile or the corresponding private cluster and operating system directory for a private profile. A private profile may reuse public common and public files for the same cluster and operating system. Later layers override the same home-relative file from earlier layers. `provision` does not resolve or require profile files. `setup` requires a profile whose cluster is `local`, because it pushes into the current machine's home; both `local` and a private identifier ending in `/local` are valid.
+Projection commands (`setup`, `push`, `pull`, `clean`, and `render`) require `profiles/<cluster>/<os>/` for a public profile or the corresponding private cluster and operating system directory for a private profile. A private profile may reuse public common and public files for the same cluster and operating system. Later layers override the same home-relative file from earlier layers. `provision` does not resolve or require profile files. Local setup requires a profile whose cluster is `local`; remote setup accepts any valid cluster and profile.
 
-Keep all path policy in direct constants and profile parsing code next to `repo_root = Path(__file__).resolve().parent`. Do not add a registry, configuration manifest, environment search path, or home-directory scan.
+Keep all path policy in direct constants and profile parsing code next to `REPO_ROOT = Path(__file__).resolve().parent`. Internal helpers use that resolved controller root directly. Do not add a registry, configuration manifest, environment search path, or home-directory scan.
 
 ### Effective file map
 
@@ -131,20 +132,20 @@ Follow the uv PEP 723 and `msup.cli.cli` structure in `refs/run.py:1-10` and `re
 
 Provide these commands:
 
-- `setup`: provision the current machine when an entry point exists, then push its local profile overlay to the current home.
+- `setup`: run a matching provisioner locally when one exists, then push the profile overlay to the current home or an optional SSH target.
 - `push`: copy the effective overlay to the current home by default, or send it to a remote home through rsync/SSH when positional `TARGET` is supplied.
 - `pull`: copy selected or currently managed paths from the current home back to their owner layers by default, or fetch them from a remote home first when positional `TARGET` is supplied.
 - `clean`: remove only paths in the current effective mapping from the destination home.
 - `render`: copy the effective overlay to an explicitly supplied output directory for another tool to consume.
 - `provision`: execute the selected cluster and operating system's provisioning entry point explicitly.
 
-Keep source, destination, private-root, and subprocess boundaries parameterized below the CLI so smoke validation can use temporary directories. Use one logged `run` function modeled on `refs/run.py:22-31` for argument arrays and external commands. It prints commands with `shlex.join`, removes `VIRTUAL_ENV` from child environments, never uses `shell=True`, and skips `subprocess.run` when `dry_run` is true. Prefer `rsync` commands over Python file-copy APIs for projection.
+Use the resolved controller root directly below the CLI. Validate alternate layouts by copying the controller into temporary fixture repositories. Use one logged `run` function modeled on `refs/run.py:22-31` for argument arrays and external commands. It prints commands with `shlex.join`, removes `VIRTUAL_ENV` from child environments, never uses `shell=True`, and skips `subprocess.run` when `dry_run` is true. Prefer `rsync` commands over Python file-copy APIs for projection.
 
 Add `--dry_run` directly through `msup` to `setup`, `push`, `pull`, and `clean`; do not rewrite `sys.argv`. Dry-run mode performs normal parsing, profile resolution, mapping construction, collision checks, path validation, and command construction, then prints sorted affected paths and any external command without copying, removing, modifying profile files, executing provisioning, or starting a subprocess. It is an action preview, not content diff generation.
 
 Do not add atomic destination writes, backup files, content diff generation, conflict merging, rollback, templates, custom cryptography, or chezmoi. Normal file and subprocess failures may stop a command with a clear error.
 
-### Local setup
+### Setup
 
 Use this interface:
 
@@ -152,15 +153,17 @@ Use this interface:
 ./run.py setup
 ./run.py setup --profile local --os macos
 ./run.py setup --profile work/nv/local --os macos -- --provision-argument
+./run.py setup --target user@host --profile work/nv/aws --os ubuntu
+./run.py setup --target user@host --profile work/nv/aws --os ubuntu --remote_home /home/user -- --provision-argument
 ```
 
-`setup` is the local golden path and is equivalent to a successful optional `provision` followed by a local `push` for the same profile and operating system. It defaults to profile `local`, accepts only profiles whose cluster is `local`, targets `Path.home()` at the production CLI boundary, and never accepts a remote target or `--remote-home`.
+`setup` is equivalent to a successful optional local `provision` followed by `push` for the same profile and operating system. It defaults both `--target` and `--profile` to `local`. Target `local` accepts only profiles whose cluster is `local`, uses host operating-system detection unless `--os` overrides it, projects to `Path.home()`, and rejects `--remote_home`. Any other target is a raw SSH target, requires explicit `--os`, accepts any valid cluster and profile, and uses push's validated `--remote_home` default and absolute-POSIX override.
 
-When `--os` is omitted, use the shared local host detection defined for profile resolution. Keep OS detection and the home root injectable for validation.
+Resolve the mapping, remote home, profile, operating system, and optional provisioner before executing the provisioner. The provisioner always executes locally with its existing context and working directory. Forward only arguments after `--` unchanged; never add the target implicitly. A named setup target keeps the native trailing argument list unambiguous without rewriting `sys.argv` or patching the parser.
 
-Resolve provisioning with the same private-first and public-fallback rules as `provision`. Provisioning is optional for `setup`: when no matching entry point exists, print that it was skipped and continue to push. If an entry point exists, run it first and stop without pushing if it fails. Forward arguments after `--` only to that entry point. `setup --dry_run` reports whether provisioning would run or be skipped and previews the subsequent local push without executing either operation.
+Resolve provisioning with the same private-first and public-fallback rules as `provision`. Provisioning is optional for `setup`: when no matching entry point exists, print that it was skipped and continue to push. If an entry point exists, run it first and stop without pushing if it fails. `setup --dry_run` reports whether provisioning would run or be skipped and previews the subsequent local or remote push without executing a provisioner, starting a subprocess, creating staging data, writing locally, or contacting a remote target.
 
-Do not extend `setup` to remote targets. Remote provisioning may create a target, discover its SSH address, or embed a rendered overlay during target creation, so it cannot be composed generically with `push` without introducing a target-discovery protocol. Keep remote workflows explicit with `provision` and `push`, or allow a private provisioner to call `render` and deliver the overlay when provisioning and initial projection are inseparable.
+Remote setup receives an already resolved raw SSH target. Target discovery remains outside the controller. A private provisioner may still call `render` and deliver the overlay itself when target creation and initial projection are inseparable.
 
 ### Local push and clean
 
@@ -250,7 +253,7 @@ The public plan does not execute this example during validation.
 
 ### Provisioning and private repositories
 
-Provisioning is optional and never runs from `render`, `push`, `pull`, or `clean`. Only the explicit `provision` primitive and the local `setup` orchestration command execute a provisioning entry point.
+Provisioning is optional and never runs from `render`, `push`, `pull`, or `clean`. Only the explicit `provision` primitive and `setup` orchestration command execute a provisioning entry point.
 
 Use this interface:
 
@@ -279,9 +282,9 @@ Deliver the smallest working local overlay while preserving current local-machin
 Work:
 
 1. Add `/.private/` to `.gitignore` without changing unrelated ignore entries.
-2. Add root `run.py` with the uv header, `msup` command mapping, repository constants, cluster parsing, injectable host OS detection, deterministic public/private `<cluster>/<os>` layer resolution, regular-file validation, collision checks, and the sorted effective mapping.
+2. Add root `run.py` with the uv header, `msup` command mapping, repository constants, cluster parsing, direct host OS detection, deterministic public/private `<cluster>/<os>` layer resolution, regular-file validation, collision checks, and the sorted effective mapping.
 3. Move the current `tilde/` tree unchanged to `profiles/local/macos/`. Do not promote any file to public common during the initial port.
-4. Implement local `push`, including `--dry_run`, with `Path.home()` at the production CLI boundary and injectable roots for temporary-directory validation.
+4. Implement local `push`, including `--dry_run`, with `Path.home()` at the production CLI boundary. Use copied-controller fixture repositories for temporary-directory validation.
 5. Run focused smoke checks for detected and explicit operating systems, default `local`, all four precedence layers for the same OS, strict separation between macOS and Ubuntu files, parent creation, overwrite behavior, dry-run action reporting without writes, symlink rejection, and file-versus-directory collisions.
 6. Update this plan to `1/5 phases implemented` only after Phase 1 validation passes, then set the current phase to Phase 2.
 
@@ -332,7 +335,7 @@ Implementation results:
 - Added local pull with native multi-value `--path PATH [PATH ...]`, owner/common/profile routing, sorted directory expansion, and real `msup` option placement. Repeated `--path` flags remain unsupported because `msup` exposes no append action and argument rewriting is prohibited.
 - Existing files update their actual winning public or private owner by default. Explicit private common/profile selections resolve only beneath the deterministic ignored private bundle roots.
 - New files require explicit ownership and are rejected when excluded from the mapping or when they would create a file/directory collision. Explicit lower-layer writes are rejected when a later layer would still win.
-- Pull uses exact-path checksum-enabled `rsync` commands through the shared logged runner. All selections, source paths, destination layers, and errors are preflighted before any command runs.
+- Pull uses exact-path checksum-enabled `rsync` commands through the shared logged `run` function. All selections, source paths, destination layers, and errors are preflighted before any command runs.
 - Added mapping-only clean with full preflight, missing-target tolerance, directory preservation, and `--dry_run` action reporting.
 - Temporary-directory validation covered public/private ownership, new and explicit layers, directory recursion, traversal and symlink boundaries, exclusions, collisions, clean behavior, dry-run equivalence, real rsync, native CLI help, Ruff, formatting, and Git diff checks.
 
@@ -396,16 +399,16 @@ Phase success criteria:
 
 Status: complete.
 
-Add explicit provisioning and the local setup golden path while keeping remote orchestration explicit.
+Add explicit provisioning and setup orchestration for local and already resolved remote targets.
 
 Work:
 
 1. Reuse the operating system component validation added in Phase 1 to implement public/private `<cluster>/<os>` provisioning resolution, private-first fallback, executable validation, working directory, environment handling, and argument forwarding after `--`.
 2. Move the six useful macOS `defaults write` operations from `scripts/osx` into the executable Bash script `provision/local/macos`. Use `#!/usr/bin/env bash` and do not carry forward the obsolete Homebrew installer.
-3. Implement local-only `setup` as optional provision followed by local push. Enforce a `local` profile cluster, reuse the injectable host OS detection and home boundaries established in Phase 1, accept explicit `--os`, forward provisioner arguments after `--`, and add `--dry_run`.
+3. Implement `setup` as optional local provision followed by local or remote push. Restrict only local setup to the `local` cluster, require explicit `--os` for remote setup, validate `--remote_home` like push, forward provisioner arguments after `--`, and add `--dry_run`.
 4. Validate both supported physical layouts with temporary directories: one combined bundle root, and separate profile/provision repository roots beneath the same ignored container. The controller does not inspect `.git/`.
 5. Smoke-check operating system validation, public fallback for the same cluster and operating system, private override, executable requirements, context variables, forwarded arguments, subprocess failure propagation, and a provision-only private repository with no profile directory.
-6. Smoke-check setup with detected and explicit operating systems, absent optional provisioners, provisioning failure before push, rejected non-local clusters, private local profiles, forwarded arguments, dry-run behavior, and successful provision-then-push ordering. Never use the real home or host provisioner during validation.
+6. Smoke-check local and remote setup with detected and explicit operating systems, remote-home validation, absent optional provisioners, provisioning failure before transport, local rejection and remote acceptance of non-local clusters, exact forwarded arguments, dry-run isolation, and successful provision-then-push ordering. Never use the real home, a real remote, or the host provisioner during validation.
 7. Document the combined and split private repository layouts. Each private repository is cloned once, and both layouts expose identical controller paths.
 8. Keep MCU cluster setup, Teleport helpers, Lepton archive creation, pod creation, and secret injection in the private bundle when that repository is migrated. A private Lepton entry point may call the public generic `render` command, then perform its own tar/base64 delivery. Do not copy private infrastructure details into public files.
 9. Update this plan to `4/5 phases implemented` only after Phase 4 validation passes, then set the current phase to Phase 5.
@@ -413,10 +416,10 @@ Work:
 Implementation results:
 
 - Added explicit public/private provisioning resolution with deterministic private-first fallback, regular non-symlink executable validation, direct argument arrays, provisioner working directories, and non-secret context variables.
-- Added local-only setup orchestration. It detects or accepts the operating system, optionally runs the selected provisioner, stops on provisioning failure, and then projects the validated local profile mapping.
-- Added native `msup` provisioner argument forwarding after `--` for both provision and setup. The generated `--provision_args` help entry remains an unavoidable upstream parser artifact; product code does not rewrite arguments.
+- Added local and remote setup orchestration. Named `--target` defaults to literal `local`; that mode detects or accepts the operating system and restricts profiles to the local cluster. Any other target requires explicit `--os`, accepts any valid profile, and reuses push staging and transport after optional local provisioning.
+- Added native `msup` provisioner argument forwarding after `--` for both provision and setup. Product code does not rewrite arguments or implicitly forward a setup target.
 - Migrated the six active macOS defaults operations to executable `provision/local/macos` with fail-fast shell behavior and omitted the obsolete Homebrew installer.
-- Temporary-directory validation covered combined and split private layouts, provision-only bundles, private override and public fallback, exact arguments, environment and working directory, executable and containment boundaries, setup ordering, failure propagation, dry-run isolation, native CLI help, Ruff, formatting, Bash syntax, and Git diff checks.
+- Temporary copied-controller validation covered combined and split private layouts, provision-only bundles, private override and public fallback, exact arguments, environment and working directory, executable and containment boundaries, local and remote setup ordering, failure propagation, remote staging and transport, dry-run isolation, native CLI help, Ruff, formatting, Bash syntax, and Git diff checks.
 
 Affected code pointers:
 
@@ -431,12 +434,13 @@ Phase success criteria:
 - One clone at `.private/work/nv/` can supply all private profile and provisioning cluster/operating-system pairs.
 - Separate clones at `.private/work/nv/profiles/` and `.private/work/nv/provision/` can supply the same paths without cloning either repository twice.
 - A provision-only private repository can run `provision` without a corresponding profile directory. Projection commands still require their selected profile directory.
-- No projection primitive executes provisioning. Only `setup` composes optional provisioning with local push.
+- No projection primitive executes provisioning. Only `setup` composes optional local provisioning with local or remote push.
 - The explicit `provision` command resolves one exact `<cluster>/<os>` executable and never infers the target operating system from the controller host.
 - Provisioning receives arguments unchanged and failures stop the command.
 - `./run.py setup` detects the local operating system, optionally provisions `local`, and pushes the default profile to the current home in that order.
-- Setup skips a missing optional provisioner, never pushes after a provisioning failure, rejects non-local clusters, and never targets a remote host.
-- Setup dry-run previews both stages without executing the provisioner or writing to the home directory.
+- Setup target `local` rejects `--remote_home`. Any other target requires explicit `--os`, accepts any valid profile cluster, validates the remote home before provisioning, and uses the same staging and transport as remote push.
+- Setup skips a missing optional provisioner and never pushes after a provisioning failure. Only local setup rejects non-local clusters.
+- Setup dry-run previews both stages without executing the provisioner, creating staging data, starting a subprocess, writing locally, or contacting a target.
 - Private bundle absence never affects the default public local workflow.
 
 ## Phase 5: Documentation and legacy Bash removal
@@ -519,15 +523,15 @@ Use temporary directories and temporary fake executables for focused setup, loca
 - The plan's end-state structure is implemented, with public profiles in the main repository and each optional private repository cloned once under ignored `.private/` paths.
 - `--profile` selects a cluster and defaults to `local` for every profile-aware command.
 - Every projection resolves one exact `<cluster>/<os>` profile. Local commands detect the host operating system unless overridden; render and remote transport require explicit `--os`.
-- `./run.py setup` is the local golden path: it detects or accepts the host operating system, optionally provisions the local cluster and operating system, and pushes that exact profile to the current home in order.
+- `./run.py setup` is the local golden path because `--target` defaults to literal `local`; it also accepts any other value as a raw SSH target. Local setup detects or accepts the host operating system and restricts the profile cluster to `local`; remote setup requires explicit `--os` and accepts any valid profile.
 - Public `local` preserves every currently managed `tilde/` file unless a later audited move to public common is intentional and validated.
 - Private identifiers and operating systems resolve deterministically as `.private/<namespace>/<bundle>/profiles/<cluster>/<os>/` without scanning outside the checkout.
 - `profiles/common/` directly mirrors the home directory without a `files/` wrapper.
 - Public common, public `<cluster>/<os>`, private common, and private `<cluster>/<os>` precedence is identical for push, pull, clean, and render.
 - Local and remote pull update existing owner layers by default and require explicit ownership for new files.
-- Provisioning is optional. The explicit primitive resolves `provision/<cluster>/<os>`; local `setup` may invoke it before a local push. Provisioning may share one private repository with profiles or come from its own single clone without changing resolved paths.
+- Provisioning is optional. The explicit primitive resolves `provision/<cluster>/<os>`; `setup` may invoke it locally before a local or remote push. Provisioning may share one private repository with profiles or come from its own single clone without changing resolved paths.
 - Remote push sends only the validated effective mapping, and remote pull fetches only its selected paths.
-- Setup never hides remote orchestration. Remote provisioning and push remain explicit unless a private provisioner owns target creation and rendered-overlay delivery.
+- Remote setup requires an explicit raw SSH target and never performs target discovery. Its provisioner runs locally, receives only arguments after `--`, and completes before the existing remote push staging and transport begin.
 - Dry-run modes perform full local validation and report sorted paths and commands without changing files, executing provisioners, starting subprocesses, or contacting remote systems.
 - Removed or renamed source paths are documented as non-convergent without an explicit current mapping.
 - Secrets, credentials, private keys, Vault values, and platform secret values remain outside profiles, rendered output, and the controller.
