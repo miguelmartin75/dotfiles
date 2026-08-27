@@ -1,5 +1,6 @@
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
+vim.g.no_markdown_maps = 1
 
 vim.opt.history = 500
 vim.opt.wildignore = { "*/tmp/*", "*.so", "*.swp", "*.zip", "*\\tmp\\*", "*.exe" }
@@ -35,15 +36,19 @@ vim.opt.grepformat = "%f:%l:%c:%m"
 
 local filetype_options = vim.api.nvim_create_augroup("FiletypeOptions", { clear = true })
 
-vim.api.nvim_create_autocmd("FileType", {
+vim.api.nvim_create_autocmd({ "FileType", "BufWinEnter" }, {
     group = filetype_options,
     pattern = "*",
     callback = function(ev)
-        local filetype = vim.bo[ev.buf].filetype
-        if filetype == "markdown" or filetype == "text" or filetype == "gitcommit" then
-            vim.opt_local.spell = true
-        else
-            vim.opt_local.spell = false
+        local prose = vim.bo[ev.buf].filetype == "markdown" or vim.bo[ev.buf].filetype == "text"
+
+        vim.wo.wrap = prose
+        vim.wo.linebreak = prose
+        vim.wo.breakindent = prose
+        vim.wo.spell = prose or vim.bo[ev.buf].filetype == "gitcommit"
+
+        if prose then
+            vim.bo[ev.buf].textwidth = 0
         end
     end,
 })
@@ -51,10 +56,17 @@ vim.api.nvim_create_autocmd("FileType", {
 vim.api.nvim_create_autocmd("FileType", {
     group = filetype_options,
     pattern = { "css", "html", "nim", "javascript", "typescript", "php" },
-    callback = function()
-        vim.opt_local.tabstop = 2
-        vim.opt_local.softtabstop = 2
-        vim.opt_local.shiftwidth = 2
+    callback = function(ev)
+        vim.bo[ev.buf].tabstop = 2
+        vim.bo[ev.buf].softtabstop = 2
+        vim.bo[ev.buf].shiftwidth = 2
+    end,
+})
+
+vim.api.nvim_create_autocmd("TermOpen", {
+    group = filetype_options,
+    callback = function(ev)
+        vim.keymap.set("n", "<leader>wi", "i", { buffer = ev.buf, desc = "Enter terminal input" })
     end,
 })
 
@@ -136,9 +148,31 @@ Snacks.setup({
             position = "bottom",
         },
     },
+    zen = {},
 })
 
-require("gitsigns").setup()
+local gitsigns = require("gitsigns")
+gitsigns.setup({
+    on_attach = function(bufnr)
+        vim.keymap.set("n", "[h", function()
+            gitsigns.nav_hunk("prev")
+        end, { buffer = bufnr, desc = "Previous hunk" })
+        vim.keymap.set("n", "]h", function()
+            gitsigns.nav_hunk("next")
+        end, { buffer = bufnr, desc = "Next hunk" })
+        vim.keymap.set("n", "<leader>gp", gitsigns.preview_hunk, { buffer = bufnr, desc = "Preview hunk" })
+        vim.keymap.set("n", "<leader>gs", gitsigns.stage_hunk, { buffer = bufnr, desc = "Stage hunk" })
+        vim.keymap.set("n", "<leader>gr", gitsigns.reset_hunk, { buffer = bufnr, desc = "Reset hunk" })
+        vim.keymap.set("n", "<leader>gb", gitsigns.blame_line, { buffer = bufnr, desc = "Blame line" })
+        vim.keymap.set("n", "<leader>gd", function()
+            vim.ui.input({ prompt = "Diff against revision: ", default = "HEAD" }, function(revision)
+                if revision and revision ~= "" then
+                    gitsigns.diffthis(revision)
+                end
+            end)
+        end, { buffer = bufnr, desc = "Diff against revision" })
+    end,
+})
 require("fidget").setup()
 
 vim.g.slime_target = "tmux"
@@ -241,61 +275,186 @@ vim.diagnostic.config({
 
 require("nvim-treesitter").setup()
 
+-- nvim-treesitter requires tar, curl, a C compiler, and tree-sitter-cli 0.26.1 or newer.
+local parser_filetypes = {
+    "c",
+    "cpp",
+    "rust",
+    "lua",
+    "python",
+    "typescript",
+    "javascript",
+    "zig",
+    "nim",
+    "odin",
+    "markdown",
+    "markdown_inline",
+}
+require("nvim-treesitter").install(parser_filetypes)
+
+require("nvim-treesitter-textobjects").setup({
+    select = { lookahead = true },
+    move = { set_jumps = true },
+})
+
+local treesitter_filetypes = vim.api.nvim_create_augroup("TreesitterFiletypes", { clear = true })
+
+local function selection_range()
+    local anchor = vim.fn.getpos("v")
+    local start = { anchor[2], anchor[3] - 1 }
+    local finish = vim.api.nvim_win_get_cursor(0)
+    if finish[1] < start[1] or (finish[1] == start[1] and finish[2] < start[2]) then
+        start, finish = finish, start
+    end
+    return start, finish
+end
+
+local function set_visual_selection(start, finish)
+    vim.api.nvim_win_set_cursor(0, finish)
+    vim.cmd.normal({ "o", bang = true })
+    vim.api.nvim_win_set_cursor(0, start)
+    vim.cmd.normal({ "o", bang = true })
+end
+
+local function next_character(position)
+    local row, col = unpack(position)
+    local line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
+    local next_col = vim.str_byteindex(line, vim.str_utfindex(line, col) + 1)
+    if next_col < #line then
+        return { row, next_col }
+    elseif row < vim.api.nvim_buf_line_count(0) then
+        return { row + 1, 0 }
+    end
+end
+
+local function select_textobject_with_count(textobject)
+    local select = require("nvim-treesitter-textobjects.select")
+    local count = vim.v.count1
+
+    select.select_textobject(textobject, "textobjects")
+    local mode = vim.api.nvim_get_mode().mode
+    if count == 1 or (mode ~= "v" and mode ~= "V" and mode ~= "\22") then
+        return
+    end
+
+    local selection_start, selection_end = selection_range()
+    local last_start, last_end = selection_start, selection_end
+    set_visual_selection(selection_start, selection_end)
+
+    for _ = 2, count do
+        local probe = next_character(last_end)
+        local selected = false
+
+        while probe do
+            vim.api.nvim_win_set_cursor(0, probe)
+            select.select_textobject(textobject, "textobjects")
+            local next_start, next_end = selection_range()
+            local same_object = next_start[1] == last_start[1]
+                and next_start[2] == last_start[2]
+                and next_end[1] == last_end[1]
+                and next_end[2] == last_end[2]
+            local after_last = next_start[1] > last_end[1]
+                or (next_start[1] == last_end[1] and next_start[2] > last_end[2])
+
+            if next_start[1] == selection_start[1]
+                and next_start[2] == selection_start[2]
+                and next_end[1] == probe[1]
+                and next_end[2] == probe[2]
+            then
+                break
+            elseif after_last and not same_object then
+                selection_end = next_end
+                last_start, last_end = next_start, next_end
+                set_visual_selection(selection_start, selection_end)
+                selected = true
+                break
+            else
+                set_visual_selection(selection_start, selection_end)
+                probe = next_character(probe)
+            end
+        end
+
+        if not selected then
+            set_visual_selection(selection_start, selection_end)
+            break
+        end
+    end
+end
+
+vim.api.nvim_create_autocmd("FileType", {
+    group = treesitter_filetypes,
+    pattern = parser_filetypes,
+    callback = function(ev)
+        local started = pcall(vim.treesitter.start, ev.buf)
+        if not started then
+            return
+        end
+
+        vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+        vim.wo.foldmethod = "expr"
+
+        local has_parser, parser = pcall(vim.treesitter.get_parser, ev.buf)
+        if not has_parser then
+            return
+        end
+
+        local has_language, language = pcall(function()
+            return parser:lang()
+        end)
+        if not has_language then
+            return
+        end
+
+        local has_query, query = pcall(vim.treesitter.query.get, language, "textobjects")
+        if not has_query or not query then
+            return
+        end
+
+        local captures = {}
+        for _, capture in ipairs(query.captures) do
+            captures[capture] = true
+        end
+
+        if captures["function.outer"] then
+            vim.keymap.set({ "x", "o" }, "af", function()
+                select_textobject_with_count("@function.outer")
+            end, { buffer = ev.buf, desc = "Select function outer" })
+            vim.keymap.set({ "n", "x", "o" }, "[m", function()
+                require("nvim-treesitter-textobjects.move").goto_previous_start("@function.outer", "textobjects")
+            end, { buffer = ev.buf, desc = "Previous function start" })
+            vim.keymap.set({ "n", "x", "o" }, "]m", function()
+                require("nvim-treesitter-textobjects.move").goto_next_start("@function.outer", "textobjects")
+            end, { buffer = ev.buf, desc = "Next function start" })
+            vim.keymap.set({ "n", "x", "o" }, "[M", function()
+                require("nvim-treesitter-textobjects.move").goto_previous_end("@function.outer", "textobjects")
+            end, { buffer = ev.buf, desc = "Previous function end" })
+            vim.keymap.set({ "n", "x", "o" }, "]M", function()
+                require("nvim-treesitter-textobjects.move").goto_next_end("@function.outer", "textobjects")
+            end, { buffer = ev.buf, desc = "Next function end" })
+        end
+
+        if captures["function.inner"] then
+            vim.keymap.set({ "x", "o" }, "if", function()
+                select_textobject_with_count("@function.inner")
+            end, { buffer = ev.buf, desc = "Select function inner" })
+        end
+
+        if captures["parameter.outer"] then
+            vim.keymap.set({ "x", "o" }, "aa", function()
+                select_textobject_with_count("@parameter.outer")
+            end, { buffer = ev.buf, desc = "Select parameter outer" })
+        end
+
+        if captures["parameter.inner"] then
+            vim.keymap.set({ "x", "o" }, "ia", function()
+                select_textobject_with_count("@parameter.inner")
+            end, { buffer = ev.buf, desc = "Select parameter inner" })
+        end
+    end,
+})
+
 require("treesitter-context").setup({
-    enable = true,
-    max_lines = 0,
-    trim_scope = "outer",
-    min_window_height = 0,
-    patterns = {
-        default = {
-            "class",
-            "function",
-            "method",
-            "for",
-            "while",
-            "if",
-            "switch",
-            "case",
-        },
-        tex = {
-            "chapter",
-            "section",
-            "subsection",
-            "subsubsection",
-        },
-        rust = {
-            "impl_item",
-            "struct",
-            "enum",
-        },
-        scala = {
-            "object_definition",
-        },
-        vhdl = {
-            "process_statement",
-            "architecture_body",
-            "entity_declaration",
-        },
-        markdown = {
-            "section",
-        },
-        elixir = {
-            "anonymous_function",
-            "arguments",
-            "block",
-            "do_block",
-            "list",
-            "map",
-            "tuple",
-            "quoted_content",
-        },
-        json = {
-            "pair",
-        },
-        yaml = {
-            "block_mapping_pair",
-        },
-    },
+    max_lines = 3,
 })
 
 vim.keymap.set("i", "<C-Space>", function()
@@ -384,6 +543,9 @@ vim.keymap.set("n", "<leader>wq", "<C-W>q", { desc = "Close window" })
 vim.keymap.set("n", "<leader>wx", "<C-W>x", { desc = "Exchange window" })
 vim.keymap.set("n", "<leader>w=", "<C-W>=", { desc = "Equalize windows" })
 vim.keymap.set("n", "<leader>w|", "<C-W>|", { desc = "Maximize window width" })
+vim.keymap.set("n", "<leader>wz", function()
+    Snacks.zen()
+end, { desc = "Toggle Zen mode" })
 vim.keymap.set("n", "<leader>wtq", "<cmd>tabclose<cr>", { desc = "Close tab" })
 vim.keymap.set("n", "<leader>wtc", "<cmd>tabnew<cr>", { desc = "Create tab" })
 vim.keymap.set("n", "<leader>wt[", "<cmd>tabprevious<cr>", { desc = "Previous tab" })

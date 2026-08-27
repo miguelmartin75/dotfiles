@@ -279,7 +279,7 @@ Status: complete
 
 ## Phase 4: Finish Git, Treesitter, terminal, and specialty workflows
 
-Status: in progress
+Status: complete
 
 ### Changes
 
@@ -300,6 +300,17 @@ Status: in progress
 11. Rewrite non-Treesitter filetype-specific indentation as a Lua `FileType` autocmd over explicit filetype names. Remove the TypeScript debug message.
 12. Configure `Snacks.zen()` as the only focus mode and add one described `<leader>wz` toggle. For `markdown` and `text` buffers, set `wrap`, `linebreak`, `breakindent`, `spell`, and `textwidth=0` locally. Keep native `gj`, `gk`, and `gq` behavior instead of remapping cursor movement or adding automatic prose formatting.
 13. Smoke-test every retained specialty plugin by its intended command or behavior and fix configuration or compatibility failures.
+
+### Implementation result
+
+- Added current Gitsigns hunk navigation and mechanical Git actions, with native diff retained for general comparisons.
+- Installed and activated the 12 declared current Treesitter parsers in an isolated fixture, enabled query-gated function and parameter textobjects with counted UTF-8-safe selections and motions, and limited Treesitter Context to three lines.
+- Kept Markdown on Neovim's native section and node mappings without duplicate built-in Markdown maps or cleanup warnings, and made missing semantic queries degrade without buffer-local semantic mappings.
+- Replaced automatic terminal insertion with an explicit terminal-input mapping, added the Snacks Zen toggle, and confined prose window options to markdown, text, and gitcommit buffers.
+- Current-parser runtime checks passed across all ten code languages. Deep count coverage passed for locked Lua and Python queries, including reversed endpoints, Visual character/line/block modes, operator-pending use, excessive counts, UTF-8 parameters, motion boundaries, and jumplist behavior.
+- Gitsigns passed staged and unstaged hunk attach, navigation, preview, blame, stage, reset, and revision diff checks. Retained specialty plugins passed command, mapping, or API smoke checks.
+- Fresh isolated startup produced no messages and left `v:errmsg` empty. A paired 20-run startup measurement increased from 93.1 ms +/- 2.3 ms in Phase 3 to 101.5 ms +/- 3.4 ms in Phase 4, a measured 8.4 ms cost for parser, Git, and specialty workflow activation.
+- Browser-host Firenvim integration, a real tmux/slime target, rendered Context height, and fully interactive Zen, surround/repeat, and mdeval behavior remain environment or UI-level manual checks; their configured commands and APIs load successfully.
 
 ### Verification
 
@@ -329,7 +340,7 @@ Status: in progress
 
 ## Phase 5: Final cleanup and acceptance
 
-Status: not started
+Status: in progress
 
 ### Changes
 
