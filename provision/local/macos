@@ -2,6 +2,8 @@
 
 set -e
 
+brew install tree-sitter-cli
+
 defaults write NSGlobalDomain KeyRepeat -int 0
 defaults write -g ApplePressAndHoldEnabled -bool false
 defaults write com.apple.Finder AppleShowAllFiles -bool true

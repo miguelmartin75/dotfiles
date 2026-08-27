@@ -3,9 +3,10 @@
 ## Status
 
 - Plan: complete
-- Implementation: not started
+- Implementation: complete
 - Target: a sufficiently recent Neovim with `vim.pack`, `vim.lsp.config`, `vim.lsp.completion`, `vim.snippet`, `vim.system`, and current diagnostic APIs
-- Primary configuration: `tilde/.config/nvim/init.lua`
+- Primary configuration: `profiles/common/.config/nvim/init.lua`
+- Implementation note: the configuration moved from the original `tilde/.config/nvim/init.lua` code pointers to the primary configuration path above; line numbers must be resolved against the current file before each phase.
 
 ## Goal
 
@@ -39,7 +40,7 @@ Use this startup order in `tilde/.config/nvim/init.lua`:
 | Snippets | Use `vim.snippet` | No programmable snippet requirement exists. |
 | Search picker | Keep Snacks and remove Telescope plus `telescope-fzf-native` | Most current picker mappings already use Snacks. One picker preserves interactive fuzzy selection without duplicate infrastructure. |
 | Exhaustive text search | Use `rg` through `grepprg`, `:grep`, and quickfix | This composes an external search tool with durable native result navigation. |
-| Mapping discovery | Remove WhichKey and add an explicit keymap search command | Described mappings can be discovered on demand using Neovim APIs and `vim.ui.select`. |
+| Mapping discovery | Keep WhichKey plus the explicit keymap search command | WhichKey teaches prefix mappings while they are being entered; the searchable inventory remains useful for exhaustive lookup. |
 | Git | Keep Gitsigns and remove `mini.diff` | Gitsigns owns substantial asynchronous Git state; the current `mini.diff` source is disabled. |
 | General diff | Use native diff commands and mappings | No second diff plugin is needed for file comparison. |
 | Lint and format | Use LSP diagnostics and `vim.lsp.buf.format` | No current use case justifies none-ls, Conform, or a lint orchestration plugin. |
@@ -55,6 +56,7 @@ Use this startup order in `tilde/.config/nvim/init.lua`:
 - `nvim-treesitter/nvim-treesitter`, `nvim-treesitter/nvim-treesitter-textobjects` on its `main` branch, and `nvim-treesitter-context`: parser-backed highlighting and folds, a deliberately small function/parameter selection and motion layer, native syntax-node selection, and bounded structural context. The textobjects plugin is a direct package whose compatible revision is recorded in `packlockfile`; do not use the frozen legacy module bundled with the old `nvim-treesitter` architecture.
 - `lewis6991/gitsigns.nvim`: live Git state and hunk operations.
 - `folke/snacks.nvim`: the one interactive fuzzy picker.
+- `folke/which-key.nvim`: interactive prefix discovery for the described direct mappings.
 - `neovim/nvim-lspconfig`: server definition database for the existing server list.
 - `j-hui/fidget.nvim`: LSP progress only. Remove the unrelated custom CodeCompanion progress layer.
 - `mcchrish/zenbones.nvim` and `rktjmp/lush.nvim`: the selected colorscheme and its dependency.
@@ -66,7 +68,7 @@ Use this startup order in `tilde/.config/nvim/init.lua`:
 - `wbthomason/packer.nvim` and its bootstrap at `tilde/.config/nvim/init.lua:1`.
 - `nvim-telescope/telescope.nvim` and `telescope-fzf-native.nvim` at `tilde/.config/nvim/init.lua:58`.
 - `williamboman/nvim-lsp-installer`, `folke/lua-dev.nvim`, and `nvimtools/none-ls.nvim` at `tilde/.config/nvim/init.lua:47`.
-- `folke/which-key.nvim`, `folke/sidekick.nvim`, `echasnovski/mini.diff`, and `saghen/blink.cmp` at `tilde/.config/nvim/init.lua:64`.
+- `folke/sidekick.nvim`, `echasnovski/mini.diff`, and `saghen/blink.cmp` at `tilde/.config/nvim/init.lua:64`.
 - `tjdevries/colorbuddy.vim`, which has no setup or consumer.
 - `ziglang/zig.vim`, because recent Neovim filetype support plus Treesitter and `zls` cover the configured Zig workflow. Restore it only for a named feature that those layers do not provide.
 - `nvim-lua/plenary.nvim`, because none of the retained package declarations require it after Telescope is removed.
@@ -129,7 +131,7 @@ The keymap search command must combine `vim.api.nvim_get_keymap(mode)` with `vim
 
 ## Phase 1: Establish a clean native package and startup baseline
 
-Status: not started
+Status: complete
 
 This phase must produce a usable editor before deeper behavior changes.
 
@@ -152,6 +154,16 @@ This phase must produce a usable editor before deeper behavior changes.
 9. Disable global spell checking and enable it only for `markdown`, `text`, and `gitcommit` buffers.
 10. Replace the shell-backed timestamp action with `os.date` or `vim.fn.strftime`.
 
+### Implementation result
+
+- Replaced Packer with one eager `vim.pack` package graph and tracked the generated 16-package lockfile.
+- Registered Treesitter and Firenvim update hooks before package activation; isolated startup skips only the external Firenvim host installation.
+- Removed every package and package-bound setup selected for removal, including the custom `rust_analyzer` override requested during implementation.
+- Converted the retained editor options and mappings to Lua, kept spelling buffer-local, and replaced the shell timestamp command with `os.date`.
+- Current `nvim-treesitter` `main` no longer provides `nvim-treesitter.configs`, so the clean-start baseline uses its top-level `setup()` API before Phase 4 adds parser activation and textobjects.
+- Clean isolated bootstrap and second startup passed. Steady-state `hyperfine` measurement over 10 runs improved from 174.8 ms +/- 9.0 ms for the old `~/.config/nvim/init.lua` to 112.5 ms +/- 12.2 ms for this phase, or 1.55x faster. Startup produced no messages and left `v:errmsg` empty.
+- The real user-environment Firenvim native-host installation remains part of the Phase 4 specialty workflow verification because it writes outside the isolated test tree.
+
 ### Verification
 
 - Create a temporary XDG fixture with `mktemp -d`, copy `tilde/.config/nvim` into its `XDG_CONFIG_HOME/nvim`, and point `XDG_DATA_HOME`, `XDG_STATE_HOME`, and `XDG_CACHE_HOME` into the same temporary root. Start Neovim headlessly twice against that copied config. The first run covers package installation and the second covers steady-state ordering without reading or writing the real package store.
@@ -169,7 +181,7 @@ This phase must produce a usable editor before deeper behavior changes.
 
 ## Phase 2: Rebuild LSP, diagnostics, formatting, and explicit completion
 
-Status: not started
+Status: complete
 
 ### Changes
 
@@ -196,6 +208,15 @@ Status: not started
 12. Replace diagnostic navigation and list calls with current `vim.diagnostic.jump`, `vim.diagnostic.open_float`, `vim.diagnostic.setloclist`, and `vim.diagnostic.setqflist` APIs.
 13. Use LSP diagnostics and formatting only. If a concrete non-LSP tool is later required, add a direct `:make`/`errorformat` or `vim.system` integration before considering a plugin.
 
+### Implementation result
+
+- Enabled all eight current `nvim-lspconfig` definitions through shared built-in client configuration and kept every server executable as an external prerequisite.
+- Configured `lua_ls` for LuaJIT and the Neovim runtime without plugin-specific library paths or a custom `rust_analyzer` override.
+- Added one idempotent attach/detach lifecycle for explicit completion and document highlights; a simulated two-client buffer retained hooks after the first detach and removed them after the final detach.
+- Replaced deprecated format and diagnostic calls with current normal/visual formatting and diagnostic jump, float, location-list, and quickfix APIs.
+- Preserved explicit completion through `<C-Space>`, native completion modes, native snippet handling, and `<C-y>` acceptance without automatic menus, documentation, signatures, or ghost text.
+- Clean isolated startup and the available `clangd` attachment passed. Missing server executables remain documented environment prerequisites. A paired 20-run `hyperfine` sample measured Phase 1 at 120.3 ms +/- 49.9 ms and Phase 2 at 119.5 ms +/- 42.0 ms; system-noise outliers affected both samples, no material regression was observed, startup produced no messages, and `v:errmsg` remained empty.
+
 ### Verification
 
 - Run `:checkhealth vim.lsp` and confirm every installed server attaches with its intended root.
@@ -215,7 +236,7 @@ Status: not started
 
 ## Phase 3: Consolidate root-aware search and canonical mappings
 
-Status: not started
+Status: complete
 
 ### Changes
 
@@ -229,6 +250,15 @@ Status: not started
 8. Replace `:cd %:p:h` and `:lcd %:p:h` string interpolation at `tilde/.config/nvim/init.lua:731` with path-safe Lua APIs.
 9. Implement explicit keymap search from global and current-buffer maps and place it under `<leader>h`.
 10. Add a non-persistent headless acceptance check that enumerates the resulting keymaps, fails on unintended exact-map/prefix conflicts, and groups mappings by normalized description to expose semantic duplicates. Do not add this audit to runtime configuration.
+
+### Implementation result
+
+- Established the global cwd as the explicit project root for project file selection and native `rg` quickfix search, even when a window has its own local cwd.
+- Added path-safe actions for setting the global cwd to a Git root or named buffer directory, plus an exceptional buffer-directory file picker with unnamed-buffer notifications.
+- Replaced overlapping search paths with Snacks interactive selectors and a canonical structured `:grep!` flow that uses `--`, shell-escaped input, an explicit global-root path, and durable quickfix results.
+- Consolidated direct mappings into the target namespaces, retained the allowed LSP and diagnostic short aliases, restored timestamp and option toggles, and removed the old `<leader>p` picker family.
+- Added display-only keymap search over global and current-buffer maps. The non-persistent audit checked 69 configuration mappings with no exact or prefix conflicts and reported only intended canonical/short-alias semantic duplicates.
+- Path-with-spaces, local-cwd override, leading-dash pattern, Ex injection, quickfix reopen, unnamed-buffer, and picker scope checks passed. A paired 20-run `hyperfine` sample measured Phase 2 at 107.8 ms +/- 24.6 ms and Phase 3 at 112.2 ms +/- 24.3 ms; the 4.4 ms difference was within the noisy distributions, startup produced no messages, and `v:errmsg` remained empty.
 
 ### Verification
 
@@ -250,7 +280,7 @@ Status: not started
 
 ## Phase 4: Finish Git, Treesitter, terminal, and specialty workflows
 
-Status: not started
+Status: complete
 
 ### Changes
 
@@ -271,6 +301,17 @@ Status: not started
 11. Rewrite non-Treesitter filetype-specific indentation as a Lua `FileType` autocmd over explicit filetype names. Remove the TypeScript debug message.
 12. Configure `Snacks.zen()` as the only focus mode and add one described `<leader>wz` toggle. For `markdown` and `text` buffers, set `wrap`, `linebreak`, `breakindent`, `spell`, and `textwidth=0` locally. Keep native `gj`, `gk`, and `gq` behavior instead of remapping cursor movement or adding automatic prose formatting.
 13. Smoke-test every retained specialty plugin by its intended command or behavior and fix configuration or compatibility failures.
+
+### Implementation result
+
+- Added current Gitsigns hunk navigation and mechanical Git actions, with native diff retained for general comparisons.
+- Installed and activated the 12 declared current Treesitter parsers in an isolated fixture, enabled query-gated function and parameter textobjects with counted UTF-8-safe selections and motions, and limited Treesitter Context to three lines.
+- Kept Markdown on Neovim's native section and node mappings without duplicate built-in Markdown maps or cleanup warnings, and made missing semantic queries degrade without buffer-local semantic mappings.
+- Replaced automatic terminal insertion with an explicit terminal-input mapping, added the Snacks Zen toggle, and confined prose window options to markdown, text, and gitcommit buffers.
+- Current-parser runtime checks passed across all ten code languages. Deep count coverage passed for locked Lua and Python queries, including reversed endpoints, Visual character/line/block modes, operator-pending use, excessive counts, UTF-8 parameters, motion boundaries, and jumplist behavior.
+- Gitsigns passed staged and unstaged hunk attach, navigation, preview, blame, stage, reset, and revision diff checks. Retained specialty plugins passed command, mapping, or API smoke checks.
+- Fresh isolated startup produced no messages and left `v:errmsg` empty. A paired 20-run startup measurement increased from 93.1 ms +/- 2.3 ms in Phase 3 to 101.5 ms +/- 3.4 ms in Phase 4, a measured 8.4 ms cost for parser, Git, and specialty workflow activation.
+- Browser-host Firenvim integration, a real tmux/slime target, rendered Context height, and fully interactive Zen, surround/repeat, and mdeval behavior remain environment or UI-level manual checks; their configured commands and APIs load successfully.
 
 ### Verification
 
@@ -300,7 +341,7 @@ Status: not started
 
 ## Phase 5: Final cleanup and acceptance
 
-Status: not started
+Status: complete
 
 ### Changes
 
@@ -308,11 +349,21 @@ Status: not started
 2. Keep direct code for one-off actions. Introduce a helper only when behavior is repeated more than three times or owns meaningful state.
 3. Normalize all configuration to spaces and LF line endings.
 4. Add a short maintenance section near package declarations documenting:
-   - `:packupdate` review and confirmation flow.
+   - `:lua vim.pack.update()` review and confirmation flow.
    - The tracked `packlockfile`.
    - External language-server and `rg` prerequisites.
    - The project-root contract.
 5. Run the complete acceptance suite below.
+
+### Implementation result
+
+- Removed the remaining stale Markdown folding flag and added concise maintenance guidance for `vim.pack.update()`, the tracked lockfile, external language servers and `rg`, and the explicit global-cwd contract.
+- Kept Lua in Treesitter activation and semantic mapping coverage while using Neovim 0.12.5's bundled Lua parser. The current external Lua parser was excluded because it is incompatible with Neovim's bundled Lua highlight query; a fresh fixture confirmed bundled highlighting, folds, queries, and counted textobjects.
+- Fresh isolated package and parser bootstrap produced exactly the 16 retained packages and all 11 externally managed parsers. Two steady-state starts produced no messages and left `v:errmsg` empty.
+- Package, LSP, Treesitter, Fidget, mapping, search, quickfix, terminal, Git, parser, and specialty workflow acceptance checks passed. Removed dependencies, obsolete APIs, stale setup calls, TODO mappings, runtime-path hacks, and accidental mapping-prefix conflicts were absent.
+- The final paired 20-run startup benchmark was unchanged within noise: 120.8 ms +/- 6.5 ms for Phase 4 and 121.4 ms +/- 5.5 ms for Phase 5.
+- The real Firenvim native-host update succeeded for Brave, Chrome, and Firefox. Firenvim reported that its Homebrew Neovim path may need regeneration after a future Neovim upgrade.
+- Remaining health output is limited to missing external language-server executables, optional Snacks image/UI tools, optional language providers, and tmux focus events. Browser interaction, live tmux/slime delivery, rendered Context height, and fully interactive UI workflows remain environment-level manual checks.
 
 ### Acceptance suite
 
@@ -333,6 +384,37 @@ Status: not started
 - File finding, grep, and relative path behavior follow one documented cwd policy.
 - All mappings are described, discoverable, non-duplicative, and free of accidental exact-prefix ambiguity.
 - The active configuration contains no historical experiments, dead handlers, invalid runtime paths, startup dependencies on stale packages, or obsolete APIs.
+
+## Phase 6: Restore interactive mapping discovery and convenience
+
+Status: complete
+
+### Changes
+
+1. Restore `folke/which-key.nvim` through `vim.pack` and configure its prefix popup from the descriptions already attached to direct mappings. Keep `vim.keymap.set` as the mapping owner and use WhichKey only for discovery and group labels.
+2. Review removed mappings against the current namespace layout. Restore only high-frequency one-key leader aliases whose convenience outweighs duplication, while retaining canonical hierarchical mappings for recall and search.
+3. Review insert-mode workflows separately and add only mappings that are useful while editing text without reintroducing automatic completion or removed AI behavior.
+4. Preserve the restored `<C-p>` project-file picker, provision `tree-sitter-cli` on macOS, and keep parser installation conditional with a visible warning when the CLI is unavailable.
+5. Re-run mapping conflict, startup warning, health, and startup-time checks after the accepted mapping set is implemented.
+
+### Success criteria
+
+- Pressing `<leader>` displays a WhichKey popup containing the described global and applicable buffer-local mappings.
+- Common operations have a small, intentional set of convenient aliases and still have canonical discoverable mappings.
+- Insert-mode additions are explicit, do not interfere with ordinary text entry, and do not restore automatic completion.
+- No unintended exact or prefix mapping conflicts are introduced.
+- Neovim starts cleanly with and without `tree-sitter` on `PATH`, apart from the intentional missing-CLI warning.
+- The macOS provisioner installs the required `tree-sitter-cli` formula.
+
+### Implementation result
+
+- Restored lockfile-pinned WhichKey v3.17.0 with automatic 200 ms prefix discovery, text-only mapping labels, and non-owning group descriptions for the existing leader namespaces.
+- Restored the approved high-frequency aliases for project files, buffer lines, search history, marks, jumps, buffers, and buffer deletion while retaining their canonical hierarchical mappings.
+- Added explicit completion-menu navigation on Insert `<Tab>` and `<S-Tab>` with native snippet and literal-key fallbacks, plus buffer-local Insert `<C-k>` signature help that preserves native digraph behavior outside supporting LSP buffers.
+- Restored Normal `Y`/`YY` and Visual `Y` system-clipboard behavior. The `Y`/`YY` prefix relationship is intentional; the mapping audit found no unintended exact or prefix conflicts.
+- Added `tree-sitter-cli` to macOS provisioning and made parser installation conditional with a visible missing-CLI warning.
+- Verified the generated WhichKey trigger, current pinned APIs, lock revision, mapping modes and descriptions, completion/snippet branches, multi-client signature-help attachment and cleanup, Lua syntax, shell syntax, two clean starts, and both tree-sitter executable paths. WhichKey's remaining icon-provider health notices are unconditional upstream informational warnings and have no runtime effect with mapping icons disabled.
+- A paired 20-run startup benchmark measured 119.4 ms +/- 28.7 ms before and 116.1 ms +/- 3.6 ms after. The baseline contained one large outlier, and the result shows no measurable regression.
 
 ## References
 
