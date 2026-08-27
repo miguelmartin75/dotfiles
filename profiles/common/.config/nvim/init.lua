@@ -138,6 +138,10 @@ local packages = {
 
 vim.pack.add(packages, { confirm = false, load = true })
 
+-- Maintenance: run :lua vim.pack.update(), review its changes, and confirm the updates you keep.
+-- nvim-pack-lock.json records the reviewed package revisions for this configuration.
+-- Install language servers and rg outside Neovim; picker and search cwd is the explicit global cwd.
+
 local Snacks = require("snacks")
 Snacks.setup({
     styles = {},
@@ -179,7 +183,6 @@ vim.g.slime_target = "tmux"
 vim.g.slime_default_config = { socket_name = "default", target_pane = "{last}" }
 vim.g.slime_python_ipython = 1
 vim.g.slime_dispatch_ipython_pause = 350
-vim.g.markdown_folding = 1
 
 vim.cmd.colorscheme("zenbones")
 
@@ -290,7 +293,10 @@ local parser_filetypes = {
     "markdown",
     "markdown_inline",
 }
-require("nvim-treesitter").install(parser_filetypes)
+-- Neovim 0.12.5's bundled Lua parser matches its bundled Lua queries; current external Lua does not.
+require("nvim-treesitter").install(vim.tbl_filter(function(filetype)
+    return filetype ~= "lua"
+end, parser_filetypes))
 
 require("nvim-treesitter-textobjects").setup({
     select = { lookahead = true },

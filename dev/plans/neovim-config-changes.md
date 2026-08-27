@@ -3,7 +3,7 @@
 ## Status
 
 - Plan: complete
-- Implementation: in progress
+- Implementation: complete
 - Target: a sufficiently recent Neovim with `vim.pack`, `vim.lsp.config`, `vim.lsp.completion`, `vim.snippet`, `vim.system`, and current diagnostic APIs
 - Primary configuration: `profiles/common/.config/nvim/init.lua`
 - Implementation note: the configuration moved from the original `tilde/.config/nvim/init.lua` code pointers to the primary configuration path above; line numbers must be resolved against the current file before each phase.
@@ -340,7 +340,7 @@ Status: complete
 
 ## Phase 5: Final cleanup and acceptance
 
-Status: in progress
+Status: complete
 
 ### Changes
 
@@ -348,11 +348,21 @@ Status: in progress
 2. Keep direct code for one-off actions. Introduce a helper only when behavior is repeated more than three times or owns meaningful state.
 3. Normalize all configuration to spaces and LF line endings.
 4. Add a short maintenance section near package declarations documenting:
-   - `:packupdate` review and confirmation flow.
+   - `:lua vim.pack.update()` review and confirmation flow.
    - The tracked `packlockfile`.
    - External language-server and `rg` prerequisites.
    - The project-root contract.
 5. Run the complete acceptance suite below.
+
+### Implementation result
+
+- Removed the remaining stale Markdown folding flag and added concise maintenance guidance for `vim.pack.update()`, the tracked lockfile, external language servers and `rg`, and the explicit global-cwd contract.
+- Kept Lua in Treesitter activation and semantic mapping coverage while using Neovim 0.12.5's bundled Lua parser. The current external Lua parser was excluded because it is incompatible with Neovim's bundled Lua highlight query; a fresh fixture confirmed bundled highlighting, folds, queries, and counted textobjects.
+- Fresh isolated package and parser bootstrap produced exactly the 16 retained packages and all 11 externally managed parsers. Two steady-state starts produced no messages and left `v:errmsg` empty.
+- Package, LSP, Treesitter, Fidget, mapping, search, quickfix, terminal, Git, parser, and specialty workflow acceptance checks passed. Removed dependencies, obsolete APIs, stale setup calls, TODO mappings, runtime-path hacks, and accidental mapping-prefix conflicts were absent.
+- The final paired 20-run startup benchmark was unchanged within noise: 120.8 ms +/- 6.5 ms for Phase 4 and 121.4 ms +/- 5.5 ms for Phase 5.
+- The real Firenvim native-host update succeeded for Brave, Chrome, and Firefox. Firenvim reported that its Homebrew Neovim path may need regeneration after a future Neovim upgrade.
+- Remaining health output is limited to missing external language-server executables, optional Snacks image/UI tools, optional language providers, and tmux focus events. Browser interaction, live tmux/slime delivery, rendered Context height, and fully interactive UI workflows remain environment-level manual checks.
 
 ### Acceptance suite
 
