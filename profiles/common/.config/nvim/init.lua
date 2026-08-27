@@ -146,21 +146,61 @@ vim.g.markdown_folding = 1
 
 vim.cmd.colorscheme("zenbones")
 
-local on_attach = function(client, bufnr)
-    vim.bo[bufnr].omnifunc = "v:lua.vim.lsp.omnifunc"
+vim.opt.completeopt = { "menu", "menuone", "noselect" }
 
-    if client.server_capabilities.document_highlight then
-        vim.api.nvim_exec2([[
-            augroup lsp_document_highlight
-                autocmd! * <buffer>
-                autocmd CursorHold <buffer> lua vim.lsp.buf.document_highlight()
-                autocmd CursorMoved <buffer> lua vim.lsp.buf.clear_references()
-            augroup END
-        ]], {})
-    end
-end
+local lsp_configuration = vim.api.nvim_create_augroup("LspConfiguration", { clear = true })
+local lsp_document_highlight = vim.api.nvim_create_augroup("LspDocumentHighlight", { clear = true })
 
-local capabilities = vim.lsp.protocol.make_client_capabilities()
+vim.api.nvim_create_autocmd("LspAttach", {
+    group = lsp_configuration,
+    callback = function(ev)
+        local client = assert(vim.lsp.get_client_by_id(ev.data.client_id))
+
+        if client:supports_method("textDocument/documentHighlight")
+            and #vim.api.nvim_get_autocmds({
+                group = lsp_document_highlight,
+                event = "CursorHold",
+                buffer = ev.buf,
+            }) == 0
+        then
+            vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
+                group = lsp_document_highlight,
+                buffer = ev.buf,
+                callback = vim.lsp.buf.document_highlight,
+            })
+            vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+                group = lsp_document_highlight,
+                buffer = ev.buf,
+                callback = vim.lsp.buf.clear_references,
+            })
+        end
+
+        if client:supports_method("textDocument/completion") then
+            vim.lsp.completion.enable(true, client.id, ev.buf, { autotrigger = false })
+        end
+    end,
+})
+
+vim.api.nvim_create_autocmd("LspDetach", {
+    group = lsp_configuration,
+    callback = function(ev)
+        local has_document_highlight_client = false
+        for _, client in ipairs(vim.lsp.get_clients({ bufnr = ev.buf, method = "textDocument/documentHighlight" })) do
+            if client.id ~= ev.data.client_id then
+                has_document_highlight_client = true
+                break
+            end
+        end
+
+        if not has_document_highlight_client then
+            vim.api.nvim_clear_autocmds({ group = lsp_document_highlight, buffer = ev.buf })
+            vim.lsp.util.buf_clear_references(ev.buf)
+        end
+    end,
+})
+
+-- Install these external language-server executables outside Neovim: rust-analyzer,
+-- typescript-language-server, clangd, zls, nimlangserver, lua-language-server, ty, and ols.
 local servers = {
     "rust_analyzer",
     "ts_ls",
@@ -172,13 +212,29 @@ local servers = {
     "ols",
 }
 
-for _, lsp in ipairs(servers) do
-    vim.lsp.config(lsp, {
-        capabilities = capabilities,
-        on_attach = on_attach,
-    })
-    vim.lsp.enable(lsp)
-end
+vim.lsp.config("*", { capabilities = vim.lsp.protocol.make_client_capabilities() })
+vim.lsp.config("lua_ls", {
+    settings = {
+        Lua = {
+            runtime = {
+                version = "LuaJIT",
+                path = { "lua/?.lua", "lua/?/init.lua" },
+            },
+            workspace = {
+                checkThirdParty = false,
+                library = { vim.env.VIMRUNTIME },
+            },
+        },
+    },
+})
+vim.lsp.enable(servers)
+
+vim.diagnostic.config({
+    signs = true,
+    underline = true,
+    virtual_text = { prefix = "●", source = "if_many", spacing = 2 },
+    severity_sort = true,
+})
 
 require("nvim-treesitter").setup()
 
@@ -247,6 +303,9 @@ vim.keymap.set("x", "Y", '"+y', { desc = "Yank selection to system clipboard" })
 vim.keymap.set("n", "<F1>", "<Nop>")
 vim.keymap.set("n", "Q", "<Nop>")
 vim.keymap.set("x", "K", "<Nop>")
+vim.keymap.set("i", "<C-Space>", function()
+    vim.lsp.completion.get()
+end, { desc = "Complete with LSP" })
 
 vim.keymap.set("n", "<C-p>", function()
     Snacks.picker.files({ hidden = true, ignored = true, follow = true })
@@ -255,10 +314,10 @@ vim.keymap.set("n", "<C-s>", function()
     Snacks.picker.lines()
 end, { desc = "Find lines" })
 vim.keymap.set("n", "[d", function()
-    vim.diagnostic.goto_prev()
+    vim.diagnostic.jump({ count = -1 })
 end, { desc = "Previous diagnostic" })
 vim.keymap.set("n", "]d", function()
-    vim.diagnostic.goto_next()
+    vim.diagnostic.jump({ count = 1 })
 end, { desc = "Next diagnostic" })
 vim.keymap.set("n", "gd", function()
     vim.lsp.buf.definition()
@@ -349,11 +408,11 @@ vim.keymap.set("n", "<leader>pO", function()
     Snacks.picker.lsp_outgoing_calls()
 end, { desc = "Outgoing calls" })
 vim.keymap.set("n", "<leader>cf", function()
-    vim.lsp.buf.formatting()
+    vim.lsp.buf.format()
 end, { desc = "Format" })
-vim.keymap.set("n", "<leader>cF", function()
-    vim.lsp.buf.range_formatting()
-end, { desc = "Range format" })
+vim.keymap.set("x", "<leader>cf", function()
+    vim.lsp.buf.format()
+end, { desc = "Format selection" })
 vim.keymap.set("n", "<leader>cw", function()
     vim.lsp.buf.add_workspace_folder()
 end, { desc = "Add workspace folder" })
@@ -372,15 +431,21 @@ end, { desc = "Rename" })
 vim.keymap.set("n", "<leader>ca", function()
     vim.lsp.buf.code_action()
 end, { desc = "Code action" })
+vim.keymap.set("n", "<leader>cs", function()
+    vim.lsp.buf.signature_help()
+end, { desc = "Signature help" })
 vim.keymap.set("n", "<leader>ci", function()
     vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled())
 end, { desc = "Toggle inlay hints" })
-vim.keymap.set("n", "<leader>cq", function()
-    vim.lsp.diagnostic.set_loclist()
-end, { desc = "Set diagnostic location list" })
-vim.keymap.set("n", "<leader>cQ", function()
-    vim.lsp.diagnostic.open_float()
+vim.keymap.set("n", "<leader>df", function()
+    vim.diagnostic.open_float()
 end, { desc = "Open diagnostic float" })
+vim.keymap.set("n", "<leader>dl", function()
+    vim.diagnostic.setloclist()
+end, { desc = "Set diagnostic location list" })
+vim.keymap.set("n", "<leader>dq", function()
+    vim.diagnostic.setqflist()
+end, { desc = "Set diagnostic quickfix list" })
 vim.keymap.set("n", "<leader>ho", "<cmd>options<cr>", { desc = "Options" })
 vim.keymap.set("n", "<leader>hh", function()
     Snacks.picker.help()

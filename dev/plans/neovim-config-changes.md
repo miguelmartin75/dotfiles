@@ -180,7 +180,7 @@ This phase must produce a usable editor before deeper behavior changes.
 
 ## Phase 2: Rebuild LSP, diagnostics, formatting, and explicit completion
 
-Status: in progress
+Status: complete
 
 ### Changes
 
@@ -207,6 +207,15 @@ Status: in progress
 12. Replace diagnostic navigation and list calls with current `vim.diagnostic.jump`, `vim.diagnostic.open_float`, `vim.diagnostic.setloclist`, and `vim.diagnostic.setqflist` APIs.
 13. Use LSP diagnostics and formatting only. If a concrete non-LSP tool is later required, add a direct `:make`/`errorformat` or `vim.system` integration before considering a plugin.
 
+### Implementation result
+
+- Enabled all eight current `nvim-lspconfig` definitions through shared built-in client configuration and kept every server executable as an external prerequisite.
+- Configured `lua_ls` for LuaJIT and the Neovim runtime without plugin-specific library paths or a custom `rust_analyzer` override.
+- Added one idempotent attach/detach lifecycle for explicit completion and document highlights; a simulated two-client buffer retained hooks after the first detach and removed them after the final detach.
+- Replaced deprecated format and diagnostic calls with current normal/visual formatting and diagnostic jump, float, location-list, and quickfix APIs.
+- Preserved explicit completion through `<C-Space>`, native completion modes, native snippet handling, and `<C-y>` acceptance without automatic menus, documentation, signatures, or ghost text.
+- Clean isolated startup and the available `clangd` attachment passed. Missing server executables remain documented environment prerequisites. A paired 20-run `hyperfine` sample measured Phase 1 at 120.3 ms +/- 49.9 ms and Phase 2 at 119.5 ms +/- 42.0 ms; system-noise outliers affected both samples, no material regression was observed, startup produced no messages, and `v:errmsg` remained empty.
+
 ### Verification
 
 - Run `:checkhealth vim.lsp` and confirm every installed server attaches with its intended root.
@@ -226,7 +235,7 @@ Status: in progress
 
 ## Phase 3: Consolidate root-aware search and canonical mappings
 
-Status: not started
+Status: in progress
 
 ### Changes
 
