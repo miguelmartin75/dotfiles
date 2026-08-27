@@ -3,9 +3,10 @@
 ## Status
 
 - Plan: complete
-- Implementation: not started
+- Implementation: in progress
 - Target: a sufficiently recent Neovim with `vim.pack`, `vim.lsp.config`, `vim.lsp.completion`, `vim.snippet`, `vim.system`, and current diagnostic APIs
-- Primary configuration: `tilde/.config/nvim/init.lua`
+- Primary configuration: `profiles/common/.config/nvim/init.lua`
+- Implementation note: the configuration moved from the original `tilde/.config/nvim/init.lua` code pointers to the primary configuration path above; line numbers must be resolved against the current file before each phase.
 
 ## Goal
 
@@ -129,7 +130,7 @@ The keymap search command must combine `vim.api.nvim_get_keymap(mode)` with `vim
 
 ## Phase 1: Establish a clean native package and startup baseline
 
-Status: not started
+Status: complete
 
 This phase must produce a usable editor before deeper behavior changes.
 
@@ -152,6 +153,16 @@ This phase must produce a usable editor before deeper behavior changes.
 9. Disable global spell checking and enable it only for `markdown`, `text`, and `gitcommit` buffers.
 10. Replace the shell-backed timestamp action with `os.date` or `vim.fn.strftime`.
 
+### Implementation result
+
+- Replaced Packer with one eager `vim.pack` package graph and tracked the generated 16-package lockfile.
+- Registered Treesitter and Firenvim update hooks before package activation; isolated startup skips only the external Firenvim host installation.
+- Removed every package and package-bound setup selected for removal, including the custom `rust_analyzer` override requested during implementation.
+- Converted the retained editor options and mappings to Lua, kept spelling buffer-local, and replaced the shell timestamp command with `os.date`.
+- Current `nvim-treesitter` `main` no longer provides `nvim-treesitter.configs`, so the clean-start baseline uses its top-level `setup()` API before Phase 4 adds parser activation and textobjects.
+- Clean isolated bootstrap and second startup passed. Steady-state `hyperfine` measurement over 10 runs improved from 174.8 ms +/- 9.0 ms for the old `~/.config/nvim/init.lua` to 112.5 ms +/- 12.2 ms for this phase, or 1.55x faster. Startup produced no messages and left `v:errmsg` empty.
+- The real user-environment Firenvim native-host installation remains part of the Phase 4 specialty workflow verification because it writes outside the isolated test tree.
+
 ### Verification
 
 - Create a temporary XDG fixture with `mktemp -d`, copy `tilde/.config/nvim` into its `XDG_CONFIG_HOME/nvim`, and point `XDG_DATA_HOME`, `XDG_STATE_HOME`, and `XDG_CACHE_HOME` into the same temporary root. Start Neovim headlessly twice against that copied config. The first run covers package installation and the second covers steady-state ordering without reading or writing the real package store.
@@ -169,7 +180,7 @@ This phase must produce a usable editor before deeper behavior changes.
 
 ## Phase 2: Rebuild LSP, diagnostics, formatting, and explicit completion
 
-Status: not started
+Status: in progress
 
 ### Changes
 
