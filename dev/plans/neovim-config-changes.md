@@ -40,7 +40,7 @@ Use this startup order in `tilde/.config/nvim/init.lua`:
 | Snippets | Use `vim.snippet` | No programmable snippet requirement exists. |
 | Search picker | Keep Snacks and remove Telescope plus `telescope-fzf-native` | Most current picker mappings already use Snacks. One picker preserves interactive fuzzy selection without duplicate infrastructure. |
 | Exhaustive text search | Use `rg` through `grepprg`, `:grep`, and quickfix | This composes an external search tool with durable native result navigation. |
-| Mapping discovery | Remove WhichKey and add an explicit keymap search command | Described mappings can be discovered on demand using Neovim APIs and `vim.ui.select`. |
+| Mapping discovery | Keep WhichKey plus the explicit keymap search command | WhichKey teaches prefix mappings while they are being entered; the searchable inventory remains useful for exhaustive lookup. |
 | Git | Keep Gitsigns and remove `mini.diff` | Gitsigns owns substantial asynchronous Git state; the current `mini.diff` source is disabled. |
 | General diff | Use native diff commands and mappings | No second diff plugin is needed for file comparison. |
 | Lint and format | Use LSP diagnostics and `vim.lsp.buf.format` | No current use case justifies none-ls, Conform, or a lint orchestration plugin. |
@@ -56,6 +56,7 @@ Use this startup order in `tilde/.config/nvim/init.lua`:
 - `nvim-treesitter/nvim-treesitter`, `nvim-treesitter/nvim-treesitter-textobjects` on its `main` branch, and `nvim-treesitter-context`: parser-backed highlighting and folds, a deliberately small function/parameter selection and motion layer, native syntax-node selection, and bounded structural context. The textobjects plugin is a direct package whose compatible revision is recorded in `packlockfile`; do not use the frozen legacy module bundled with the old `nvim-treesitter` architecture.
 - `lewis6991/gitsigns.nvim`: live Git state and hunk operations.
 - `folke/snacks.nvim`: the one interactive fuzzy picker.
+- `folke/which-key.nvim`: interactive prefix discovery for the described direct mappings.
 - `neovim/nvim-lspconfig`: server definition database for the existing server list.
 - `j-hui/fidget.nvim`: LSP progress only. Remove the unrelated custom CodeCompanion progress layer.
 - `mcchrish/zenbones.nvim` and `rktjmp/lush.nvim`: the selected colorscheme and its dependency.
@@ -67,7 +68,7 @@ Use this startup order in `tilde/.config/nvim/init.lua`:
 - `wbthomason/packer.nvim` and its bootstrap at `tilde/.config/nvim/init.lua:1`.
 - `nvim-telescope/telescope.nvim` and `telescope-fzf-native.nvim` at `tilde/.config/nvim/init.lua:58`.
 - `williamboman/nvim-lsp-installer`, `folke/lua-dev.nvim`, and `nvimtools/none-ls.nvim` at `tilde/.config/nvim/init.lua:47`.
-- `folke/which-key.nvim`, `folke/sidekick.nvim`, `echasnovski/mini.diff`, and `saghen/blink.cmp` at `tilde/.config/nvim/init.lua:64`.
+- `folke/sidekick.nvim`, `echasnovski/mini.diff`, and `saghen/blink.cmp` at `tilde/.config/nvim/init.lua:64`.
 - `tjdevries/colorbuddy.vim`, which has no setup or consumer.
 - `ziglang/zig.vim`, because recent Neovim filetype support plus Treesitter and `zls` cover the configured Zig workflow. Restore it only for a named feature that those layers do not provide.
 - `nvim-lua/plenary.nvim`, because none of the retained package declarations require it after Telescope is removed.
@@ -383,6 +384,37 @@ Status: complete
 - File finding, grep, and relative path behavior follow one documented cwd policy.
 - All mappings are described, discoverable, non-duplicative, and free of accidental exact-prefix ambiguity.
 - The active configuration contains no historical experiments, dead handlers, invalid runtime paths, startup dependencies on stale packages, or obsolete APIs.
+
+## Phase 6: Restore interactive mapping discovery and convenience
+
+Status: complete
+
+### Changes
+
+1. Restore `folke/which-key.nvim` through `vim.pack` and configure its prefix popup from the descriptions already attached to direct mappings. Keep `vim.keymap.set` as the mapping owner and use WhichKey only for discovery and group labels.
+2. Review removed mappings against the current namespace layout. Restore only high-frequency one-key leader aliases whose convenience outweighs duplication, while retaining canonical hierarchical mappings for recall and search.
+3. Review insert-mode workflows separately and add only mappings that are useful while editing text without reintroducing automatic completion or removed AI behavior.
+4. Preserve the restored `<C-p>` project-file picker, provision `tree-sitter-cli` on macOS, and keep parser installation conditional with a visible warning when the CLI is unavailable.
+5. Re-run mapping conflict, startup warning, health, and startup-time checks after the accepted mapping set is implemented.
+
+### Success criteria
+
+- Pressing `<leader>` displays a WhichKey popup containing the described global and applicable buffer-local mappings.
+- Common operations have a small, intentional set of convenient aliases and still have canonical discoverable mappings.
+- Insert-mode additions are explicit, do not interfere with ordinary text entry, and do not restore automatic completion.
+- No unintended exact or prefix mapping conflicts are introduced.
+- Neovim starts cleanly with and without `tree-sitter` on `PATH`, apart from the intentional missing-CLI warning.
+- The macOS provisioner installs the required `tree-sitter-cli` formula.
+
+### Implementation result
+
+- Restored lockfile-pinned WhichKey v3.17.0 with automatic 200 ms prefix discovery, text-only mapping labels, and non-owning group descriptions for the existing leader namespaces.
+- Restored the approved high-frequency aliases for project files, buffer lines, search history, marks, jumps, buffers, and buffer deletion while retaining their canonical hierarchical mappings.
+- Added explicit completion-menu navigation on Insert `<Tab>` and `<S-Tab>` with native snippet and literal-key fallbacks, plus buffer-local Insert `<C-k>` signature help that preserves native digraph behavior outside supporting LSP buffers.
+- Restored Normal `Y`/`YY` and Visual `Y` system-clipboard behavior. The `Y`/`YY` prefix relationship is intentional; the mapping audit found no unintended exact or prefix conflicts.
+- Added `tree-sitter-cli` to macOS provisioning and made parser installation conditional with a visible missing-CLI warning.
+- Verified the generated WhichKey trigger, current pinned APIs, lock revision, mapping modes and descriptions, completion/snippet branches, multi-client signature-help attachment and cleanup, Lua syntax, shell syntax, two clean starts, and both tree-sitter executable paths. WhichKey's remaining icon-provider health notices are unconditional upstream informational warnings and have no runtime effect with mapping icons disabled.
+- A paired 20-run startup benchmark measured 119.4 ms +/- 28.7 ms before and 116.1 ms +/- 3.6 ms after. The baseline contained one large outlier, and the result shows no measurable regression.
 
 ## References
 

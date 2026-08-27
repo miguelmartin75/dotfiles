@@ -112,6 +112,8 @@ local packages = {
     "https://github.com/lewis6991/gitsigns.nvim",
     -- Explicit fuzzy pickers for files, buffers, symbols, and search.
     "https://github.com/folke/snacks.nvim",
+    -- Discoverable leader-key mappings and group labels.
+    "https://github.com/folke/which-key.nvim",
     -- Language-server definitions for the configured external servers.
     "https://github.com/neovim/nvim-lspconfig",
     -- Progress reporting for language-server requests.
@@ -153,6 +155,22 @@ Snacks.setup({
         },
     },
     zen = {},
+})
+
+local which_key = require("which-key")
+which_key.setup({
+    icons = { mappings = false },
+})
+which_key.add({
+    { "<leader>b", group = "Buffers" },
+    { "<leader>c", group = "Code" },
+    { "<leader>d", group = "Diagnostics" },
+    { "<leader>f", group = "Files" },
+    { "<leader>g", group = "Git" },
+    { "<leader>h", group = "Help" },
+    { "<leader>s", group = "Search" },
+    { "<leader>w", group = "Windows" },
+    { "<leader>wt", group = "Tabs" },
 })
 
 local gitsigns = require("gitsigns")
@@ -218,6 +236,13 @@ vim.api.nvim_create_autocmd("LspAttach", {
         if client:supports_method("textDocument/completion") then
             vim.lsp.completion.enable(true, client.id, ev.buf, { autotrigger = false })
         end
+
+        if client:supports_method("textDocument/signatureHelp") then
+            vim.keymap.set("i", "<C-k>", function()
+                vim.lsp.buf.signature_help()
+            end, { buffer = ev.buf, desc = "Signature help" })
+            vim.b[ev.buf].lsp_signature_help_mapped = true
+        end
     end,
 })
 
@@ -235,6 +260,19 @@ vim.api.nvim_create_autocmd("LspDetach", {
         if not has_document_highlight_client then
             vim.api.nvim_clear_autocmds({ group = lsp_document_highlight, buffer = ev.buf })
             vim.lsp.util.buf_clear_references(ev.buf)
+        end
+
+        local has_signature_help_client = false
+        for _, client in ipairs(vim.lsp.get_clients({ bufnr = ev.buf, method = "textDocument/signatureHelp" })) do
+            if client.id ~= ev.data.client_id then
+                has_signature_help_client = true
+                break
+            end
+        end
+
+        if not has_signature_help_client and vim.b[ev.buf].lsp_signature_help_mapped then
+            vim.keymap.del("i", "<C-k>", { buffer = ev.buf })
+            vim.b[ev.buf].lsp_signature_help_mapped = nil
         end
     end,
 })
@@ -294,9 +332,13 @@ local parser_filetypes = {
     "markdown_inline",
 }
 -- Neovim 0.12.5's bundled Lua parser matches its bundled Lua queries; current external Lua does not.
-require("nvim-treesitter").install(vim.tbl_filter(function(filetype)
-    return filetype ~= "lua"
-end, parser_filetypes))
+if vim.fn.executable("tree-sitter") == 1 then
+    require("nvim-treesitter").install(vim.tbl_filter(function(filetype)
+        return filetype ~= "lua"
+    end, parser_filetypes))
+else
+    vim.notify("tree-sitter CLI not found; parser installation skipped", vim.log.levels.WARN)
+end
 
 require("nvim-treesitter-textobjects").setup({
     select = { lookahead = true },
@@ -466,6 +508,24 @@ require("treesitter-context").setup({
 vim.keymap.set("i", "<C-Space>", function()
     vim.lsp.completion.get()
 end, { desc = "Complete with LSP" })
+vim.keymap.set("i", "<Tab>", function()
+    if vim.fn.pumvisible() == 1 then
+        return "<C-n>"
+    elseif vim.snippet.active({ direction = 1 }) then
+        return "<Cmd>lua vim.snippet.jump(1)<CR>"
+    else
+        return "<Tab>"
+    end
+end, { expr = true, desc = "Next completion or snippet placeholder" })
+vim.keymap.set("i", "<S-Tab>", function()
+    if vim.fn.pumvisible() == 1 then
+        return "<C-p>"
+    elseif vim.snippet.active({ direction = -1 }) then
+        return "<Cmd>lua vim.snippet.jump(-1)<CR>"
+    else
+        return "<S-Tab>"
+    end
+end, { expr = true, desc = "Previous completion or snippet placeholder" })
 
 vim.keymap.set("n", "[d", function()
     vim.diagnostic.jump({ count = -1 })
@@ -487,6 +547,9 @@ vim.keymap.set("n", "K", function()
 end, { desc = "Hover" })
 
 vim.keymap.set("n", "<leader>p", '"+p', { desc = "Paste from system clipboard" })
+vim.keymap.set("n", "Y", '"+y', { desc = "Yank motion to system clipboard" })
+vim.keymap.set("n", "YY", '"+yy', { desc = "Yank line to system clipboard" })
+vim.keymap.set("x", "Y", '"+y', { desc = "Yank selection to system clipboard" })
 
 local function global_cwd()
     return vim.fn.getcwd(-1, -1)
@@ -496,6 +559,9 @@ vim.keymap.set("n", "<leader>ff", function()
     Snacks.picker.files({ cwd = global_cwd(), hidden = true, follow = true })
 end, { desc = "Find project files" })
 vim.keymap.set("n", "<leader>fF", function()
+    Snacks.picker.files({ cwd = global_cwd(), hidden = true, ignored = true, follow = true })
+end, { desc = "Find all project files" })
+vim.keymap.set("n", "<C-p>", function()
     Snacks.picker.files({ cwd = global_cwd(), hidden = true, ignored = true, follow = true })
 end, { desc = "Find all project files" })
 vim.keymap.set("n", "<leader>fo", function()
@@ -538,8 +604,12 @@ end, { desc = "Find files in buffer directory" })
 vim.keymap.set("n", "<leader>bb", function()
     Snacks.picker.buffers()
 end, { desc = "Find buffers" })
+vim.keymap.set("n", "<leader>,", function()
+    Snacks.picker.buffers()
+end, { desc = "Find buffers" })
 vim.keymap.set("n", "<leader>bd", "<cmd>bd<cr>", { desc = "Delete buffer" })
 vim.keymap.set("n", "<leader>bD", "<cmd>%bd<cr>", { desc = "Delete all buffers" })
+vim.keymap.set("n", "<leader>q", "<cmd>bd<cr>", { desc = "Delete buffer" })
 
 vim.keymap.set("n", "<leader>wh", "<C-W>h", { desc = "Focus left window" })
 vim.keymap.set("n", "<leader>wl", "<C-W>l", { desc = "Focus right window" })
@@ -560,14 +630,26 @@ vim.keymap.set("n", "<leader>wt]", "<cmd>tabnext<cr>", { desc = "Next tab" })
 vim.keymap.set("n", "<leader>sl", function()
     Snacks.picker.lines()
 end, { desc = "Find line in buffer" })
+vim.keymap.set("n", "<leader>/", function()
+    Snacks.picker.lines()
+end, { desc = "Find line in buffer" })
 vim.keymap.set("n", "<leader>sh", function()
+    Snacks.picker.search_history()
+end, { desc = "Search history" })
+vim.keymap.set("n", "<leader>?", function()
     Snacks.picker.search_history()
 end, { desc = "Search history" })
 vim.keymap.set("n", "<leader>sH", "<cmd>set hls!<cr>", { desc = "Toggle search highlight" })
 vim.keymap.set("n", "<leader>sm", function()
     Snacks.picker.marks()
 end, { desc = "Marks" })
+vim.keymap.set("n", "<leader>m", function()
+    Snacks.picker.marks()
+end, { desc = "Marks" })
 vim.keymap.set("n", "<leader>sj", function()
+    Snacks.picker.jumps()
+end, { desc = "Jump list" })
+vim.keymap.set("n", "<leader>j", function()
     Snacks.picker.jumps()
 end, { desc = "Jump list" })
 vim.keymap.set("n", "<leader>ss", function()
