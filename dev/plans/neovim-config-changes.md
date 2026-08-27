@@ -235,7 +235,7 @@ Status: complete
 
 ## Phase 3: Consolidate root-aware search and canonical mappings
 
-Status: in progress
+Status: complete
 
 ### Changes
 
@@ -249,6 +249,15 @@ Status: in progress
 8. Replace `:cd %:p:h` and `:lcd %:p:h` string interpolation at `tilde/.config/nvim/init.lua:731` with path-safe Lua APIs.
 9. Implement explicit keymap search from global and current-buffer maps and place it under `<leader>h`.
 10. Add a non-persistent headless acceptance check that enumerates the resulting keymaps, fails on unintended exact-map/prefix conflicts, and groups mappings by normalized description to expose semantic duplicates. Do not add this audit to runtime configuration.
+
+### Implementation result
+
+- Established the global cwd as the explicit project root for project file selection and native `rg` quickfix search, even when a window has its own local cwd.
+- Added path-safe actions for setting the global cwd to a Git root or named buffer directory, plus an exceptional buffer-directory file picker with unnamed-buffer notifications.
+- Replaced overlapping search paths with Snacks interactive selectors and a canonical structured `:grep!` flow that uses `--`, shell-escaped input, an explicit global-root path, and durable quickfix results.
+- Consolidated direct mappings into the target namespaces, retained the allowed LSP and diagnostic short aliases, restored timestamp and option toggles, and removed the old `<leader>p` picker family.
+- Added display-only keymap search over global and current-buffer maps. The non-persistent audit checked 69 configuration mappings with no exact or prefix conflicts and reported only intended canonical/short-alias semantic duplicates.
+- Path-with-spaces, local-cwd override, leading-dash pattern, Ex injection, quickfix reopen, unnamed-buffer, and picker scope checks passed. A paired 20-run `hyperfine` sample measured Phase 2 at 107.8 ms +/- 24.6 ms and Phase 3 at 112.2 ms +/- 24.3 ms; the 4.4 ms difference was within the noisy distributions, startup produced no messages, and `v:errmsg` remained empty.
 
 ### Verification
 
@@ -270,7 +279,7 @@ Status: in progress
 
 ## Phase 4: Finish Git, Treesitter, terminal, and specialty workflows
 
-Status: not started
+Status: in progress
 
 ### Changes
 
