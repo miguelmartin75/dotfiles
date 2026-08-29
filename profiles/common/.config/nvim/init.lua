@@ -35,6 +35,7 @@ vim.opt.grepprg = "rg --vimgrep --smart-case"
 vim.opt.grepformat = "%f:%l:%c:%m"
 
 local filetype_options = vim.api.nvim_create_augroup("FiletypeOptions", { clear = true })
+local last_edit_position = vim.api.nvim_create_augroup("LastEditPosition", { clear = true })
 
 vim.api.nvim_create_autocmd({ "FileType", "BufWinEnter" }, {
     group = filetype_options,
@@ -67,6 +68,16 @@ vim.api.nvim_create_autocmd("TermOpen", {
     group = filetype_options,
     callback = function(ev)
         vim.keymap.set("n", "<leader>wi", "i", { buffer = ev.buf, desc = "Enter terminal input" })
+    end,
+})
+
+vim.api.nvim_create_autocmd("BufReadPost", {
+    group = last_edit_position,
+    callback = function(ev)
+        local position = vim.api.nvim_buf_get_mark(ev.buf, '"')
+        if position[1] > 0 and position[1] <= vim.api.nvim_buf_line_count(ev.buf) then
+            vim.api.nvim_win_set_cursor(0, position)
+        end
     end,
 })
 
