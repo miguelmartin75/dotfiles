@@ -167,10 +167,6 @@
 
   (setq org-src-preserve-indentation t)
   (add-hook 'org-mode-hook (lambda () (electric-indent-mode -1)))
-  ; (add-hook 'org-mode-hook (lambda () (company-mode -1)))
-  (with-eval-after-load 'corfu
-    (add-hook 'org-mode-hook (lambda () (corfu-mode -1)))
-  )
 
   (setq org-agenda-files '("~/org/life.org"))
 
@@ -306,10 +302,10 @@
      "author-or-editor"
      "keywords")))
 
-(use-package org-ref)
-(use-package ivy-bibtex :config
-  (ivy-add-actions 'ivy-bibtex '(("u" ivy-bibtex-open-url-or-doi "Open URL or DOI in browser")
-				 ("p" ivy-bibtex-open-pdf "Open PDF file (if present)"))))
+(use-package org-ref
+  :commands (org-ref-insert-cite-link
+             org-ref-open-pdf-at-point
+             org-ref-open-url-at-point))
 (use-package gscholar-bibtex)
 
 
@@ -488,187 +484,34 @@
 
 
 ;; completion
-(use-package corfu
-  ;; Optional customizations
-  :custom
-  (corfu-auto-prefix 2)
-  (corfu-auto t)
-  (corfu-cycle t)                ;; Enable cycling for `corfu-next/previous'
-  ;; (corfu-quit-at-boundary t)
-  ;; (corfu-quit-no-match nil)      ;; Never quit, even if there is no match
-  ;; (corfu-preview-current nil)    ;; Disable current candidate preview
-  ;; (corfu-preselect 'prompt)      ;; Preselect the prompt
-  ;; (corfu-on-exact-match nil)     ;; Configure handling of exact matches
+(require 'icomplete)
+(setq completion-styles '(basic partial-completion flex)
+      completion-category-defaults nil
+      completion-category-overrides nil
+      icomplete-in-buffer t
+      icomplete-vertical-in-buffer-adjust-list t)
+(icomplete-vertical-mode 1)
 
-  ;; Enable Corfu only for certain modes. See also `global-corfu-modes'.
-  ;; :hook ((prog-mode . corfu-mode)
-  ;;        (shell-mode . corfu-mode)
-  ;;        (eshell-mode . corfu-mode))
+(keymap-set completion-in-region-mode-map
+            "TAB" #'icomplete-forward-completions)
+(keymap-set completion-in-region-mode-map
+            "S-TAB" #'icomplete-backward-completions)
+(keymap-set completion-in-region-mode-map
+            "<backtab>" #'icomplete-backward-completions)
+(advice-add 'completion-at-point :after #'minibuffer-hide-completions)
 
-  :init
+(global-completion-preview-mode -1)
+(define-key evil-insert-state-map (kbd "C-SPC") #'completion-at-point)
+(define-key evil-insert-state-map (kbd "C-M-i") #'completion-at-point)
+(define-key evil-insert-state-map (kbd "M-/") #'dabbrev-expand)
+(evil-define-key '(normal visual insert) 'global
+  (kbd "C-s") #'isearch-forward)
 
-  ;; Recommended: Enable Corfu globally.  Recommended since many modes provide
-  ;; Capfs and Dabbrev can be used globally (M-/).  See also the customization
-  ;; variable `global-corfu-modes' to exclude certain modes.
-  ; (global-corfu-mode)
-
-  (keymap-unset corfu-map "RET")
-  ;; (keymap-unset corfu-map "TAB")
-
-  ;; Enable optional extension modes:
-  (corfu-history-mode)
-  (corfu-popupinfo-mode)
-)
-;; (use-package corfu-terminal
-;;   :unless (display-graphic-p)
-;;   :after corfu
-;;   :init (corfu-terminal-mode +1))
-
-
-;; Add extensions
-(use-package cape
-  ;; Bind dedicated completion commands
-  :bind (("C-c p p" . completion-at-point) ;; capf
-         ("C-c p t" . complete-tag)        ;; etags
-         ("C-c p d" . cape-dabbrev)        ;; or dabbrev-completion
-         ("C-c p f" . cape-file)
-         ("C-c p k" . cape-keyword)
-         ("C-c p s" . cape-symbol)
-         ("C-c p a" . cape-abbrev)
-         ("C-c p i" . cape-ispell)
-         ("C-c p l" . cape-line)
-         ("C-c p w" . cape-dict)
-         ("C-c p \\" . cape-tex)
-         ("C-c p &" . cape-sgml)
-         ("C-c p r" . cape-rfc1345))
-  :init
-  ;; Add `completion-at-point-functions', used by `completion-at-point'.
-  (add-to-list 'completion-at-point-functions #'cape-file)
-  (add-to-list 'completion-at-point-functions #'cape-tex)
-  (add-to-list 'completion-at-point-functions #'cape-dabbrev)
-)
-
-; company-mode
-;; (use-package company
-;;   :config
-;;   ;; (global-company-mode 1)
-;;   ;; (company-tng-mode)
-;;   (setq company-tooltip-idle-delay 0.2)
-;;   (setq company-idle-delay 0.1)
-;;   ;;(setq company-backends '((company-capf company-files company-yasnippet company-dabbrev company-dabbrev-code)))
-;;   ;; (setq company-backends '((company-capf company-files company-yasnippet)))
-;;   (setq company-backends '(company-capf))
-;;   (setq company-dabbrev-downcase nil)
-;;   (setq company-transformers '(company-sort-by-occurrence delete-consecutive-dups))
-;;   (setq company-minimum-prefix-length 1)
-;; )
-;; (use-package company-box)
-;; (use-package company-posframe :config (company-posframe-mode 1))
-
-
-;; You may prefer to use `initials' instead of `partial-completion'.
-(use-package orderless
-  :init
-  ;; Configure a custom style dispatcher (see the Consult wiki)
-  ;; (setq orderless-style-dispatchers '(+orderless-dispatch)
-  ;;       orderless-component-separator #'orderless-escapable-split-on-space)
-
-  ;; (setq orderless-component-separator "!") ;; will work for most PLs
-  (setq
-    completion-styles '(orderless basic)
-    completion-category-defaults nil
-    completion-category-overrides '((file (styles . (partial-completion))))
-  )
-)
-
-;; Use dabbrev with Corfu!
-(use-package dabbrev
-  ;; Swap M-/ and C-M-/
-  :bind (("M-/" . dabbrev-completion)
-         ("C-M-/" . dabbrev-expand)))
-
-
-
-;; ---- other completions
-
-;; search
-(use-package consult)
-(use-package embark-consult)
-(use-package consult-eglot :after consult)
-
-; (use-package consult-omni
-;   :after consult
-;   :custom
-;    ;; General settings that apply to all sources
-;   (consult-omni-show-preview t) ;;; show previews
-;   (consult-omni-preview-key "C-o") ;;; set the preview key to C-o
-;   :config
-;
-;   ;; Load Sources Core code
-;   (require 'consult-omni-sources)
-;   ;; Load Embark Actions
-;   (require 'consult-omni-embark)
-;
-;   (consult-omni-sources-load-modules)
-;   ;; (setq consult-omni-default-interactive-command #'consult-omni-wikipedia)
-;
-;   (setq consult-omni-multi-sources '("calc"
-;                                     ;; "File"
-;                                     ;; "Buffer"
-;                                     ;; "Bookmark"
-;                                     "Apps"
-;                                     ;; "gptel"
-;                                     ;; "Brave"
-;                                     "Dictionary"
-;                                     "Google"
-;                                     "Wikipedia"
-;                                     "elfeed"
-;                                     ;; "mu4e"
-;                                     ;; "buffers text search"
-;                                     "Notes Search"
-;                                     "Org Agenda"
-;                                     ;; "GitHub"
-;                                     ;; "YouTube"
-;                                     "Invidious"
-;                                     )
-;   )
-; )
-
-(use-package counsel
-  :config
-  (counsel-mode 1)
-  (setq ivy-initial-inputs-alist nil)
-)
-
-(use-package ivy
-  :diminish
-  :bind (("C-s" . swiper)
-	 :map ivy-minibuffer-map
-	 ("TAB" . ivy-alt-done)
-	 ("C-l" . ivy-alt-done)
-	 ("C-j" . ivy-next-line)
-	 ("C-k" . ivy-previous-line)
-	 :map ivy-switch-buffer-map
-	 ("C-k" . ivy-previous-line)
-	 ("C-l" . ivy-done)
-	 ("C-d" . ivy-switch-buffer-kill)
-	 :map ivy-reverse-i-search-map
-	 ("C-k" . ivy-previous-line)
-	 ("C-d" . ivy-reverse-i-search-kill))
-  :config
-  (ivy-mode 1)
-  (setq ivy-use-selectable-prompt t)
-  (setq ivy-use-virtual-buffers t)
-)
-
-(use-package ivy-rich
-  :init
-  (ivy-rich-mode 1))
-
-(use-package ivy-xref
-  :init
-  (setq xref-show-xrefs-function #'ivy-xref-show-xrefs)
-)
+(require 'savehist)
+(add-to-list 'savehist-additional-variables 'search-ring)
+(add-to-list 'savehist-additional-variables 'regexp-search-ring)
+(savehist-mode 1)
+(recentf-mode 1)
 
 ;; treesitter
 (use-package tree-sitter
@@ -730,13 +573,10 @@
 )
 
 (use-package helpful
-  :custom
-  (counsel-describe-function-function #'helpful-callable)
-  (counsel-describe-variable-function #'helpful-variable)
   :bind
-  ([remap describe-function] . counsel-describe-function)
+  ([remap describe-function] . helpful-callable)
   ([remap describe-command] . helpful-command)
-  ([remap describe-variable] . counsel-describe-variable)
+  ([remap describe-variable] . helpful-variable)
   ([remap describe-key] . helpful-key))
 
 
@@ -760,8 +600,7 @@
     :config
     (general-create-definer my/leader-keys
 	:keymaps '(normal insert visual emacs)
-	:prefix "SPC"
-	:global-prefix "C-SPC")
+	:prefix "SPC")
 )
 
 (defun my/linear-load-api-key-from-auth-source ()
@@ -808,8 +647,6 @@
 ;;   (my/leader-keys "gd"  '(linear-emacs-toggle-debug         :which-key "Toggle debug mode" ))
 ;; )
 
-(define-key evil-normal-state-map (kbd "M-p") 'counsel-fzf)
-(define-key evil-insert-state-map (kbd "M-p") 'counsel-fzf)
 (my/leader-keys "[" '(flymake-goto-prev-error :which-key "prev error"))
 (my/leader-keys "]" '(flymake-goto-next-error :which-key "next error"))
 (my/leader-keys "b" '(compile :which-key "compile"))
@@ -827,9 +664,6 @@
 
 ;; TODO fixme
 
-(my/leader-keys "," '(counsel-switch-buffer :which-key "switch buffer"))
-(my/leader-keys "<" '(counsel-switch-buffer :which-key "switch buffer"))
-(my/leader-keys "p" '(counsel-find-file :which-key "find a file"))
 (my/leader-keys "e" '(org-set-effort :which-key "set effort for org-mode"))
 (my/leader-keys "x" '(org-capture :which-key "capture task"))
 (my/leader-keys "n" '(org-roam-node-find :which-key "roam files"))
@@ -837,7 +671,6 @@
 
 (my/leader-keys "oc" '(org-table-recalculate-buffer-tables :which-key "recaclc tables in buffer"))
 (my/leader-keys "on" '(org-id-get-create :which-key "create node"))
-(my/leader-keys "ot" '(cousnel-org-tag :which-key "add tags"))
 
 (my/leader-keys "wz" '(delete-other-windows :which-key "zoom window"))
 (my/leader-keys "wj" '(evil-window-down :which-key "win down"))
@@ -862,7 +695,6 @@
 
 ;; TODO: need this operation
 (my/leader-keys "i" '(org-roam-node-insert :which-key "insert roam link"))
-(my/leader-keys "I" '(counsel-org-link :which-key "insert heading link"))
 (my/leader-keys "mt" '(org-roam-tag-add :which-key "add tag"))
 (my/leader-keys "mT" '(org-roam-tag-remove :which-key "remove tag"))
 
@@ -1143,7 +975,6 @@
    (olivetti-mode 1)
    (text-scale-set 3.0)
    (display-line-numbers-mode 0)
-   (company-mode 0)
 )
 
 (defun my/write-mode-no-zoom() (interactive)
@@ -1151,7 +982,6 @@
    (olivetti-mode 1)
    (text-scale-set 0.0)
    (display-line-numbers-mode 0)
-   (company-mode 0)
 )
 
 (defun my/default-mode() (interactive)
@@ -1266,10 +1096,6 @@ is nil, refile in the current file."
 ;; TODO: styling
 (setq c-default-style "bsd" c-basic-offset 4)
 
-(defun my/tab-key () (interactive)
-  (indent-relative)
-)
-(global-set-key (kbd "TAB") 'my/tab-key)
 (setq indent-tabs-mode nil)
 
 (require 'org-autolist "~/.config/emacs/better-ret.el")

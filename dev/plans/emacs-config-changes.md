@@ -3,7 +3,7 @@
 ## Status
 
 - Plan: in progress
-- Implementation: Phase 1 complete; Phase 2 pending
+- Implementation: Phases 1-2 complete; Phase 3 pending
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
@@ -23,6 +23,7 @@ Times are wall-clock process durations. Deltas compare each row's mean with the 
 | --- | --- | --- | --- | --- | --- |
 | Before Phase 1 | `fbee7f8` | 8.130 s +/- 1.911 s | 7.379 s | 7.160-11.543 s | baseline |
 | After Phase 1 | Phase 1 commit | 3.966 s +/- 0.093 s | 4.002 s | 3.817-4.042 s | -4.164 s (-51.2%) |
+| After Phase 2 | Phase 2 commit | 2.807 s +/- 0.061 s | 2.810 s | 2.734-2.898 s | -1.159 s (-29.2%) |
 
 The baseline completed with exit status 0 on every measured run, but logged a non-fatal `use-package` error because `corfu-map` was unbound.
 
@@ -409,7 +410,7 @@ Status: complete
 
 ## Phase 2: Replace automatic completion and picker stacks
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -430,6 +431,16 @@ Status: pending
 
 - No completion frontend or source package remains.
 - Completion is explicit and native.
+
+### Outcome
+
+- Removed Corfu, Cape, Company remnants, Orderless, Consult, Embark Consult, Consult Eglot, Ivy, Counsel, Ivy Rich, Ivy Xref, and `ivy-bibtex`, including their direct bindings and global CAPF injection.
+- Enabled vertical Icomplete for minibuffer and explicit in-buffer completion with `basic`, `partial-completion`, and `flex` styles. Completion Preview remains disabled.
+- Bound `C-SPC`, `C-M-i`, and `M-/` directly in Evil insert state. `C-M-i` resolves to `completion-at-point` even when Flyspell is active, while other Evil states retain native bindings.
+- Bound `TAB` and `S-TAB` only in `completion-in-region-mode-map`; the global `TAB` binding remains `indent-for-tab-command`.
+- Restored native `C-s` Isearch in Evil normal, visual, and insert states, persisted both search rings with Savehist, and enabled Recentf.
+- Retained completion-agnostic Org Ref citation, PDF, and URL commands in place of `ivy-bibtex` actions.
+- Batch assertions verified key precedence, completion state, removed features, history modes, and config loading. Startup mean improved from 3.966 s to 2.807 s across the recorded five-run samples.
 
 ## Phase 3: Rebuild language services with Emacs primitives
 
