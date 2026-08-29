@@ -3,7 +3,7 @@
 ## Status
 
 - Plan: in progress
-- Implementation: Phases 1-2 complete; Phase 3 pending
+- Implementation: Phases 1-3 complete; Phase 4 pending
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
@@ -24,6 +24,7 @@ Times are wall-clock process durations. Deltas compare each row's mean with the 
 | Before Phase 1 | `fbee7f8` | 8.130 s +/- 1.911 s | 7.379 s | 7.160-11.543 s | baseline |
 | After Phase 1 | Phase 1 commit | 3.966 s +/- 0.093 s | 4.002 s | 3.817-4.042 s | -4.164 s (-51.2%) |
 | After Phase 2 | Phase 2 commit | 2.807 s +/- 0.061 s | 2.810 s | 2.734-2.898 s | -1.159 s (-29.2%) |
+| After Phase 3 | Phase 3 commit | 2.665 s +/- 0.020 s | 2.661 s | 2.637-2.686 s | -0.142 s (-5.1%) |
 
 The baseline completed with exit status 0 on every measured run, but logged a non-fatal `use-package` error because `corfu-map` was unbound.
 
@@ -88,8 +89,14 @@ Do not carry Neovim's global-cwd and buffer-directory commands forward. Emacs us
 | `SPC s D` | `eglot-find-declaration` | N, V | Find an LSP declaration when the server supports it. |
 | `SPC s r` | `xref-find-references` | N, V | Find references through Xref or Eglot. |
 | `SPC s i` | `eglot-find-implementation` | N, V | Find LSP implementations when supported. |
+| `SPC s t` | `eglot-find-typeDefinition` | N, V | Find an LSP type definition when the server supports it. |
+| `SPC s I` | `eglot-show-call-hierarchy` | N, V | Show the native unified incoming and outgoing call hierarchy. |
+| `SPC s b` | `multi-occur` | N, V | Search selected open buffers, including unsaved contents. |
+| `SPC s H` | `describe-face` | N, V | Complete and describe a face or highlight definition. |
+| `SPC s m` / `SPC m` | `evil-show-marks` | N, V | Show Evil's selectable local and global marks list. |
+| `SPC s j` / `SPC j` | `evil-show-jumps` | N, V | Show Evil's selectable jump list. |
 
-Use native Isearch history rather than a separate search-history picker: `C-s` starts Isearch and `M-p` / `M-n` traverse its persisted history. Leave `SPC s h` and `SPC ?` unbound. The Neovim-only highlights, marks, jumps, buffer-grep, type-definition, and call-hierarchy picker mappings have no selected native equivalent in this plan and remain unbound.
+Use native Isearch history rather than a separate search-history picker: `C-s` starts Isearch and `M-p` / `M-n` traverse its persisted history. Leave `SPC s h` and `SPC ?` unbound. Native Emacs and Evil cover highlights, marks, jumps, open-buffer grep, type definitions, and call hierarchy, though their UIs do not provide the uniform fuzzy filtering and live preview of Neovim's Snacks pickers.
 
 ### Code actions and completion
 
@@ -101,7 +108,7 @@ Use native Isearch history rather than a separate search-history picker: `C-s` s
 | `SPC c h` | `eldoc-doc-buffer` | N, V | Show explicit Eglot or mode documentation at point. |
 | `SPC c i` | `eglot-inlay-hints-mode` | N, V | Toggle Eglot inlay hints for the current buffer. |
 
-There is no separate native public Eglot command for a standalone signature-help request, so `SPC c s` remains unbound. `SPC c h` and `K` are the explicit documentation and signature view. Workspace-folder editing mappings remain unbound because Eglot does not expose an equivalent public native workflow.
+There is no separate native public Eglot command for a standalone signature-help request, so `SPC c s` remains unbound. `SPC c h` and `K` deliberately combine hover and signature information through Eldoc. Eglot supplies initial LSP workspace folders from the active `project.el` project and its `project-external-roots`; runtime add, remove, and list editing mappings remain unbound because Eglot exposes no equivalent public interactive workflow.
 
 ### Diagnostics and debugging
 
@@ -192,13 +199,16 @@ The `SPC a` group is only for Gptel. Terminal coding agents use the agent-neutra
 | `K` | `eldoc-doc-buffer` | N | Show explicit documentation and signature information at point. |
 | `[d` | `flymake-goto-prev-error` | N | Visit the previous diagnostic. |
 | `]d` | `flymake-goto-next-error` | N | Visit the next diagnostic. |
+| `[m` / `]m` | Native Tree-sitter defun motion | N, V, O | Move to the previous or next function start with count and jump history. |
+| `[M` / `]M` | Native Tree-sitter defun motion | N, V, O | Move to the previous or next function end with count and jump history. |
 | `C-s` | `isearch-forward` | N, V, I | Start native incremental search. |
 | `C-SPC` | `completion-at-point` | I | Request explicit CAPF completion outside terminal buffers. |
 | `C-M-i` | `completion-at-point` | I | Terminal-safe explicit-completion fallback. |
 | `M-/` | `dabbrev-expand` | I | Request explicit dabbrev completion. |
 | `TAB` / `S-TAB` | Native completion candidate movement | Completion transient map only | Select the next or previous candidate only while explicit completion is active. |
+| `TAB` / `S-TAB` | Yasnippet field movement | Active snippet map only | Move through placeholders only after an explicit Eglot snippet completion expands. |
 
-Keep normal `TAB` indentation and editing behavior everywhere else. Keep standard Isearch keys and use `M-p` / `M-n` inside Isearch for persisted search history.
+Completion candidate movement takes priority when completion and a snippet are both active. Keep normal `TAB` indentation and editing behavior when neither transient interaction is active. Keep standard Isearch keys and use `M-p` / `M-n` inside Isearch for persisted search history.
 
 ## Text and buffer transport contract
 
@@ -228,6 +238,19 @@ Do not bridge `python-shell` to `zmx` or tmux. Doing so would require a fragile 
 
 Keep one ordered configuration in `profiles/common/.config/emacs/init.el`; the current size comes from overlapping and stale subsystems, not a need for modules.
 
+### Fresh-machine bootstrap
+
+Link these dotfiles into `~/.config` before starting Emacs, then run the explicit provisioners in this order:
+
+```sh
+emacs -Q --batch -l ~/.config/emacs/install-packages.el
+emacs -Q --batch -l ~/.config/emacs/install-tree-sitter-grammars.el
+```
+
+Document those commands and their prerequisites in comments at the top of `profiles/common/.config/emacs/init.el`. Normal startup must never invoke either provisioner, refresh package archives, clone repositories, compile native code, or install software. The final package audit must make `install-packages.el` cover every retained third-party declaration before the two-command bootstrap is accepted from an empty package and grammar directory.
+
+The bootstrap requires Emacs 31.1+ with dynamic-module and native Tree-sitter support, Git, and a C/C++ compiler and linker. Language servers, ripgrep, `zmx`, and optional `difft` remain operating-system prerequisites. After Phase 6 configures a stable Ghostel module directory, provision Ghostel's platform-specific native module explicitly through its public download or compile command.
+
 Startup order:
 
 1. Configure package sources and native options without network access or package installation.
@@ -244,13 +267,14 @@ Use `package.el` and bundled `use-package` only. Install or update packages expl
 | Area | Decision | Reason |
 | --- | --- | --- |
 | Package management | Use `package.el` and `package-vc`; remove Straight and Quelpa. | Current startup refreshes archives and bootstraps three package systems at `profiles/common/.config/emacs/init.el:2`. |
-| Code completion | Bind explicit native CAPF to `C-SPC` in Evil insert state, retain `C-M-i` as the terminal-safe fallback, and retain explicit dabbrev completion on `M-/`. | This matches Neovim's explicit completion interaction while retaining a reliable TTY key path. Eglot exposes a CAPF directly. No Corfu, Cape, Company, or automatic popup is needed. [CAPF documentation](https://www.gnu.org/software/emacs/manual/html_node/elisp/Completion-in-Buffers.html) |
+| Code completion | Bind explicit native CAPF to `C-SPC` in Evil insert state, retain `C-M-i` as the terminal-safe fallback, retain explicit dabbrev completion on `M-/`, and use Yasnippet only for placeholders returned by explicit Eglot completion. | This matches Neovim's explicit trigger, completion-menu navigation, and active-snippet field navigation while retaining a reliable TTY key path. No Corfu, Cape, Company, or automatic popup is needed. [CAPF documentation](https://www.gnu.org/software/emacs/manual/html_node/elisp/Completion-in-Buffers.html) |
 | Minibuffer completion | Use vertical Icomplete with `basic`, `partial-completion`, and `flex` styles, including explicit in-buffer CAPF candidates. | Fast native selection for files, buffers, commands, search history, and sessions without automatic code suggestions. [Icomplete documentation](https://www.gnu.org/software/emacs/manual/html_node/emacs/Icomplete.html) |
 | LSP | Use built-in Eglot, started explicitly per project or buffer. | Eglot integrates Xref, Flymake, Eldoc, formatting, and CAPF without a separate LSP framework. [Eglot features](https://www.gnu.org/software/emacs/manual/html_node/eglot/Eglot-Features.html) |
 | DAP | Install and configure Dape, but never start it automatically or make it the default debugger. | Emacs has built-in GUD for GDB, LLDB, and PDB. Dape is an explicit, independently configured DAP client for workflows that need adapter-protocol features. [Dape](https://github.com/svaante/dape) |
 | Structural Git diffs | Optionally install and enable `difftastic.el` only when the `difft` executable is present, using its supplied Magit bindings. | This adds syntax-aware review inside existing Magit transients without making an external tool a startup requirement or duplicating the integration. |
 | Search | Use project.el, ripgrep-backed Xref, Isearch, Occur, Imenu, and native minibuffer completion. | Removes both the Consult and Ivy/Counsel picker stacks. |
-| Parsing | Replace legacy Tree-sitter packages with built-in `treesit`. | Emacs 31 owns parser integration. |
+| Parsing | Replace legacy Tree-sitter packages with built-in `treesit`, native defun motion, Hideshow, and Which Function. | Emacs 31 owns parser integration, structural motion, structural folding, and lightweight function context. Query-backed Evil text objects remain gated on complete language validation. |
+| Theme | Vendor a compact standalone `mig-one-light` theme under the Emacs profile and remove the Doom Themes dependency. | A repo-owned native theme preserves the actively used One Light surface without inheriting Doom's 1,258-face compatibility matrix or future upstream face cycles. |
 | Terminal renderer | Replace Vterm with Ghostel and `evil-ghostel`. | Ghostel is the one substantial terminal package, with native PTY rendering and maintained Evil integration. [Ghostel](https://github.com/dakra/ghostel) |
 | Persistent terminals | Configure `term-sessions.el` with `term-sessions-preferred-frontend` set to `ghostel`; use `zmx` as the session owner. | Sessions survive buffer kills, Emacs restarts, and SSH drops while the remote host and its zmx runtime state remain available. [term-sessions](https://github.com/ArthurHeymans/emacs-term-sessions) |
 | Terminal selection | Bind `term-sessions-open` and `term-sessions-list`; do not bind Consult integrations. | They already use `completing-read` and `tabulated-list-mode`: `refs/emacs-term-sessions/term-sessions-zmx.el:333`, `refs/emacs-term-sessions/term-sessions-list.el:66`. |
@@ -264,7 +288,8 @@ Use `package.el` and bundled `use-package` only. Install or update packages expl
 ### Retain
 
 - `evil`, `evil-collection`, `evil-org`, `evil-surround`, `evil-visualstar`, `evil-numbers`
-- `which-key`, `magit`, `doom-themes`, `doom-modeline`, `olivetti`
+- `which-key`, `magit`, `doom-modeline`, `olivetti`, and the repo-owned `mig-one-light` theme
+- `yasnippet`, only for placeholder expansion and navigation from explicitly requested Eglot completions
 - `difftastic.el`, only on machines with the external `difft` executable, integrated through `difftastic-bindings-mode`
 - Org, Org Roam, bibliography, and prose packages with an active personal workflow
 - `gptel`, only through explicit commands
@@ -295,6 +320,23 @@ Retain or configure the following Emacs modes and native Tree-sitter grammars to
 | CSS, HTML, PHP | Filetype-specific indentation | Retain their modes and two-space indentation behavior; no new language server is required by this plan |
 | Plain text and Git commits | Prose wrapping, spelling | Retain text and Git commit modes with wrapping and spelling |
 
+### Neovim parity follow-up analysis
+
+The Neovim configuration already implements several explicit workflows more completely than the original Emacs plan. The target is behavioral parity through native Emacs ownership where practical, not a claim that Neovim lacked these features.
+
+- Completion at `profiles/common/.config/nvim/init.lua:255` and `:528` is already explicit: LSP autotrigger is disabled, `C-SPC` requests completion, and `TAB` acts only on an active menu or snippet. Phase 2 matches the explicit CAPF and menu behavior. Phase 3 adds narrowly scoped Yasnippet support for Eglot snippet placeholders without adding an automatic completion frontend or idle `TAB` expansion.
+- LSP operations at `profiles/common/.config/nvim/init.lua:731` already cover formatting, rename, actions, hover, signatures, inlay hints, diagnostics, and mutable workspace folders. Emacs uses `eglot-format` for region-or-buffer formatting, Eldoc for combined hover and signature display, `eglot-inlay-hints-mode`, and Flymake's native diagnostic lists. `project.el` supplies initial workspace folders; runtime workspace-folder mutation remains intentionally absent because Eglot has no public interactive API for it.
+- Picker mappings at `profiles/common/.config/nvim/init.lua:667` cover highlights, marks, jumps, search history, open-buffer grep, type definitions, and directional call hierarchy. Phase 5 uses `describe-face`, `evil-show-marks`, `evil-show-jumps`, `multi-occur`, `eglot-find-typeDefinition`, and the unified `eglot-show-call-hierarchy`. Isearch keeps its persisted in-session history rather than adding an owned picker. Native UIs trade Snacks-style live preview and uniform fuzzy filtering for smaller package and maintenance cost.
+- Tree-sitter editing at `profiles/common/.config/nvim/init.lua:337` includes counted function and parameter text objects, function motions, folds, and three-line cursor context. Emacs uses native counted defun motion, Hideshow structural folds, and Which Function context. Full query-backed `af`, `if`, `aa`, and `ia` parity is adopted only if one revision-pinned Evil package validates against the active built-in grammars without loading the legacy `tree-sitter` feature; otherwise the plan records the text-object UI as a deliberate residual gap rather than maintaining per-grammar queries in `init.el`.
+
+### Native Tree-sitter editing contract
+
+- Enable native Tree-sitter modes only when their reviewed grammars are installed. JavaScript requires both the `javascript` and auxiliary `jsdoc` grammars; Markdown requires both `markdown` and `markdown-inline`.
+- Enable `hs-minor-mode` and `which-function-mode` in active native parser modes. Evil's existing `z` folding commands must operate through Hideshow without `ts-fold`.
+- In Phase 5, add buffer-local Evil motions for `[m`, `]m`, `[M`, and `]M` using Emacs 31's counted Tree-sitter defun navigation. Motions must record Evil jumps and exist only where the active mode supplies a parser-backed defun contract.
+- Evaluate revision-pinned `evil-textobj-tree-sitter` only for `af`, `if`, `aa`, and `ia`. Accept it only when query compilation, count behavior, mode-language mappings, and legacy-feature isolation pass for the retained language surface. Do not vendor per-grammar node queries into `init.el`.
+- Use Which Function as the maintained context baseline. Do not add a partial three-line context package that omits Lua, Zig, Nim, Odin, or Markdown.
+
 ### Remove
 
 - Straight, Quelpa, their bootstraps, and automatic archive refresh/install at `profiles/common/.config/emacs/init.el:2`
@@ -306,6 +348,7 @@ Retain or configure the following Emacs modes and native Tree-sitter grammars to
 - Legacy `tree-sitter`, `tree-sitter-langs`, and `ts-fold` at `profiles/common/.config/emacs/init.el:811`
 - Undo Tree and its Evil integration at `profiles/common/.config/emacs/init.el:452`
 - General at `profiles/common/.config/emacs/init.el:901`
+- Doom Themes after the repo-owned One Light theme replaces its active visual surface
 - Stale `vi-tilde-fringe-mode`, stale `company-mode` calls, and unused package declarations discovered in the final audit
 
 ## Current problems to eliminate
@@ -321,6 +364,7 @@ Retain or configure the following Emacs modes and native Tree-sitter grammars to
 - Global `TAB` overrides context-sensitive indentation and completion at `:1413`.
 - `package-selected-packages` preserves obsolete package state at `:67`.
 - `vc-ignore-dir-regexp` includes `tramp-file-name-regexp` at `:1063`, preventing the VC-aware project workflow needed for remote projects.
+- Installed Doom Themes 20250920.430 creates an Emacs 31 Gnus face inheritance cycle when CSS mode lazily loads EWW and Gnus. A temporary theme-scoped override keeps Phase 3 web modes usable; Phase 4 removes the dependency entirely with a repo-owned theme.
 
 ## Project-root and path contract
 
@@ -405,7 +449,7 @@ Status: complete
 - `profiles/common/.config/emacs/install-packages.el` is the explicit provisioner. It installs Dape from GNU ELPA and passes reviewed revisions through the native `package-vc-install` `REV` argument for Ghostel, `term-sessions.el`, and Difftastic when `difft` is present.
 - Installed and verified Ghostel at `7c4cbd9f487b545c3d0452ab749f65eaa3c18b7e`, `term-sessions.el` at `0815dbea006128df1d61e9d29e5a8ada53b349c1`, Difftastic at `f94076985ba46bf629abc9615c9b1fefcc3390ef`, and Dape 0.27.1.
 - Two guarded startup loads completed with package installation, archive refresh, VC installation, and synchronous URL retrieval replaced by errors. A simulated machine without `difft` selected and loaded no Difftastic feature.
-- Dape, Ghostel, `term-sessions.el`, and Difftastic remained unloaded after normal startup. Ghostel's native module remains an explicit first-use installation for Phase 5.
+- Dape, Ghostel, `term-sessions.el`, and Difftastic remained unloaded after normal startup. Ghostel's native module remains an explicit first-use installation for Phase 6.
 - Startup mean improved from 8.130 s to 3.966 s across the recorded five-run samples.
 
 ## Phase 2: Replace automatic completion and picker stacks
@@ -444,34 +488,79 @@ Status: complete
 
 ## Phase 3: Rebuild language services with Emacs primitives
 
-Status: pending
+Status: complete
 
 ### Changes
 
 1. Activate Eglot configuration for every language server in the language support contract. Retain only server overrides that Emacs cannot infer.
 2. Start Eglot explicitly. Do not use `eglot-ensure`.
 3. Retain Flymake diagnostics after an Eglot session starts.
-4. Map explicit formatting, code actions, rename, hover, signature help, and Xref commands.
+4. Map `eglot-format` for region-or-buffer formatting plus explicit code actions, rename, combined hover/signature display, inlay hints, and Xref commands.
 5. Set Xref to use `rg` when available.
-6. Replace legacy Tree-sitter packages with native grammar configuration and explicit grammar installation for every parser-backed language in the language support contract.
+6. Replace legacy Tree-sitter packages with native grammar configuration and explicit pinned grammar installation for every parser-backed language in the language support contract, including Emacs 31 JavaScript's auxiliary `jsdoc` grammar.
 7. Configure Dape without autostart. Document the `dape` launch and attach commands, adapter installation prerequisites, and each configured adapter's local or remote scope beside the configuration. Start with only verified adapters for active workflows, keeping GUD as the default debugger.
 8. Retain Python mode's `C-c C-p`, `C-c C-r`, `C-c C-c`, and `C-M-x` commands for the optional native Python Comint route outside Evil visual state. In Evil visual state, deliberately reserve `C-c C-c` for the generalized zmx sender. Configure IPython only through `python-shell-interpreter` and `python-shell-interpreter-args`, and apply `ghostel-comint-mode` only to `inferior-python-mode-hook` when wanted.
+9. Install Yasnippet explicitly as Eglot's snippet expander. Do not enable idle snippet expansion or automatic completion. Keep `TAB` and `S-TAB` field movement confined to an active snippet map, behind the completion transient map.
+10. Enable native Hideshow and Which Function in active Tree-sitter modes. Do not add `ts-fold` or a partial cursor-context package.
+11. Retain CSS, HTML, and PHP with two-space indentation through their current public mode variables. While the installed Doom Themes release remains active, apply the smallest theme-scoped Emacs 31 Gnus face-cycle compatibility override; Phase 4 removes the dependency and override together.
 
 ### Verification
 
 - An explicitly started Eglot session supplies diagnostics, Xref, Eldoc, and CAPF.
-- Formatting and code actions run only from their mappings.
+- `eglot-format` formats the active region and otherwise the full buffer; formatting and code actions run only from explicit mappings.
+- Explicit Eglot snippet completion expands through Yasnippet. Completion candidates take `TAB` precedence over snippet fields, and ordinary `TAB` remains unchanged when neither is active.
 - A language with an installed native grammar uses `treesit` without legacy packages.
-- Each Neovim-configured LSP language can start its corresponding Eglot server, and every parser-backed Neovim language has an installed native grammar.
+- Each Neovim-configured LSP language can start its corresponding Eglot server, and all 14 required native grammars load from the pinned provisioner.
+- JavaScript mode loads and fontifies with both `javascript` and `jsdoc`; Markdown selects native mode only with both Markdown grammars and otherwise retains `gfm-mode` or `markdown-mode`.
+- Hideshow folds and Which Function context work in representative native C, Python, and TypeScript buffers without loading legacy Tree-sitter features.
 - A local and TRAMP-remote `run-python` session can evaluate a region and buffer with the native Python commands; its output remains in `*Python*`.
 - Dape loads and exposes its documented explicit launch and attach commands, while visiting a project or source buffer starts no DAP session.
+- CSS, HTML, and PHP modes open with two-space indentation and no Gnus face inheritance cycle or obsolete PHP indentation warning.
 
 ### Success criteria
 
 - Eglot, Flymake, Xref, and native Tree-sitter are the only language-service layers.
+- Code completion and snippet expansion remain explicit.
 - Language-server executables remain external system prerequisites.
 
-## Phase 4: Rebuild project retrieval and direct mappings
+### Outcome
+
+- Activated dormant built-in Eglot with Emacs 31's inferred server contacts plus only the required Python `ty` and Nim `nimlangserver` overrides. Explicit aliases cover region-or-buffer formatting, code actions, rename, combined Eldoc hover/signatures, navigation, and inlay hints; Xref selects ripgrep when available.
+- Installed and verified Dape 0.27.1, PHP mode 20260825.1535, Yasnippet 20250602.1342, and Odin mode at `21c6ff8b49f5eaa2d3b9969feeb08de921f11e92` through the explicit package provisioner. Dape remains restricted to documented `lldb-dap` launch and attach workflows and starts no process during normal startup.
+- Added a staged, fail-fast native grammar provisioner for C, C++, Rust, Lua, Python, TypeScript, TSX, JavaScript, JSDoc, Zig, Nim, Odin, Markdown, and inline Markdown. Every pinned grammar compiled, passed isolated fresh-Emacs validation, and was atomically installed. JavaScript and Markdown mode selection passed their auxiliary-grammar checks.
+- Replaced legacy Tree-sitter and `ts-fold` with native modes, Hideshow folding, and Which Function context. Representative C, Python, TypeScript, and nested Markdown section tests passed without loading legacy parser features.
+- Yasnippet is available only as Eglot's explicit snippet expander. Idle and global `TAB` bindings remain unchanged, completion candidate navigation takes precedence, and active snippet `TAB`, `S-TAB`, `S-<tab>`, and `<backtab>` field navigation passed.
+- Retained two-space CSS, HTML, and PHP indentation using public mode variables. A temporary theme-scoped override fixes the installed Doom Themes 20250920.430 Gnus face cycle until Phase 4 removes that dependency.
+- Two complete static acceptance loads passed. A real explicitly started `ty` session supplied Eglot-managed Flymake, Xref, Eldoc, and CAPF, then shut down; local native Python region and buffer evaluation both produced output in `*Python*`. No configured service autostarted.
+- No TRAMP host was available for a live remote Eglot or Python Comint session. The configuration uses the built-in remote-aware Eglot and Python paths without local-only wrappers; live remote acceptance remains in Phase 7.
+- Startup mean improved from 2.807 s to 2.665 s across the recorded five-run sample.
+
+## Phase 4: Vendor the active theme
+
+Status: pending
+
+### Changes
+
+1. Add `profiles/common/.config/emacs/themes/mig-one-light-theme.el` as a compact standalone Emacs theme derived from the actively used Doom One Light palette and retained workflow faces.
+2. Use direct colors and stable core-face inheritance. Do not vendor Doom's macro DSL, 1,258 generated face settings, unused package compatibility matrix, or Gnus sibling-face cycles.
+3. Include the upstream MIT copyright notice, license text, source commit `556598955c67540eac8811835b327f299ffb58c7`, and attribution URL in the theme file.
+4. Add the repo-owned theme directory to `custom-theme-load-path`, load only `mig-one-light`, and remove `doom-themes`, its compatibility override, and its Neotree and Org helper calls.
+5. Retain a visual bell only through a small repo-owned implementation if the workflow still needs it. Keep `doom-modeline` independent and style its retained faces in the local theme.
+
+### Verification
+
+- With Doom Themes absent from an isolated package directory, startup loads `mig-one-light` twice offline and no Doom Themes feature is present.
+- Representative core, font-lock, region/search, Icomplete, line-number, mode-line, ANSI, compilation, diff, Flymake, Org, Magit, Markdown, Dired, Which Key, Doom Modeline, Evil, Flyspell, and Gptel faces match the active One Light appearance except for documented removals.
+- Loading CSS/Gnus, Org, Magit, and Markdown realizes their faces without an inheritance cycle.
+- A graphical frame and `emacs -nw` receive a focused visual comparison.
+
+### Success criteria
+
+- The active theme is repo-owned and independent of Doom Themes.
+- `init.el` remains readable and does not contain a generated theme dump.
+- The phase has its own startup benchmark and commit so the theme delta is attributable.
+
+## Phase 5: Rebuild project retrieval and direct mappings
 
 Status: pending
 
@@ -485,12 +574,18 @@ Status: pending
 6. Bind native file, buffer, search, Eglot, diagnostic, terminal, and Gptel commands to their stated ownership prefixes without shadowing Python mode's specialized `C-c` bindings.
 7. Bind `my/annotate-region` to visual `SPC r a` and `my/annotate-send-all` to `SPC r s` under the dedicated review prefix; do not add an agent-specific leader map.
 8. When `difft` and the explicitly installed `difftastic.el` package are available, configure `difftastic-bindings-alist` with only the supplied Magit diff, blame, and file-dispatch entries, then enable `difftastic-bindings-mode`. Do not add leader bindings or owned wrappers, and do not enable the package's Dired or Forge entries. Leave Magit unchanged when the executable is absent.
+9. Add the native highlight, mark, jump, selected-buffer grep, type-definition, and unified call-hierarchy mappings in the target contract. Keep Isearch history on `C-s`, `M-p`, and `M-n` rather than adding an owned picker.
+10. Add buffer-local counted Tree-sitter defun motions for `[m`, `]m`, `[M`, and `]M` where the active mode supplies the native parser contract. Record Evil jumps.
+11. Evaluate a revision-pinned `evil-textobj-tree-sitter` only for counted `af`, `if`, `aa`, and `ia`. Adopt it only if the retained grammar and legacy-feature isolation criteria pass; otherwise document the exact residual text-object gap.
 
 ### Verification
 
 - Every leader operation has one canonical mapping.
 - No `SPC` leader exists in insert or Emacs state.
 - Every project search honors the current project root.
+- Evil marks and jumps list populated entries and navigate on `RET`; `multi-occur` finds matches across selected buffers including unsaved edits.
+- `describe-face`, type definition, and unified call hierarchy work through native completion and Eglot, with prefix direction selection where supported.
+- Native Tree-sitter function motions honor counts and record jumps. Any adopted query-backed text objects compile and select correctly without loading legacy `tree-sitter`.
 - With `difft` available, the Magit diff, blame, and file-dispatch contexts expose the supplied Difftastic actions and produce a structural diff. Without `difft`, those actions are absent and normal Magit diffs still work.
 
 ### Success criteria
@@ -499,7 +594,7 @@ Status: pending
 - Search, navigation, and history work through native commands and the minibuffer.
 - Review annotations have their own `SPC r` prefix, and optional Difftastic support is contained within Magit.
 
-## Phase 5: Replace Vterm with Ghostel and persistent sessions
+## Phase 6: Replace Vterm with Ghostel and persistent sessions
 
 Status: pending
 
@@ -540,7 +635,7 @@ Status: pending
 - `zmx` owns persistent session lifecycle and `term-sessions.el` remains a thin native-UI client.
 - Every project task runs through its project-local command catalog and the one Ghostel-backed runner.
 
-## Phase 6: Final cleanup and acceptance
+## Phase 7: Final cleanup and acceptance
 
 Status: pending
 
@@ -550,10 +645,13 @@ Status: pending
 2. Audit every retained package for a named workflow and a one-line purpose.
 3. Keep personal Org, research, prose, Git, and explicit Gptel workflows unless they are genuinely unused.
 4. Validate fresh startup, native completion, Eglot, Dape's dormant explicit configuration, project search, optional Difftastic Magit integration, the project command catalog, Ghostel, Python Comint, generalized REPL dispatch, annotation dispatch, and persistent sessions.
+5. Reconcile `install-packages.el` with every retained third-party package and remove every obsolete package from the provisioner.
+6. Add the two explicit fresh-machine bootstrap commands and prerequisites to the top of `init.el`. Do not add startup-time installation or archive refresh.
 
 ### Acceptance suite
 
 - Batch-load the configuration from a clean Emacs state.
+- From empty temporary package and grammar directories, run the documented package and grammar provisioners, then load `init.el` twice offline.
 - Search for removed symbols: `straight`, `quelpa`, `whisper`, `vterm`, `corfu`, `cape`, `company`, `consult`, `counsel`, `ivy`, `tree-sitter`, `ts-fold`, `undo-tree`, and `general`.
 - Exercise project file finding, `rg` search, Isearch history, explicit CAPF, Eglot navigation, dormant Dape startup, Magit's Difftastic actions when `difft` is installed and ordinary Magit fallback when it is not, the project-local `Compile`, `Test`, `Check`, and `Fix` catalog tasks in separate Ghostel compilation buffers, native Python Comint, selected-region and full-buffer zmx dispatch, queued annotations with an additional prompt sent to a terminal coding agent, optional tmux delivery, and a persistent remote-capable `zmx` session.
 
@@ -561,7 +659,9 @@ Status: pending
 
 - Startup is offline, deterministic, and uses one package manager.
 - No automatic code completion package or automatic completion behavior remains.
+- Yasnippet expands only placeholders returned by explicitly requested completion and never owns an idle global `TAB` binding.
 - Native Emacs primitives own completion, retrieval, projects, LSP integration, diagnostics, and parsing.
+- The repo-owned One Light theme loads without Doom Themes or cyclic face inheritance.
 - Ghostel replaces Vterm completely.
 - Persistent terminals are durable named `zmx` sessions accessed through Ghostel and native Emacs interfaces.
 - Python's Comint workflow and the generalized zmx workflow remain intentionally separate, explicit, and functional locally, remotely, and in `emacs -nw`.
@@ -569,6 +669,7 @@ Status: pending
 - `difftastic.el` integrates structural diffs into Magit only on machines that provide `difft`; its absence does not affect startup or normal Magit workflows.
 - Annotation collection works from any buffer and reaches any terminal coding agent through the same named-session transport as `SPC t r`.
 - Build, test, check, fix, and future project tasks are data in one per-project catalog and execute through the same Ghostel-backed runner.
+- The documented explicit bootstrap recreates every retained package and grammar from empty directories without relying on normal startup.
 
 ## References
 
@@ -582,6 +683,11 @@ Status: pending
 - `profiles/common/.config/emacs/init.el:901`
 - `profiles/common/.config/emacs/init.el:1018`
 - `profiles/common/.config/emacs/init.el:1063`
+- `profiles/common/.config/nvim/init.lua:255`
+- `profiles/common/.config/nvim/init.lua:337`
+- `profiles/common/.config/nvim/init.lua:528`
+- `profiles/common/.config/nvim/init.lua:667`
+- `profiles/common/.config/nvim/init.lua:731`
 - `refs/ghostel/README.org:15`
 - `refs/ghostel/README.org:1740`
 - `refs/emacs-term-sessions/README.org:3`
@@ -603,3 +709,8 @@ Status: pending
 - [Dape](https://github.com/svaante/dape)
 - [Ghostel](https://github.com/dakra/ghostel)
 - [term-sessions.el](https://github.com/ArthurHeymans/emacs-term-sessions)
+- [Yasnippet](https://github.com/joaotavora/yasnippet)
+- [Emacs Tree-sitter source](https://github.com/emacs-mirror/emacs/blob/master/lisp/treesit.el)
+- [evil-textobj-tree-sitter](https://github.com/meain/evil-textobj-tree-sitter)
+- [Doom Themes source used for `mig-one-light`](https://github.com/doomemacs/themes/tree/556598955c67540eac8811835b327f299ffb58c7)
+- [Doom Themes Emacs 31 Gnus face issue](https://github.com/doomemacs/themes/issues/883)

@@ -333,8 +333,12 @@
    (evil-mode 1)
    (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
    (define-key evil-insert-state-map (kbd "C-h") 'evil-delete-backward-char-and-join)
-   (define-key evil-normal-state-map (kbd "[-d") 'flymake-goto-next-error)
-   (define-key evil-normal-state-map (kbd "]-d") 'flymake-goto-prev-error)
+   (define-key evil-normal-state-map (kbd "gd") #'xref-find-definitions)
+   (define-key evil-normal-state-map (kbd "gD") #'eglot-find-declaration)
+   (define-key evil-normal-state-map (kbd "gi") #'eglot-find-implementation)
+   (define-key evil-normal-state-map (kbd "K") #'eldoc-doc-buffer)
+   (define-key evil-normal-state-map (kbd "[d") #'flymake-goto-prev-error)
+   (define-key evil-normal-state-map (kbd "]d") #'flymake-goto-next-error)
    ;; Use visual line motions even outside of visual-line-mode buffers
    ;;(evil-global-set-key 'motion "j" 'evil-next-visual-line)
    ;;(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
@@ -455,24 +459,68 @@
       (vterm-send-return))
     (pop-to-buffer buf)))
 
-;; -- ----------
-;; lsp
-;; (use-package eglot
-;;   :config
-;;   (add-to-list 'eglot-server-programs
-;;              `(swift-mode . ("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/sourcekit-lsp")))
-;;   ;; (add-to-list 'eglot-server-programs
-;;   ;;            `(nim-mode . ("~/")))
-;; )
-;; (use-package lsp-mode)
+;; language services
+(use-package yasnippet
+  :commands yas-minor-mode
+  :config
+  ;; Eglot enables Yasnippet only when it expands a server-provided snippet.
+  ;; Idle TAB remains available to the major mode for ordinary indentation.
+  (keymap-unset yas-minor-mode-map "TAB")
+  (keymap-unset yas-minor-mode-map "<tab>")
+  (keymap-unset yas-minor-mode-map "S-TAB")
+  (keymap-set yas-keymap "S-TAB"
+              (yas-filtered-definition 'yas-prev-field))
+  (add-hook 'yas-keymap-disable-hook
+            (lambda () completion-in-region-mode)))
 
-;; Install Dape explicitly with `package-install'.  The autoload declaration
-;; keeps it dormant until `dape' is invoked.
+(use-package eglot
+  :commands eglot
+  :config
+  ;; Install clangd, rust-analyzer, lua-language-server, ty,
+  ;; typescript-language-server, zls, nimlangserver, and ols outside Emacs.
+  ;; A TRAMP project requires its server executable on the remote host PATH.
+  ;; Emacs 31 already knows the contract servers for C, C++, Rust, Lua,
+  ;; JavaScript, TypeScript, Zig, and Odin.  Prefer ty for Python because
+  ;; Eglot manages one server per buffer.  Ruff can replace ty explicitly,
+  ;; but it is not started as a concurrent second server.
+  (setf (alist-get '(python-mode python-ts-mode)
+                   eglot-server-programs nil nil #'equal)
+        '("ty" "server"))
+  (add-to-list 'eglot-server-programs '(nim-mode . ("nimlangserver")))
+
+  ;; These aliases exist only in an active Eglot buffer.  The owned leader
+  ;; hierarchy is rebuilt separately in Phase 5.
+  (keymap-set eglot-mode-map "C-c e f" #'eglot-format)
+  (keymap-set eglot-mode-map "C-c e a" #'eglot-code-actions)
+  (keymap-set eglot-mode-map "C-c e r" #'eglot-rename)
+  (keymap-set eglot-mode-map "C-c e h" #'eldoc-doc-buffer)
+  (keymap-set eglot-mode-map "C-c e d" #'xref-find-definitions)
+  (keymap-set eglot-mode-map "C-c e R" #'xref-find-references)
+  (keymap-set eglot-mode-map "C-c e D" #'eglot-find-declaration)
+  (keymap-set eglot-mode-map "C-c e i" #'eglot-inlay-hints-mode)
+  (keymap-set eglot-mode-map "C-c e t" #'eglot-find-typeDefinition))
+
+(setq xref-search-program (if (executable-find "rg") 'ripgrep 'grep))
+
+;; Install Dape explicitly with `install-packages.el'.  GUD remains the
+;; default debugger and no Dape hook or global mode is enabled.  Invoke
+;; `M-x dape', select `lldb-dap', and set `:program' to launch a local C,
+;; C++, or Rust binary.  To attach, invoke `M-x dape' with
+;; `lldb-dap :request "attach" :pid PID'.  Both forms work from a local or
+;; TRAMP project, but lldb-dap must be on PATH on the machine where the
+;; project lives.  Homebrew users can install it with `brew install llvm'.
 (use-package dape
-  :commands dape)
+  :commands dape
+  :config
+  (setq dape-configs (list (assq 'lldb-dap dape-configs))))
 
 ;; languages
 (use-package nim-mode)
+(use-package odin-mode
+  :mode ("\\.odin\\'" . odin-mode))
+(use-package php-mode
+  :mode ("\\.php\\'" . php-mode)
+  :hook (php-mode . (lambda () (setq-local php-indent-offset 2))))
 (use-package zig-mode)
 (use-package swift-mode)
 ;; https://justinramel.github.io/2013/09/25/vim-to-emacs-smart-tab/
@@ -513,16 +561,72 @@
 (savehist-mode 1)
 (recentf-mode 1)
 
-;; treesitter
-(use-package tree-sitter
-  :config
-  (global-tree-sitter-mode)
-)
-(use-package tree-sitter-langs)
-(use-package ts-fold
-  :after tree-sitter
-  :config (global-ts-fold-mode)
-)
+;; Install the pinned native grammars separately with
+;; `emacs --batch -l ~/.config/emacs/install-tree-sitter-grammars.el'.
+(require 'treesit)
+(setopt treesit-auto-install-grammar 'never
+        treesit-enabled-modes
+        '(c-ts-mode
+          c++-ts-mode
+          rust-ts-mode
+          lua-ts-mode
+          python-ts-mode
+          js-ts-mode
+          typescript-ts-mode
+          tsx-ts-mode))
+(setopt which-func-modes
+        '(c-ts-mode
+          c++-ts-mode
+          rust-ts-mode
+          lua-ts-mode
+          python-ts-mode
+          js-ts-mode
+          typescript-ts-mode
+          tsx-ts-mode
+          markdown-ts-mode))
+
+(defun my/parser-tools-mode ()
+  "Enable native folding and function context in parser-backed buffers."
+  (when (eq major-mode 'markdown-ts-mode)
+    (setq-local treesit-thing-settings '((markdown (list "section")))
+                hs-treesit-things 'list
+                hs-c-start-regexp nil
+                hs-block-start-regexp nil
+                hs-block-end-regexp nil
+                hs-forward-sexp-function #'treesit-forward-list
+                hs-find-block-beginning-function
+                #'treesit-hs-find-block-beginning
+                hs-find-next-block-function #'treesit-hs-find-next-block
+                hs-looking-at-block-start-predicate
+                #'treesit-hs-looking-at-block-start-p
+                hs-inside-comment-predicate
+                #'treesit-hs-inside-comment-p))
+  (hs-minor-mode 1)
+  (unless which-function-mode
+    (which-function-mode 1)))
+
+(dolist (hook '(c-ts-mode-hook
+                c++-ts-mode-hook
+                rust-ts-mode-hook
+                lua-ts-mode-hook
+                python-ts-mode-hook
+                js-ts-mode-hook
+                typescript-ts-mode-hook
+                tsx-ts-mode-hook
+                markdown-ts-mode-hook))
+  (add-hook hook #'my/parser-tools-mode))
+(add-to-list
+ 'auto-mode-alist
+ `("\\.md\\'" .
+   ,(lambda ()
+      (if (treesit-ready-p '(markdown markdown-inline) t)
+          (progn
+            (require 'markdown-ts-mode)
+            (markdown-ts-mode))
+        (if (string-equal (file-name-nondirectory buffer-file-name)
+                          "README.md")
+            (gfm-mode)
+          (markdown-mode))))))
 
 
 ;; (flyspell-mode) this is a test on comments
@@ -556,6 +660,13 @@
   ;; (load-theme 'doom-opera-light t)
   ;; (load-theme 'doom-flatwhite t)
   (load-theme 'doom-one-light t)
+  ;; Doom Themes 20250920.430 makes this face inherit
+  ;; `gnus-group-news-low', while Emacs 31 makes that face inherit this one.
+  ;; Break the installed package's cycle without loading Gnus during startup.
+  (custom-theme-set-faces
+   'doom-one-light
+   '(gnus-group-news-low-empty
+     ((t (:inherit gnus-group-mail-1-empty :weight normal)))))
 
   ;; Enable flashing mode-line on errors
   (doom-themes-visual-bell-config)
@@ -1109,4 +1220,5 @@ is nil, refile in the current file."
 (setq-default c-basic-offset 4)      ; C/C++/Java
 (setq-default js-indent-level 2)     ; JavaScript
 (setq-default css-indent-offset 2)   ; CSS
+(setq-default sgml-basic-offset 2)   ; HTML
 (setq-default python-indent-offset 4) ; Python
