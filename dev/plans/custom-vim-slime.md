@@ -2,16 +2,16 @@
 
 ## Status
 
-- Plan: complete
+- Plan: proposed
 - Implementation: not started
 - Target: a sufficiently recent Neovim with `vim.system`, current buffer APIs, and current user-command APIs
-- Current implementation reference: `refs/vim-slime`
-- Primary configuration: `tilde/.config/nvim/init.lua`
+- Current implementation reference: the `vim-slime` package locked at `profiles/common/.config/nvim/nvim-pack-lock.json:53`
+- Primary configuration: `profiles/common/.config/nvim/init.lua`
 - Prerequisite plan: `dev/plans/neovim-config-changes.md`, completed through its final acceptance phase
 - Existing test fixture from the prerequisite: `dev/tests/neovim/minimal_init.lua`
 - New modules:
-  - `tilde/.config/nvim/lua/transport/tmux.lua`
-  - `tilde/.config/nvim/lua/repl.lua`
+  - `profiles/common/.config/nvim/lua/transport/tmux.lua`
+  - `profiles/common/.config/nvim/lua/repl.lua`
 - New tests:
   - `dev/tests/neovim/transport/tmux_test.lua`
   - `dev/tests/neovim/repl_test.lua`
@@ -19,7 +19,7 @@
 
 ## Goal
 
-Replace the installed vim-slime plugin with a small owned Lua implementation limited to the tmux and Python/IPython behavior used by this configuration.
+Replace the installed vim-slime plugin with a small owned Lua implementation for tmux REPL parity. It is source-to-selected-tmux input delivery only, not an Emacs-equivalent terminal-session platform.
 
 The replacement must preserve the established high-frequency workflow before vim-slime is removed:
 
@@ -27,7 +27,7 @@ The replacement must preserve the established high-frequency workflow before vim
 - Visual `<C-c><C-c>` sends the exact characterwise, linewise, or blockwise selection.
 - Normal `<C-c>v` configures the tmux target.
 - Python multiline input uses the configured IPython `%cpaste` transaction.
-- Existing `SlimeSend`, `SlimeSend0`, `SlimeSend1`, `SlimeSendCurrentLine`, and `SlimeConfig` callers continue to work after cutover.
+- Compatibility commands `SlimeSend`, `SlimeSend0`, `SlimeSend1`, `SlimeSendCurrentLine`, and `SlimeConfig` remain usable after cutover.
 
 The implementation must follow the infrastructure order in `refs/editor-philosophy.md:1`: use Neovim APIs for extraction and state, `vim.system` for subprocesses, and tmux as the external delivery mechanism. It must not reproduce vim-slime backends or language integrations that this configuration does not use.
 
@@ -41,11 +41,11 @@ No phase in this plan is a prerequisite for, or part of the acceptance criteria 
 
 ## Audited current behavior
 
-The compatibility contract is based on the checked-in vim-slime reference and the active configuration.
+The compatibility contract is based on the locked vim-slime revision and the active configuration. Phase 1 must obtain that exact revision from the lockfile before it records fixtures.
 
 ### Commands and mappings
 
-`refs/vim-slime/plugin/slime.vim:10` defines:
+The locked vim-slime revision defines:
 
 - `:SlimeConfig`: configure the target for the current buffer.
 - `:[range]SlimeSend`: send complete lines in the Ex range.
@@ -53,17 +53,17 @@ The compatibility contract is based on the checked-in vim-slime reference and th
 - `:SlimeSend0 {text}`: send command arguments without adding a carriage return.
 - `:SlimeSendCurrentLine`: send the current line followed by a carriage return.
 
-`refs/vim-slime/plugin/slime.vim:25` installs:
+Its default mappings install:
 
 - Normal `<C-c><C-c>` through the `ip` paragraph text object.
 - Visual `<C-c><C-c>` for the current visual selection.
 - Normal `<C-c>v` for target configuration.
 
-The current configuration also invokes `SlimeSend1` from `tilde/.config/nvim/init.lua:105`. Preserve the compatibility command even if the surrounding LLDB helper is removed during general configuration cleanup.
+The current configuration has no `SlimeSend1` caller. Preserve the compatibility command for manual and external callers after cutover.
 
 ### Extraction and editor state
 
-`refs/vim-slime/autoload/slime.vim:63` handles characterwise, linewise, and blockwise operator regions. It temporarily uses the unnamed register, restores the register value and type, and restores the window view for operator-driven sends.
+The locked vim-slime revision handles characterwise, linewise, and blockwise operator regions. It temporarily uses the unnamed register, restores the register value and type, and restores the window view for operator-driven sends.
 
 The owned implementation must produce the same sent text without mutating registers. Use current buffer and region APIs, normalize reversed visual selections, respect inclusive and exclusive endpoints, and preserve cursor position and window view.
 
@@ -71,20 +71,20 @@ Blockwise extraction is display-column based, not byte-column based. Tabs, combi
 
 ### Target configuration
 
-The active configuration at `tilde/.config/nvim/init.lua:490` uses:
+The active configuration at `profiles/common/.config/nvim/init.lua` uses:
 
 - Backend: tmux only.
 - Socket name: `default`.
 - Target pane: `{last}`.
 - Configuration scope: a buffer-local target copied from defaults and editable through `<C-c>v`.
 
-`refs/vim-slime/autoload/slime/targets/tmux.vim:2` accepts either a named socket or an absolute socket path. A named socket maps to `tmux -L`; an absolute path maps to `tmux -S`. Preserve both forms.
+The locked vim-slime tmux target accepts either a named socket or an absolute socket path. A named socket maps to `tmux -L`; an absolute path maps to `tmux -S`. Preserve both forms.
 
 ### Python and IPython
 
-The active configuration at `tilde/.config/nvim/init.lua:494` enables IPython handling and sets the dispatch pause to 350 milliseconds.
+The active configuration at `profiles/common/.config/nvim/init.lua` enables IPython handling and sets the dispatch pause to 350 milliseconds.
 
-`refs/vim-slime/ftplugin/python/slime.vim:5` transforms Python input as follows:
+The locked vim-slime Python integration transforms input as follows:
 
 - Multiline input with IPython enabled becomes a four-step transaction: `%cpaste -q\n`, a pause, the source body, and `--\n`.
 - Other Python input removes redundant empty lines, dedents by the leading indentation, and inserts suite-terminating blank lines where required, excluding `elif`, `else`, `except`, and `finally` continuations.
@@ -93,7 +93,7 @@ Preserve this observable behavior. Test transformation independently from tmux, 
 
 ### Existing tmux transport
 
-`refs/vim-slime/autoload/slime/targets/tmux.vim:13` cancels tmux copy mode, loads text through stdin, pastes it into the target, and handles a trailing newline. It chunks text at 1000 characters and uses tmux's unnamed paste buffer.
+The locked vim-slime tmux target cancels tmux copy mode, loads text through stdin, pastes it into the target, and handles a trailing newline. It chunks text at 1000 characters and uses tmux's unnamed paste buffer.
 
 The owned implementation does not preserve those internal choices. It must preserve delivered text while improving isolation and failure handling:
 
@@ -106,7 +106,7 @@ The owned implementation does not preserve those internal choices. It must prese
 
 ## Recommended architecture
 
-### `tilde/.config/nvim/lua/transport/tmux.lua`
+### `profiles/common/.config/nvim/lua/transport/tmux.lua`
 
 Own all tmux process and delivery state:
 
@@ -137,7 +137,7 @@ Each target contains `socket_name` and `target_pane`. Each step is one of:
 
 Only a small allowlist of mechanical keys is valid. Arbitrary content must always use paste steps.
 
-### `tilde/.config/nvim/lua/repl.lua`
+### `profiles/common/.config/nvim/lua/repl.lua`
 
 Own REPL semantics:
 
@@ -158,6 +158,7 @@ The final owned implementation uses a canonical REPL namespace plus the establis
 
 | Mapping | Operation |
 | --- | --- |
+| `<leader>tr` | Send the whole buffer in normal mode or the exact selection in visual mode. This is the portable source-to-REPL action. |
 | `<leader>rs` | Send paragraph in normal mode or selection in visual mode |
 | `<leader>rl` | Send current line or count of lines |
 | `<leader>rm` | Start the send operator for a motion or text object |
@@ -166,7 +167,7 @@ The final owned implementation uses a canonical REPL namespace plus the establis
 | `<C-c><C-c>` | High-frequency alias for paragraph or visual selection send |
 | `<C-c>v` | High-frequency alias for target configuration |
 
-All mappings use `vim.keymap.set` with descriptions. The `<leader>r` namespace remains after migration; it is not temporary compatibility scaffolding.
+All mappings use `vim.keymap.set` with descriptions. `<leader>tr` is a direct action, not a prefix. The `<leader>r` namespace remains after migration for Neovim-specific granular REPL operations; it is not temporary compatibility scaffolding.
 
 ## Non-goals
 
@@ -177,6 +178,12 @@ Do not reproduce:
 - vim-slime override hooks, paste-file mode, debug compatibility variables, or third-party `<Plug>` compatibility.
 - automatic terminal creation or REPL process management.
 - a generic backend or asynchronous job framework.
+- named `zmx` session lifecycle, discovery, history, attachment, or persistence.
+- remote session routing, terminal rendering, output parsing, or compilation.
+- source annotations, annotation queues, coding-agent prompts, or agent-specific transport.
+- Emacs Python Comint process management, completion, documentation, or output buffers.
+
+If a shared named-session or annotation workflow is needed later, plan it as a separate subsystem with its own target and lifetime contract. Do not extend `transport.tmux` or `repl.lua` beyond tmux REPL delivery.
 
 Do not add cell-delimiter support in the initial implementation because the active configuration has no cell mapping or delimiter. Add it later only for a named current workflow.
 
@@ -186,8 +193,9 @@ Status: not started
 
 ### Changes
 
-1. Keep `jpalardy/vim-slime` installed and retain the settings at `tilde/.config/nvim/init.lua:490`.
-2. Add headless extraction fixtures for:
+1. Keep `jpalardy/vim-slime` installed and retain the settings in `profiles/common/.config/nvim/init.lua`.
+2. Obtain the exact `vim-slime` source revision recorded in `profiles/common/.config/nvim/nvim-pack-lock.json:53` and use it as the fixture baseline.
+3. Add headless extraction fixtures for:
    - Forward and reversed characterwise selections.
    - Inclusive and exclusive characterwise selection.
    - Linewise selection.
@@ -195,11 +203,11 @@ Status: not started
    - Tabs, combining characters, and multibyte characters in every applicable visual mode.
    - Paragraph selection at the start, middle, and end of a buffer.
    - Ex ranges, counted lines, and operator motions.
-3. Record expected newline behavior for all five compatibility commands.
-4. Add Python fixtures for a single statement, nested suites, blank lines, decorators, and `elif`, `else`, `except`, and `finally` continuations.
-5. Add an integration fixture that captures text sent by the existing vim-slime implementation into a temporary tmux pane. Use the captured bytes as the behavioral baseline where the plugin behavior is intentional.
-6. Verify that sends preserve the unnamed register, its register type, cursor position, and window view.
-7. Record intentional differences from vim-slime before replacement code is written:
+4. Record expected newline behavior for all five compatibility commands.
+5. Add Python fixtures for a single statement, nested suites, blank lines, decorators, and `elif`, `else`, `except`, and `finally` continuations.
+6. Add an integration fixture that captures text sent by the existing vim-slime implementation into a temporary tmux pane. Use the captured bytes as the behavioral baseline where the plugin behavior is intentional.
+7. Verify that sends preserve the unnamed register, its register type, cursor position, and window view.
+8. Record intentional differences from vim-slime before replacement code is written:
    - Named buffers replace the global unnamed tmux buffer.
    - Whole-payload paste replaces 1000-character chunks.
    - Errors become visible instead of being discarded.
@@ -207,7 +215,7 @@ Status: not started
 
 ### Verification
 
-- Run the fixture against the checked-in `refs/vim-slime` implementation.
+- Run the fixture against the vim-slime package revision recorded in the lockfile.
 - Confirm the fixture covers every current mapping, command, configuration value, and Python branch.
 - Confirm every intentional difference is internal or improves failure behavior without changing successfully delivered text.
 
@@ -223,7 +231,7 @@ Status: not started
 
 ### Changes
 
-1. Implement `tilde/.config/nvim/lua/transport/tmux.lua`, loaded as `require('transport.tmux')`, with one public `enqueue(target, steps, callback)` operation.
+1. Implement `profiles/common/.config/nvim/lua/transport/tmux.lua`, loaded as `require('transport.tmux')`, with one public `enqueue(target, steps, callback)` operation.
 2. Accept named sockets as `tmux -L <name>` and absolute socket paths as `tmux -S <path>`.
 3. Resolve target expressions such as `{last}` once per transaction with `tmux ... display-message -p -t <target> '#{pane_id}'`. Reject an empty pane id or subprocess failure before running any delivery step.
 4. Support three validated step types:
@@ -260,7 +268,7 @@ Status: not started
 
 ### Changes
 
-1. Implement `tilde/.config/nvim/lua/repl.lua` with defaults for socket `default`, target `{last}`, IPython enabled, and a 350 millisecond pause.
+1. Implement `profiles/common/.config/nvim/lua/repl.lua` with defaults for socket `default`, target `{last}`, IPython enabled, and a 350 millisecond pause.
 2. Store configured targets buffer-locally. Copy setup defaults on first use and allow `<leader>rc` to edit the current buffer's socket and target.
 3. List panes through structured `tmux list-panes` arguments and present them through `vim.ui.select`. Keep direct text entry for a valid target expression or absolute socket path.
 4. Extract text directly with Neovim region and buffer APIs:
@@ -276,7 +284,7 @@ Status: not started
    - `:ReplSend0`
    - `:ReplSendCurrentLine`
    - `:ReplConfig`
-7. Add the canonical `<leader>r` mappings while vim-slime's `<C-c><C-c>`, `<C-c>v`, and `Slime*` commands remain unchanged.
+7. Add the canonical `<leader>r` mappings while vim-slime's `<C-c><C-c>`, `<C-c>v`, `<leader>tr`, and `Slime*` commands remain unchanged. Keep `<leader>tr` mapped to vim-slime until Phase 5.
 8. Submit all transformed text through `require('transport.tmux')`.
 
 ### Verification
@@ -300,7 +308,7 @@ Status: not started
 
 ### Changes
 
-1. Port the required Python transformation from `refs/vim-slime/ftplugin/python/slime.vim:5` into pure Lua transformation functions in `repl.lua`.
+1. Port the required Python transformation from the locked vim-slime revision into pure Lua transformation functions in `repl.lua`.
 2. For multiline Python with IPython enabled, submit one transport transaction containing:
    - Paste `%cpaste -q\n`.
    - Wait 350 milliseconds.
@@ -337,17 +345,18 @@ Status: not started
    - Normal `<C-c><C-c>` to owned paragraph send.
    - Visual `<C-c><C-c>` to owned visual send.
    - Normal `<C-c>v` to owned target configuration.
-4. Replace temporary command names with compatibility commands:
+4. Rebind normal `<leader>tr` to the owned full-buffer sender and visual `<leader>tr` to the owned visual sender.
+5. Replace temporary command names with compatibility commands:
    - `:[range]SlimeSend`
    - `:SlimeSend1`
    - `:SlimeSend0`
    - `:SlimeSendCurrentLine`
    - `:SlimeConfig`
-5. Update the caller at `tilde/.config/nvim/init.lua:105` to use the owned Lua API directly if the LLDB action remains after general cleanup. Keep compatibility commands for manual and external callers.
-6. Run the complete parity suite with vim-slime still available as an immediate rollback.
-7. Remove `jpalardy/vim-slime` from the `vim.pack` package list only after the owned mappings and commands pass the parity gate.
-8. Remove `g:slime_target`, `g:slime_default_config`, `g:slime_python_ipython`, and `g:slime_dispatch_ipython_pause` after their owned Lua equivalents are active.
-9. Remove temporary `Repl*` commands. Keep the canonical `<leader>r` mappings and high-frequency aliases.
+6. Keep compatibility commands for manual and external callers.
+7. Run the complete parity suite with vim-slime still available as an immediate rollback.
+8. Remove `jpalardy/vim-slime` from the `vim.pack` package list only after the owned mappings and commands pass the parity gate.
+9. Remove `g:slime_target`, `g:slime_default_config`, `g:slime_python_ipython`, and `g:slime_dispatch_ipython_pause` after their owned Lua equivalents are active.
+10. Remove temporary `Repl*` commands. Keep the canonical `<leader>r` mappings, `<leader>tr`, and high-frequency aliases.
 
 ### Verification
 
@@ -391,7 +400,7 @@ Status: not started
 
 - The configuration owns only the tmux REPL behavior it uses.
 - Normal `<C-c><C-c>`, visual `<C-c><C-c>`, and `<C-c>v` preserve the established workflow.
-- The canonical `<leader>r` family exposes the same operations with described mappings.
+- The canonical `<leader>r` family exposes the described Neovim-specific operations, and `<leader>tr` remains the portable full-buffer or visual-selection sender.
 - Required `Slime*` commands remain compatible.
 - Python and IPython delivery preserve current transformations and timing.
 - Every REPL send uses one safe, serialized tmux transport.
@@ -405,15 +414,14 @@ Status: not started
 
 - Editor philosophy and infrastructure preference: `refs/editor-philosophy.md:1`
 - Tmux transport guidance: `refs/editor-philosophy.md:524`
-- Current vim-slime package declaration: `tilde/.config/nvim/init.lua:52`
-- Current `SlimeSend1` caller: `tilde/.config/nvim/init.lua:105`
-- Current tmux and IPython configuration: `tilde/.config/nvim/init.lua:490`
-- vim-slime commands and default mappings: `refs/vim-slime/plugin/slime.vim:10`
-- vim-slime extraction and dispatch: `refs/vim-slime/autoload/slime.vim:63`
-- vim-slime tmux configuration and delivery: `refs/vim-slime/autoload/slime/targets/tmux.vim:2`
-- vim-slime Python and IPython transformation: `refs/vim-slime/ftplugin/python/slime.vim:2`
-- vim-slime configuration precedence: `refs/vim-slime/autoload/slime/config.vim:12`
-- vim-slime bracketed-paste behavior: `refs/vim-slime/autoload/slime/common.vim:54`
+- Current vim-slime package declaration and settings: `profiles/common/.config/nvim/init.lua:137` and `:219`
+- Locked vim-slime source revision: `profiles/common/.config/nvim/nvim-pack-lock.json:53`
+- vim-slime commands and mappings: https://github.com/jpalardy/vim-slime/blob/305b4d81ff4630af5137fdeffb54aa0fef14761b/plugin/slime.vim
+- vim-slime extraction and dispatch: https://github.com/jpalardy/vim-slime/blob/305b4d81ff4630af5137fdeffb54aa0fef14761b/autoload/slime.vim
+- vim-slime tmux delivery: https://github.com/jpalardy/vim-slime/blob/305b4d81ff4630af5137fdeffb54aa0fef14761b/autoload/slime/targets/tmux.vim
+- vim-slime Python and IPython transformation: https://github.com/jpalardy/vim-slime/blob/305b4d81ff4630af5137fdeffb54aa0fef14761b/ftplugin/python/slime.vim
+- vim-slime configuration precedence: https://github.com/jpalardy/vim-slime/blob/305b4d81ff4630af5137fdeffb54aa0fef14761b/autoload/slime/config.vim
+- vim-slime bracketed-paste behavior: https://github.com/jpalardy/vim-slime/blob/305b4d81ff4630af5137fdeffb54aa0fef14761b/autoload/slime/common.vim
 - Main Neovim alignment plan: `dev/plans/neovim-config-changes.md`
 
 ### Neovim and tmux documentation
