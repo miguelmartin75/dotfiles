@@ -278,7 +278,7 @@ vim.api.nvim_create_autocmd("LspDetach", {
 })
 
 -- Install these external language-server executables outside Neovim: rust-analyzer,
--- typescript-language-server, clangd, zls, nimlangserver, lua-language-server, ty, and ols.
+-- typescript-language-server, clangd, zls, nimlangserver, lua-language-server, ty, ruff, and ols.
 local servers = {
     "rust_analyzer",
     "ts_ls",
@@ -287,6 +287,7 @@ local servers = {
     "nim_langserver",
     "lua_ls",
     "ty",
+    "ruff",
     "ols",
 }
 
