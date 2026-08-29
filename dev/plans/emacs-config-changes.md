@@ -105,7 +105,9 @@ There is no separate native public Eglot command for a standalone signature-help
 
 Magit status owns diff, stage, reset, blame, and hunk interactions. Do not recreate Neovim Gitsigns-style direct hunk bindings in the leader map.
 
-### Terminals, REPLs, and annotations
+On machines where `(executable-find "difft")` succeeds, explicitly install `difftastic.el` through `package-vc`, pinned to the reviewed source under `refs/difftastic.el`, and enable `difftastic-bindings-mode`. Configure its public `difftastic-bindings-alist` for Magit contexts only instead of adding owned wrapper commands or leader bindings: `M-d` and `M-c` in the Magit diff transient, `M-RET` in Magit blame, and `M-d` in Magit file dispatch. Do not enable the package's unrelated Dired or Forge bindings. When `difft` is absent, do not install, require, or enable `difftastic.el`; ordinary Magit diffs remain the complete fallback.
+
+### Terminals and REPLs
 
 | Key | Command | States | Purpose |
 | --- | --- | --- | --- |
@@ -117,11 +119,18 @@ Magit status owns diff, stage, reset, blame, and hunk interactions. Do not recre
 | `SPC t c` | `my/project-run-command` | N, V | Select and run a catalogued project task in Ghostel. `Compile` is the default selection. |
 | `SPC t r` | `my/term-sessions-send-region-or-buffer` | N, V | Send the active region, or the full buffer, to a selected named zmx session. |
 | `C-c C-c` | `my/term-sessions-send-region-or-buffer` | V | Alias for the generalized sender when the visual-state override is reliable. |
-| `SPC t a` | `my/annotate-region` | V | Add the selected region to the agent-agnostic annotation queue. |
-| `SPC t A` | `my/annotate-send-all` | N, V | Prompt for an optional request and send all queued annotations to a selected named zmx session. |
 | `SPC t m` | `my/tmux-paste-region-or-buffer` | N, V | Optional explicit delivery to a selected non-Emacs tmux pane. |
 
 `SPC t m` is absent unless the optional tmux adapter is implemented. If `C-c C-c` cannot cleanly override Evil visual state, leave it unchanged and retain `SPC t r` as the sole generalized sender. Python mode's specialized `C-c` commands remain outside this leader contract.
+
+### Review
+
+| Key | Command | States | Purpose |
+| --- | --- | --- | --- |
+| `SPC r a` | `my/annotate-region` | V | Add the selected region to the agent-agnostic annotation queue. |
+| `SPC r s` | `my/annotate-send-all` | N, V | Prompt for an optional request and send all queued annotations to a selected named zmx session. |
+
+The `SPC r` group owns code-review collection and dispatch. Annotation delivery still delegates to the shared terminal-session transport, but its user-facing actions do not live under the terminal prefix.
 
 ### AI
 
@@ -132,7 +141,7 @@ Magit status owns diff, stage, reset, blame, and hunk interactions. Do not recre
 | `SPC a s` | `gptel-send` | N, V | Submit an explicit Gptel request for an in-place response. |
 | `SPC a r` | `gptel-rewrite` | V | Request an explicit rewrite of the selected region. |
 
-The `SPC a` group is only for Gptel. Terminal coding agents use the agent-neutral `SPC t a` and `SPC t A` annotation transport instead.
+The `SPC a` group is only for Gptel. Terminal coding agents use the agent-neutral `SPC r a` and `SPC r s` review workflow instead.
 
 ### Org, research, and help
 
@@ -181,7 +190,7 @@ This configuration has separate explicit routes for source text. Do not introduc
 | --- | --- | --- | --- |
 | Source to native Python | `run-python` starts an Emacs-owned `inferior-python-mode` process. `python-shell-send-region`, `python-shell-send-buffer`, and `python-shell-send-defun` perform Python-aware evaluation. | Output remains in `*Python*`. | Ephemeral local or TRAMP-remote Comint process. This is the only route that supports the built-in Python send commands. |
 | Source to named REPL | `my/term-sessions-send-region-or-buffer` sends the active region, or the full buffer when no region is active, plus one carriage return to an explicitly selected `zmx` session. Bind it to `SPC t r` in normal and visual states and to `C-c C-c` in Evil visual state. | Inspect output in the Ghostel attachment or with `term-sessions-history`; do not copy it into the source automatically. | The generalized vim-slime replacement. `zmx` owns persistence; Ghostel only renders the attached terminal. |
-| Annotation queue to a coding agent | `my/annotate-region` records a selected region from any buffer with its text snapshot, buffer or file identity, line range, major mode, and an annotation. Bind it to visual `SPC t a`. `my/annotate-send-all` accepts an optional additional prompt, formats all queued annotations, and sends the result to an explicitly selected named session. Bind it to `SPC t A`. | Inspect the agent response in its Ghostel attachment; do not scrape it back into an Emacs buffer. | Agent-agnostic terminal transport: the selected zmx session may run Codex or any other coding agent with a text composer. The queue is in memory and clears only after a successful send. |
+| Annotation queue to a coding agent | `my/annotate-region` records a selected region from any buffer with its text snapshot, buffer or file identity, line range, major mode, and an annotation. Bind it to visual `SPC r a`. `my/annotate-send-all` accepts an optional additional prompt, formats all queued annotations, and sends the result to an explicitly selected named session. Bind it to `SPC r s`. | Inspect the agent response in its Ghostel attachment; do not scrape it back into an Emacs buffer. | Agent-agnostic terminal transport: the selected zmx session may run Codex or any other coding agent with a text composer. The queue is in memory and clears only after a successful send. |
 | Source to tmux pane | An optional explicit adapter writes the text with `tmux load-buffer`, pastes it with `tmux paste-buffer`, then sends Return. | No reverse transport. | Only for a deliberately chosen existing pane. It is not a second persistent-session system. |
 | Source to Gptel | Explicit `gptel-send`, `gptel-rewrite`, or an owned compose-region command. | Gptel inserts the result in its conversation or requested target. | Gptel request state only. Never submit a selected region to AI implicitly. |
 
@@ -221,6 +230,7 @@ Use `package.el` and bundled `use-package` only. Install or update packages expl
 | Minibuffer completion | Use vertical Icomplete with `basic`, `partial-completion`, and `flex` styles, including explicit in-buffer CAPF candidates. | Fast native selection for files, buffers, commands, search history, and sessions without automatic code suggestions. [Icomplete documentation](https://www.gnu.org/software/emacs/manual/html_node/emacs/Icomplete.html) |
 | LSP | Use built-in Eglot, started explicitly per project or buffer. | Eglot integrates Xref, Flymake, Eldoc, formatting, and CAPF without a separate LSP framework. [Eglot features](https://www.gnu.org/software/emacs/manual/html_node/eglot/Eglot-Features.html) |
 | DAP | Install and configure Dape, but never start it automatically or make it the default debugger. | Emacs has built-in GUD for GDB, LLDB, and PDB. Dape is an explicit, independently configured DAP client for workflows that need adapter-protocol features. [Dape](https://github.com/svaante/dape) |
+| Structural Git diffs | Optionally install and enable `difftastic.el` only when the `difft` executable is present, using its supplied Magit bindings. | This adds syntax-aware review inside existing Magit transients without making an external tool a startup requirement or duplicating the integration. |
 | Search | Use project.el, ripgrep-backed Xref, Isearch, Occur, Imenu, and native minibuffer completion. | Removes both the Consult and Ivy/Counsel picker stacks. |
 | Parsing | Replace legacy Tree-sitter packages with built-in `treesit`. | Emacs 31 owns parser integration. |
 | Terminal renderer | Replace Vterm with Ghostel and `evil-ghostel`. | Ghostel is the one substantial terminal package, with native PTY rendering and maintained Evil integration. [Ghostel](https://github.com/dakra/ghostel) |
@@ -237,6 +247,7 @@ Use `package.el` and bundled `use-package` only. Install or update packages expl
 
 - `evil`, `evil-collection`, `evil-org`, `evil-surround`, `evil-visualstar`, `evil-numbers`
 - `which-key`, `magit`, `doom-themes`, `doom-modeline`, `olivetti`
+- `difftastic.el`, only on machines with the external `difft` executable, integrated through `difftastic-bindings-mode`
 - Org, Org Roam, bibliography, and prose packages with an active personal workflow
 - `gptel`, only through explicit commands
 - `dape`, installed and configured with documented explicit launch and attach commands, but never started by a mode hook or project visit
@@ -353,12 +364,14 @@ Status: pending
 5. Remove Whisper, its keybinding, and its FFmpeg/audio helpers.
 6. Install Ghostel and `term-sessions.el` explicitly through `package-vc`, pinned to the reviewed sources under `refs/ghostel` and `refs/emacs-term-sessions`.
 7. Install Dape explicitly through `package.el`. Do not start a debug adapter or add a global Dape mode during startup.
+8. Treat `difftastic.el` as a machine capability: when `(executable-find "difft")` succeeds, install it explicitly through `package-vc` from the reviewed `refs/difftastic.el` source. Do not install or load it on machines without `difft`.
 
 ### Verification
 
 - `emacs --batch --eval '(princ emacs-version)'` succeeds.
 - Loading `init.el` performs no network request or package installation.
 - A second startup behaves identically.
+- A machine without `difft` loads the configuration without `difftastic.el` being installed or required.
 
 ### Success criteria
 
@@ -366,6 +379,7 @@ Status: pending
 - Startup is deterministic and offline.
 - No Whisper-related symbol remains.
 - Dape is installed but no debug adapter starts until the user invokes an explicit Dape command.
+- Difftastic support is optional and follows the presence of the external `difft` executable.
 
 ## Phase 2: Replace automatic completion and picker stacks
 
@@ -428,22 +442,25 @@ Status: pending
 
 1. Define one sparse owned leader map and bind it directly through Evil.
 2. Replace Counsel file/buffer/search actions with `project-find-file`, `switch-to-buffer`, `recentf-open-files`, `project-find-regexp`, Occur, Imenu, and Xref.
-3. Add direct Eglot, diagnostics, Magit, Org, and help mappings under their owned prefixes.
+3. Add direct Eglot, diagnostics, Magit, review, Org, and help mappings under their owned prefixes.
 4. Retain Which Key solely for discovering that map.
 5. Resolve duplicate and broken mappings, including `SPC w m` and `cousnel-org-tag`.
 6. Bind native file, buffer, search, Eglot, diagnostic, terminal, and Gptel commands to their stated ownership prefixes without shadowing Python mode's specialized `C-c` bindings.
-7. Bind `my/annotate-region` to visual `SPC t a` and `my/annotate-send-all` to `SPC t A`; do not add an agent-specific leader map.
+7. Bind `my/annotate-region` to visual `SPC r a` and `my/annotate-send-all` to `SPC r s` under the dedicated review prefix; do not add an agent-specific leader map.
+8. When `difft` and the explicitly installed `difftastic.el` package are available, configure `difftastic-bindings-alist` with only the supplied Magit diff, blame, and file-dispatch entries, then enable `difftastic-bindings-mode`. Do not add leader bindings or owned wrappers, and do not enable the package's Dired or Forge entries. Leave Magit unchanged when the executable is absent.
 
 ### Verification
 
 - Every leader operation has one canonical mapping.
 - No `SPC` leader exists in insert or Emacs state.
 - Every project search honors the current project root.
+- With `difft` available, the Magit diff, blame, and file-dispatch contexts expose the supplied Difftastic actions and produce a structural diff. Without `difft`, those actions are absent and normal Magit diffs still work.
 
 ### Success criteria
 
 - No removed picker command is referenced.
 - Search, navigation, and history work through native commands and the minibuffer.
+- Review annotations have their own `SPC r` prefix, and optional Difftastic support is contained within Magit.
 
 ## Phase 5: Replace Vterm with Ghostel and persistent sessions
 
@@ -459,7 +476,7 @@ Status: pending
 6. Bind `ghostel-project`, `term-sessions-open`, `term-sessions-list`, `term-sessions-history`, and optionally `term-sessions-store-org-link`.
 7. Add `my/term-sessions-send-text` as the one owned primitive for selecting a named session and delivering text through public `term-sessions.el` APIs. It appends one carriage return and has no knowledge of source-buffer, annotation, or agent details.
 8. Add `my/term-sessions-send-region-or-buffer`, which extracts the active region or full buffer and delegates to `my/term-sessions-send-text`. Bind it to `SPC t r` in normal and visual states, and bind `C-c C-c` to the same command in Evil visual state when that override is reliable. Do not inspect Ghostel buffers or call Ghostel-private send functions.
-9. Add `my/annotate-region`, which works in any buffer with an active region and queues a text snapshot, buffer or file identity, line range, major mode, and minibuffer annotation. Bind it to visual `SPC t a`. Add `my/annotate-send-all`, which prompts for an optional overall request, formats the queued annotations as an agent-neutral Markdown prompt, delegates to `my/term-sessions-send-text`, and clears the queue only after a successful send. Bind it to `SPC t A`. Do not add Codex-, Gptel-, or other agent-specific transport code.
+9. Add `my/annotate-region`, which works in any buffer with an active region and queues a text snapshot, buffer or file identity, line range, major mode, and minibuffer annotation. Bind it to visual `SPC r a`. Add `my/annotate-send-all`, which prompts for an optional overall request, formats the queued annotations as an agent-neutral Markdown prompt, delegates to `my/term-sessions-send-text`, and clears the queue only after a successful send. Bind it to `SPC r s`. Do not add Codex-, Gptel-, or other agent-specific transport code.
 10. Add explicit Gptel compose-region and rewrite commands under `SPC a`; ensure neither submits automatically. Retain `gptel-send` as the explicit in-place response command.
 11. Add an optional `my/tmux-paste-region-or-buffer` only if dispatch to existing tmux panes remains required. It must prompt for a non-Emacs pane, use `load-buffer` followed by `paste-buffer`, then send Return. Do not use `tmux send-keys` for arbitrary multiline source text.
 12. Add the project-local `my/project-commands` catalog and its one owned runner, `my/project-run-command`. Require `Compile` and `Test` entries from every project; seed `Check` with `./run.py check` and `Fix` with `./run.py check --fix`, allowing project overrides and additional labels. The runner must use native completion, default to `Compile`, run at the local or TRAMP project root, create a distinct Ghostel compilation buffer for each label, and delegate execution to `ghostel-compile`. Bind it to `SPC t c`.
@@ -495,13 +512,13 @@ Status: pending
 1. Remove dead declarations, commented replacement systems, and all references to removed packages.
 2. Audit every retained package for a named workflow and a one-line purpose.
 3. Keep personal Org, research, prose, Git, and explicit Gptel workflows unless they are genuinely unused.
-4. Validate fresh startup, native completion, Eglot, Dape's dormant explicit configuration, project search, the project command catalog, Ghostel, Python Comint, generalized REPL dispatch, annotation dispatch, and persistent sessions.
+4. Validate fresh startup, native completion, Eglot, Dape's dormant explicit configuration, project search, optional Difftastic Magit integration, the project command catalog, Ghostel, Python Comint, generalized REPL dispatch, annotation dispatch, and persistent sessions.
 
 ### Acceptance suite
 
 - Batch-load the configuration from a clean Emacs state.
 - Search for removed symbols: `straight`, `quelpa`, `whisper`, `vterm`, `corfu`, `cape`, `company`, `consult`, `counsel`, `ivy`, `tree-sitter`, `ts-fold`, `undo-tree`, and `general`.
-- Exercise project file finding, `rg` search, Isearch history, explicit CAPF, Eglot navigation, dormant Dape startup, the project-local `Compile`, `Test`, `Check`, and `Fix` catalog tasks in separate Ghostel compilation buffers, native Python Comint, selected-region and full-buffer zmx dispatch, queued annotations with an additional prompt sent to a terminal coding agent, optional tmux delivery, and a persistent remote-capable `zmx` session.
+- Exercise project file finding, `rg` search, Isearch history, explicit CAPF, Eglot navigation, dormant Dape startup, Magit's Difftastic actions when `difft` is installed and ordinary Magit fallback when it is not, the project-local `Compile`, `Test`, `Check`, and `Fix` catalog tasks in separate Ghostel compilation buffers, native Python Comint, selected-region and full-buffer zmx dispatch, queued annotations with an additional prompt sent to a terminal coding agent, optional tmux delivery, and a persistent remote-capable `zmx` session.
 
 ### Overall success criteria
 
@@ -512,6 +529,7 @@ Status: pending
 - Persistent terminals are durable named `zmx` sessions accessed through Ghostel and native Emacs interfaces.
 - Python's Comint workflow and the generalized zmx workflow remain intentionally separate, explicit, and functional locally, remotely, and in `emacs -nw`.
 - Dape is installed, configured, and documented without becoming an automatic or default debugger.
+- `difftastic.el` integrates structural diffs into Magit only on machines that provide `difft`; its absence does not affect startup or normal Magit workflows.
 - Annotation collection works from any buffer and reaches any terminal coding agent through the same named-session transport as `SPC t r`.
 - Build, test, check, fix, and future project tasks are data in one per-project catalog and execute through the same Ghostel-backed runner.
 
@@ -533,6 +551,8 @@ Status: pending
 - `refs/emacs-term-sessions/term-sessions-frontends.el:60`
 - `refs/emacs-term-sessions/term-sessions-actions.el:389`
 - `refs/emacs-term-sessions/term-sessions-zmx.el:402`
+- `refs/difftastic.el/README.org:147`
+- `refs/difftastic.el/difftastic-bindings.el:184`
 
 ### Upstream documentation
 
