@@ -22,7 +22,7 @@ The result uses no completion frontend or completion-source package. Native CAPF
 
 Install one sparse `SPC` leader map in Evil normal and visual states only. Do not make `SPC` a leader in insert or Emacs states. `N` means normal state, `V` means visual state, and `I` means insert state. A mapping marked `N, V` is present in both states; a visual command must still have the region or selection its command requires.
 
-Use direct native commands where they exist. New owned commands are limited to the operations that need data assembly or a missing native interaction: `my/project-find-regexp-at-point`, `my/term-sessions-send-region-or-buffer`, `my/annotate-region`, `my/annotate-send-all`, `my/gptel-compose-region`, and the optional `my/tmux-paste-region-or-buffer`. Do not create a compatibility wrapper merely to rename a native command.
+Use direct native commands where they exist. New owned commands are limited to the operations that need data assembly or a missing native interaction: `my/project-find-regexp-at-point`, `my/project-run-command`, `my/term-sessions-send-region-or-buffer`, `my/annotate-region`, `my/annotate-send-all`, `my/gptel-compose-region`, and the optional `my/tmux-paste-region-or-buffer`. Do not create a compatibility wrapper merely to rename a native command.
 
 ### Files and buffers
 
@@ -114,7 +114,7 @@ Magit status owns diff, stage, reset, blame, and hunk interactions. Do not recre
 | `SPC t l` | `term-sessions-list` | N, V | List and manage known terminal sessions. |
 | `SPC t h` | `term-sessions-history` | N, V | Show history for a selected terminal session. |
 | `SPC t o` | `term-sessions-store-org-link` | N, V | Store an Org link for a selected terminal session. |
-| `SPC t c` | `ghostel-compile` | N, V | Run compilation explicitly in Ghostel. |
+| `SPC t c` | `my/project-run-command` | N, V | Select and run a catalogued project task in Ghostel. `Compile` is the default selection. |
 | `SPC t r` | `my/term-sessions-send-region-or-buffer` | N, V | Send the active region, or the full buffer, to a selected named zmx session. |
 | `C-c C-c` | `my/term-sessions-send-region-or-buffer` | V | Alias for the generalized sender when the visual-state override is reliable. |
 | `SPC t a` | `my/annotate-region` | V | Add the selected region to the agent-agnostic annotation queue. |
@@ -227,7 +227,7 @@ Use `package.el` and bundled `use-package` only. Install or update packages expl
 | Persistent terminals | Configure `term-sessions.el` with `term-sessions-preferred-frontend` set to `ghostel`; use `zmx` as the session owner. | Sessions survive buffer kills, Emacs restarts, and SSH drops while the remote host and its zmx runtime state remain available. [term-sessions](https://github.com/ArthurHeymans/emacs-term-sessions) |
 | Terminal selection | Bind `term-sessions-open` and `term-sessions-list`; do not bind Consult integrations. | They already use `completing-read` and `tabulated-list-mode`: `refs/emacs-term-sessions/term-sessions-zmx.el:333`, `refs/emacs-term-sessions/term-sessions-list.el:66`. |
 | REPL dispatch | Use named `zmx` sessions as the generalized text target; retain Python's native Comint route as an optional specialized target; make tmux delivery opt-in. Route annotation queues for any terminal coding agent through the same zmx primitive. | This keeps one durable terminal protocol while preserving Python-mode semantics where they materially help. |
-| Compilation | Retain explicit `ghostel-compile`; do not enable `ghostel-compile-global-mode`. | It provides TTY-aware compilation without globally advising every compilation caller. |
+| Project tasks | Keep a per-project command catalog. One owned command selects a task and invokes `ghostel-compile`; do not enable `ghostel-compile-global-mode`. | This provides explicit TTY-aware compilation without global advice or a separate Emacs implementation for each build, test, check, or fix task. |
 | Mappings | Replace General with one owned sparse leader map and direct Evil key definitions. Retain Which Key. | `SPC` must not be a leader in insert or Emacs states. |
 | AI and transcription | Retain explicit Gptel commands and agent-agnostic terminal annotation dispatch; remove Whisper and audio-device helpers. | AI remains deliberate; transcription is unwanted. |
 
@@ -303,6 +303,23 @@ Retain or configure the following Emacs modes and native Tree-sitter grammars to
 - Ghostel is the only `term-sessions.el` frontend. Its adapter preserves title and directory tracking at `refs/emacs-term-sessions/term-sessions-frontends.el:60`.
 - `zmx` must be installed locally and on every remote host where sessions are controlled.
 - Org `term-session` links and Babel blocks preserve session identity instead of creating an Emacs-side session store.
+
+## Project command catalog contract
+
+Keep one command catalog per project. The catalog is project data, not a new Elisp command for every task: define `my/project-commands` as a simple, validated directory-local alist of task label and shell command. Store it in the repository's `.dir-locals.el` or another reviewed project-local configuration file. The catalog is always resolved from `project-current`, so the same catalog runs in a local project or at its TRAMP remote root.
+
+`my/project-run-command` is the only owned task runner. It presents the current project's catalog through native `completing-read`, defaults to `Compile`, binds `default-directory` to the project root, then passes the selected shell command to `ghostel-compile`. It gives each task label a distinct Ghostel compilation buffer, allowing an in-progress test and check to coexist. `ghostel-recompile` reruns the selected task unchanged.
+
+Every project begins with these catalog roles, in this order:
+
+| Task | Default command | Catalog rule |
+| --- | --- | --- |
+| `Compile` | No universal default | The project supplies its exact build command. |
+| `Test` | No universal default | The project supplies its exact test-suite command. |
+| `Check` | `./run.py check` | Performs additional static analysis for compiled code. A project may override the command. |
+| `Fix` | `./run.py check --fix` | Applies the available fixes from the check workflow. A project may override the command. |
+
+Projects may add any further labels, such as `Lint`, `Typecheck`, `Docs`, or a focused test command, without adding a keybinding, new runner, or a Ghostel integration. Do not infer build or test commands from the major mode. Do not enable `ghostel-compile-global-mode`, and do not use a mutable global `compile-command` as the project catalog.
 
 ## Remote development contract
 
@@ -445,8 +462,9 @@ Status: pending
 9. Add `my/annotate-region`, which works in any buffer with an active region and queues a text snapshot, buffer or file identity, line range, major mode, and minibuffer annotation. Bind it to visual `SPC t a`. Add `my/annotate-send-all`, which prompts for an optional overall request, formats the queued annotations as an agent-neutral Markdown prompt, delegates to `my/term-sessions-send-text`, and clears the queue only after a successful send. Bind it to `SPC t A`. Do not add Codex-, Gptel-, or other agent-specific transport code.
 10. Add explicit Gptel compose-region and rewrite commands under `SPC a`; ensure neither submits automatically. Retain `gptel-send` as the explicit in-place response command.
 11. Add an optional `my/tmux-paste-region-or-buffer` only if dispatch to existing tmux panes remains required. It must prompt for a non-Emacs pane, use `load-buffer` followed by `paste-buffer`, then send Return. Do not use `tmux send-keys` for arbitrary multiline source text.
-12. Retain `ghostel-compile` as an explicit command. Do not enable its global advice.
-13. Do not install or bind `consult-ghostel` or `term-sessions-consult-session`.
+12. Add the project-local `my/project-commands` catalog and its one owned runner, `my/project-run-command`. Require `Compile` and `Test` entries from every project; seed `Check` with `./run.py check` and `Fix` with `./run.py check --fix`, allowing project overrides and additional labels. The runner must use native completion, default to `Compile`, run at the local or TRAMP project root, create a distinct Ghostel compilation buffer for each label, and delegate execution to `ghostel-compile`. Bind it to `SPC t c`.
+13. Retain `ghostel-compile` and `ghostel-recompile` as explicit implementation commands. Do not enable Ghostel's global compilation advice or use global `compile-command` as the catalog.
+14. Do not install or bind `consult-ghostel` or `term-sessions-consult-session`.
 
 ### Verification
 
@@ -458,6 +476,7 @@ Status: pending
 - Where the visual-state override is reliable, `C-c C-c` and `SPC t r` invoke the same generalized sender for a visual selection; Python's native `C-c C-c` buffer evaluation remains available outside visual state. Otherwise, verify that `SPC t r` works and leave `C-c C-c` unchanged.
 - Annotations from multiple local or TRAMP buffers form one queue. `my/annotate-send-all` accepts an additional prompt and produces the same session-selection interaction as `SPC t r` when targeting a terminal coding agent.
 - In `emacs -nw` inside tmux, zmx delivery and the optional tmux pane adapter work without targeting the pane running Emacs.
+- `SPC t c` presents the active project's catalog in this order: `Compile`, `Test`, `Check`, and `Fix`; accepting its default runs `Compile`. `Check` and `Fix` use `./run.py check` and `./run.py check --fix` unless the project overrides them. Two selected tasks can remain visible in separate Ghostel compilation buffers.
 - Remote project search, Eglot CAPF/Flymake/Xref, Ghostel compilation, and remote zmx reconnection work after a deliberate SSH disconnect.
 
 ### Success criteria
@@ -465,6 +484,7 @@ Status: pending
 - Vterm is absent.
 - Ghostel is the only interactive terminal renderer.
 - `zmx` owns persistent session lifecycle and `term-sessions.el` remains a thin native-UI client.
+- Every project task runs through its project-local command catalog and the one Ghostel-backed runner.
 
 ## Phase 6: Final cleanup and acceptance
 
@@ -475,13 +495,13 @@ Status: pending
 1. Remove dead declarations, commented replacement systems, and all references to removed packages.
 2. Audit every retained package for a named workflow and a one-line purpose.
 3. Keep personal Org, research, prose, Git, and explicit Gptel workflows unless they are genuinely unused.
-4. Validate fresh startup, native completion, Eglot, Dape's dormant explicit configuration, project search, Ghostel, Python Comint, generalized REPL dispatch, annotation dispatch, and persistent sessions.
+4. Validate fresh startup, native completion, Eglot, Dape's dormant explicit configuration, project search, the project command catalog, Ghostel, Python Comint, generalized REPL dispatch, annotation dispatch, and persistent sessions.
 
 ### Acceptance suite
 
 - Batch-load the configuration from a clean Emacs state.
 - Search for removed symbols: `straight`, `quelpa`, `whisper`, `vterm`, `corfu`, `cape`, `company`, `consult`, `counsel`, `ivy`, `tree-sitter`, `ts-fold`, `undo-tree`, and `general`.
-- Exercise project file finding, `rg` search, Isearch history, explicit CAPF, Eglot navigation, dormant Dape startup, Ghostel compilation, native Python Comint, selected-region and full-buffer zmx dispatch, queued annotations with an additional prompt sent to a terminal coding agent, optional tmux delivery, and a persistent remote-capable `zmx` session.
+- Exercise project file finding, `rg` search, Isearch history, explicit CAPF, Eglot navigation, dormant Dape startup, the project-local `Compile`, `Test`, `Check`, and `Fix` catalog tasks in separate Ghostel compilation buffers, native Python Comint, selected-region and full-buffer zmx dispatch, queued annotations with an additional prompt sent to a terminal coding agent, optional tmux delivery, and a persistent remote-capable `zmx` session.
 
 ### Overall success criteria
 
@@ -493,6 +513,7 @@ Status: pending
 - Python's Comint workflow and the generalized zmx workflow remain intentionally separate, explicit, and functional locally, remotely, and in `emacs -nw`.
 - Dape is installed, configured, and documented without becoming an automatic or default debugger.
 - Annotation collection works from any buffer and reaches any terminal coding agent through the same named-session transport as `SPC t r`.
+- Build, test, check, fix, and future project tasks are data in one per-project catalog and execute through the same Ghostel-backed runner.
 
 ## References
 
