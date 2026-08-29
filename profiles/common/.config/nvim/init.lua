@@ -162,8 +162,14 @@ Snacks.setup({
         layout = {
             preview = "main",
             preset = "ivy",
-            position = "bottom",
+            layout = {
+                position = "bottom",
+            },
         },
+        config = function(opts)
+            opts.layout.preset = "ivy"
+            return opts
+        end,
     },
     zen = {},
 })
@@ -546,13 +552,13 @@ vim.keymap.set("n", "]d", function()
     vim.diagnostic.jump({ count = 1 })
 end, { desc = "Next diagnostic" })
 vim.keymap.set("n", "gd", function()
-    vim.lsp.buf.definition()
+    Snacks.picker.lsp_definitions()
 end, { desc = "Go to definition" })
 vim.keymap.set("n", "gD", function()
-    vim.lsp.buf.declaration()
+    Snacks.picker.lsp_declarations()
 end, { desc = "Go to declaration" })
 vim.keymap.set("n", "gi", function()
-    vim.lsp.buf.implementation()
+    Snacks.picker.lsp_implementations()
 end, { desc = "Go to implementation" })
 vim.keymap.set("n", "K", function()
     vim.lsp.buf.hover()
@@ -651,7 +657,9 @@ end, { desc = "Search history" })
 vim.keymap.set("n", "<leader>?", function()
     Snacks.picker.search_history()
 end, { desc = "Search history" })
-vim.keymap.set("n", "<leader>sH", "<cmd>set hls!<cr>", { desc = "Toggle search highlight" })
+vim.keymap.set("n", "<leader>sH", function()
+    Snacks.picker.highlights()
+end, { desc = "Highlights" })
 vim.keymap.set("n", "<leader>sm", function()
     Snacks.picker.marks()
 end, { desc = "Marks" })
@@ -674,35 +682,22 @@ vim.keymap.set("n", "<leader>sc", function()
     Snacks.picker.commands()
 end, { desc = "Commands" })
 vim.keymap.set("n", "<leader>sd", function()
-    vim.lsp.buf.definition()
+    Snacks.picker.lsp_definitions()
 end, { desc = "Go to definition" })
 vim.keymap.set("n", "<leader>sD", function()
-    vim.lsp.buf.declaration()
+    Snacks.picker.lsp_declarations()
 end, { desc = "Go to declaration" })
 vim.keymap.set("n", "<leader>sb", function()
     Snacks.picker.grep_buffers()
 end, { desc = "Grep buffers" })
 vim.keymap.set("n", "<leader>sw", function()
-    Snacks.picker.grep_word()
+    Snacks.picker.grep_word({ cwd = global_cwd() })
 end, { desc = "Grep word" })
 vim.keymap.set("n", "<leader>sn", function()
     vim.api.nvim_put({ os.date("%m/%d/%y %H:%M") }, "l", true, true)
 end, { desc = "Insert timestamp" })
 vim.keymap.set("n", "<leader>sg", function()
-    vim.ui.input({ prompt = "Grep pattern: " }, function(pattern)
-        if pattern and pattern ~= "" then
-            vim.cmd({
-                cmd = "grep",
-                bang = true,
-                args = { "--", vim.fn.shellescape(pattern), vim.fn.shellescape(global_cwd()) },
-            })
-            if #vim.fn.getqflist() > 0 then
-                vim.cmd.copen()
-            else
-                vim.notify("No matches for: " .. pattern)
-            end
-        end
-    end)
+    Snacks.picker.grep({ cwd = global_cwd() })
 end, { desc = "Grep project" })
 vim.keymap.set("n", "<leader>sr", function()
     Snacks.picker.lsp_references()
@@ -779,44 +774,5 @@ vim.keymap.set("n", "<leader>hl", function()
     vim.wo.relativenumber = not vim.wo.relativenumber
 end, { desc = "Toggle line numbers" })
 vim.keymap.set("n", "<leader>hk", function()
-    local mappings = {}
-
-    for _, mode in ipairs({ "n", "x", "i", "t" }) do
-        for _, map in ipairs(vim.api.nvim_get_keymap(mode)) do
-            if map.desc and map.desc ~= "" then
-                table.insert(mappings, {
-                    desc = map.desc,
-                    lhs = map.lhs,
-                    mode = mode,
-                    scope = "global",
-                })
-            end
-        end
-
-        for _, map in ipairs(vim.api.nvim_buf_get_keymap(0, mode)) do
-            if map.desc and map.desc ~= "" then
-                table.insert(mappings, {
-                    desc = map.desc,
-                    lhs = map.lhs,
-                    mode = mode,
-                    scope = "buffer",
-                })
-            end
-        end
-    end
-
-    table.sort(mappings, function(left, right)
-        return left.lhs < right.lhs
-    end)
-
-    vim.ui.select(mappings, {
-        prompt = "Keymap",
-        format_item = function(item)
-            return item.mode .. " " .. item.lhs .. " (" .. item.scope .. "): " .. item.desc
-        end,
-    }, function(item)
-        if item then
-            vim.notify(item.mode .. " " .. item.lhs .. " (" .. item.scope .. "): " .. item.desc)
-        end
-    end)
+    Snacks.picker.keymaps()
 end, { desc = "Search keymaps" })
