@@ -2,12 +2,29 @@
 
 ## Status
 
-- Plan: proposed
-- Implementation: not started
+- Plan: in progress
+- Implementation: Phase 1 complete; Phase 2 pending
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
-- Prerequisite: repair the current Emacs 31.0.50 installation. It cannot start because `libjpeg.9.dylib` is missing.
+- Prerequisite: satisfied on 2026-08-29. `emacs --batch --eval '(princ emacs-version)'` prints `31.1`.
+
+## Startup performance
+
+Measure each accepted phase with Hyperfine using one warmup and five timed runs of:
+
+```sh
+emacs -Q --batch -l profiles/common/.config/emacs/init.el --eval '(princ "CONFIG_LOADED\\n")'
+```
+
+Times are wall-clock process durations. Deltas compare each row's mean with the immediately preceding row.
+
+| State | Revision | Mean | Median | Range | Delta |
+| --- | --- | --- | --- | --- | --- |
+| Before Phase 1 | `fbee7f8` | 8.130 s +/- 1.911 s | 7.379 s | 7.160-11.543 s | baseline |
+| After Phase 1 | Phase 1 commit | 3.966 s +/- 0.093 s | 4.002 s | 3.817-4.042 s | -4.164 s (-51.2%) |
+
+The baseline completed with exit status 0 on every measured run, but logged a non-fatal `use-package` error because `corfu-map` was unbound.
 
 ## Goal
 
@@ -353,7 +370,7 @@ Local Emacs
 
 ## Phase 1: Establish a native, offline startup baseline
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -380,6 +397,15 @@ Status: pending
 - No Whisper-related symbol remains.
 - Dape is installed but no debug adapter starts until the user invokes an explicit Dape command.
 - Difftastic support is optional and follows the presence of the external `difft` executable.
+
+### Outcome
+
+- `profiles/common/.config/emacs/init.el` uses bundled `use-package` through `package.el` without startup refreshes, installs, `:ensure`, Straight, or Quelpa.
+- `profiles/common/.config/emacs/install-packages.el` is the explicit provisioner. It installs Dape from GNU ELPA and passes reviewed revisions through the native `package-vc-install` `REV` argument for Ghostel, `term-sessions.el`, and Difftastic when `difft` is present.
+- Installed and verified Ghostel at `7c4cbd9f487b545c3d0452ab749f65eaa3c18b7e`, `term-sessions.el` at `0815dbea006128df1d61e9d29e5a8ada53b349c1`, Difftastic at `f94076985ba46bf629abc9615c9b1fefcc3390ef`, and Dape 0.27.1.
+- Two guarded startup loads completed with package installation, archive refresh, VC installation, and synchronous URL retrieval replaced by errors. A simulated machine without `difft` selected and loaded no Difftastic feature.
+- Dape, Ghostel, `term-sessions.el`, and Difftastic remained unloaded after normal startup. Ghostel's native module remains an explicit first-use installation for Phase 5.
+- Startup mean improved from 8.130 s to 3.966 s across the recorded five-run samples.
 
 ## Phase 2: Replace automatic completion and picker stacks
 

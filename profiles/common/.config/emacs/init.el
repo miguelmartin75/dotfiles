@@ -4,42 +4,7 @@
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
                          ("elpa" . "https://elpa.gnu.org/packages/")))
 (package-initialize)
-
-(unless package-archive-contents (package-refresh-contents))
-
-;; Initialize use-package on non-Linux platforms
-(unless (package-installed-p 'use-package) (package-install 'use-package))
-
-
-
-(defvar bootstrap-version)
-(let ((bootstrap-file
-       (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
-      (bootstrap-version 6))
-  (unless (file-exists-p bootstrap-file)
-    (with-current-buffer
-        (url-retrieve-synchronously
-         "https://raw.githubusercontent.com/radian-software/straight.el/develop/install.el"
-         'silent 'inhibit-cookies)
-      (goto-char (point-max))
-      (eval-print-last-sexp)))
-  (load bootstrap-file nil 'nomessage))
-
-(straight-use-package 'use-package)
 (require 'use-package)
-(setq use-package-always-ensure t)
-
-(unless (package-installed-p 'quelpa)
-  (with-temp-buffer
-    (url-insert-file-contents "https://raw.githubusercontent.com/quelpa/quelpa/master/quelpa.el")
-    (eval-buffer)
-    (quelpa-self-upgrade)))
-
-(quelpa
- '(quelpa-use-package
-   :fetcher git
-   :url "https://github.com/quelpa/quelpa-use-package.git"))
-(require 'quelpa-use-package)
 
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
@@ -64,13 +29,6 @@
      "37768a79b479684b0756dec7c0fc7652082910c37d8863c35b702db3f16000f8"
      default))
  '(org-agenda-files '("/Users/migmartin/org/journal.org"))
- '(package-selected-packages
-   '(nim-mode org-autolist which-key vterm vi-tilde-fringe use-package
-              undo-tree org-ref org-fragtog olivetti nord-theme
-              lsp-ivy ivy-rich ivy-bibtex helpful gscholar-bibtex
-              general flycheck evil-org evil-collection
-              evil-better-visual-line dap-mode counsel company
-              command-log-mode))
  '(tramp-completion-reread-directory-timeout nil)
  '(tramp-default-method "sshx")
  '(tramp-use-ssh-controlmaster-options nil)
@@ -120,17 +78,13 @@
   :config
   (load-env-vars "~/.secrets")
   (load-env-vars "~/.zshrc")
-  ;; (setenv "TERM" "xterm-256")
-  (setenv "TERM" "")
 )
 
 (use-package websocket)
 (use-package simple-httpd)
 ;;(use-package org-super-agenda)
 ;;(use-package org-ql)
-;; (use-package org-ql
-;;   :quelpa (org-ql :fetcher github :repo "alphapapa/org-ql"
-;;             :files (:defaults (:exclude "helm-org-ql.el"))))
+;; (use-package org-ql)
 
 
 (setq config-path "~/.config/emacs/init.el")
@@ -150,12 +104,7 @@
 
 
 
-(use-package magit :ensure t)
-
-;; (package-install 'magit)
-;; (package-install 'magit-section)
-;; (package-install 'transient)
-;; (package-install 'with-editor)
+(use-package magit)
 (setq server-kill-new-buffers t)
 
 (use-package org
@@ -289,7 +238,6 @@
 (require 'org-tempo)
 
 (use-package org-fragtog
-    :ensure t
     :config
     (add-hook 'org-mode-hook 'org-fragtog-mode)
     (setq org-odt-pixels-per-inch 192.0)
@@ -312,84 +260,9 @@
   )
 )
 (use-package inline-diff
-  :straight (:repo "https://code.tecosaur.net/tec/inline-diff")
   :after gptel-rewrite) ;or use :defer
 
-
-(use-package whisper
-  :load-path "~/repos/whisper.el"
-  :bind ("C-H-r" . whisper-run)
-  :config
-  (setq whisper-install-directory "~/repos/"
-        whisper-model "large-v3-turbo"
-        whisper-language "en"
-        whisper-translate nil
-        whisper-use-threads (/ (num-processors) 1)))
-
-(defun rk/get-ffmpeg-device ()
-  "Gets the list of devices available to ffmpeg.
-The output of the ffmpeg command is pretty messy, e.g.
-  [AVFoundation indev @ 0x7f867f004580] AVFoundation video devices:
-  [AVFoundation indev @ 0x7f867f004580] [0] FaceTime HD Camera (Built-in)
-  [AVFoundation indev @ 0x7f867f004580] AVFoundation audio devices:
-  [AVFoundation indev @ 0x7f867f004580] [0] Cam Link 4K
-  [AVFoundation indev @ 0x7f867f004580] [1] MacBook Pro Microphone
-so we need to parse it to get the list of devices.
-The return value contains two lists, one for video devices and one for audio devices.
-Each list contains a list of cons cells, where the car is the device number and the cdr is the device name."
-  (unless (string-equal system-type "darwin")
-    (error "This function is currently only supported on macOS"))
-
-  (let ((lines (string-split (shell-command-to-string "ffmpeg -list_devices true -f avfoundation -i dummy || true") "\n")))
-    (cl-loop with at-video-devices = nil
-             with at-audio-devices = nil
-             with video-devices = nil
-             with audio-devices = nil
-             for line in lines
-             when (string-match "AVFoundation video devices:" line)
-             do (setq at-video-devices t
-                      at-audio-devices nil)
-             when (string-match "AVFoundation audio devices:" line)
-             do (setq at-audio-devices t
-                      at-video-devices nil)
-             when (and at-video-devices
-                       (string-match "\\[\\([0-9]+\\)\\] \\(.+\\)" line))
-             do (push (cons (string-to-number (match-string 1 line)) (match-string 2 line)) video-devices)
-             when (and at-audio-devices
-                       (string-match "\\[\\([0-9]+\\)\\] \\(.+\\)" line))
-             do (push (cons (string-to-number (match-string 1 line)) (match-string 2 line)) audio-devices)
-             finally return (list (nreverse video-devices) (nreverse audio-devices)))))
-
-(defun rk/find-device-matching (string type)
-  "Get the devices from `rk/get-ffmpeg-device' and look for a device
-matching `STRING'. `TYPE' can be :video or :audio."
-  (let* ((devices (rk/get-ffmpeg-device))
-         (device-list (if (eq type :video)
-                          (car devices)
-                        (cadr devices))))
-    (cl-loop for device in device-list
-             when (string-match-p string (cdr device))
-             return (car device))))
-
-(defcustom rk/default-audio-device nil
-  "The default audio device to use for whisper.el and outher audio processes."
-  :type 'string)
-
-(defun rk/select-default-audio-device (&optional device-name)
-  "Interactively select an audio device to use for whisper.el and other audio processes.
-If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
-  (interactive)
-  (let* ((audio-devices (cadr (rk/get-ffmpeg-device)))
-         (indexes (mapcar #'car audio-devices))
-         (names (mapcar #'cdr audio-devices))
-         (name (or device-name (completing-read "Select audio device: " names nil t))))
-    (setq rk/default-audio-device (rk/find-device-matching name :audio))
-    (when (boundp 'whisper--ffmpeg-input-device)
-      (setq whisper--ffmpeg-input-device (format ":%s" rk/default-audio-device)))))
-
-
-
-(use-package org-roam :ensure t
+(use-package org-roam
       :hook
       (after-init . org-roam-mode)
       :custom
@@ -403,8 +276,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 )
 
 ;;(use-package org-roam-ui
-;;  :straight
-;;    (:host github :repo "org-roam/org-roam-ui" :branch "main" :files ("*.el" "out"))
 ;;    :after org-roam
 ;;;;         normally we'd recommend hooking orui after org-roam, but since org-roam does not have
 ;;;;         a hookable mode anymore, you're advised to pick something yourself
@@ -415,7 +286,7 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 ;;          org-roam-ui-follow t
 ;;          org-roam-ui-update-on-save t
 ;;          org-roam-ui-open-on-start t))
-(use-package command-log-mode :ensure t)
+(use-package command-log-mode)
 
 ;; research
 (use-package bibtex-completion)
@@ -444,7 +315,7 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 
 ;; TODO: fix this up
 
-(use-package ob-async :ensure t)
+(use-package ob-async)
 ;;(setq ob-async-no-async-languages-alist '("ipython"))
 ;;(use-package org-datetree)
 
@@ -453,7 +324,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 
 (use-package evil
    :after undo-tree
-   :ensure t
    :init
    (setq evil-want-integration t)
    (setq evil-want-keybinding nil)
@@ -495,18 +365,15 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 
 (use-package evil-surround
   :after evil
-  :ensure t
   :config
   (global-evil-surround-mode 1))
 
 (use-package evil-collection
   :after evil
-  :ensure t
   :config
   (evil-collection-init))
 
 (use-package evil-org
-  :ensure t
   :after org
   :config
   (add-hook 'org-mode-hook 'evil-org-mode)
@@ -518,19 +385,17 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 )
 
 (use-package evil-better-visual-line
-  :ensure t
   :config
   (evil-better-visual-line-on)
 )
 
 ;; TODO removeme
 ;; (use-package vi-tilde-fringe
-;;   :ensure t
 ;;   :config
 ;;   (global-vi-tilde-fringe-mode 1))
 
 (use-package
-  evil-numbers :ensure t
+  evil-numbers
   :config
   (evil-define-key '(normal visual) 'global (kbd "C-c +") 'evil-numbers/inc-at-pt)
   (evil-define-key '(normal visual) 'global (kbd "C-c -") 'evil-numbers/dec-at-pt)
@@ -605,7 +470,10 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 ;; )
 ;; (use-package lsp-mode)
 
-(use-package dap-mode)
+;; Install Dape explicitly with `package-install'.  The autoload declaration
+;; keeps it dormant until `dape' is invoked.
+(use-package dape
+  :commands dape)
 
 ;; languages
 (use-package nim-mode)
@@ -615,7 +483,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 ;; (use-package smart-tab :config (global-smart-tab-mode t) (setq smart-tab-using-hippie-expand t))
 
 (use-package markdown-mode
-  :ensure t
   :mode ("README\\.md\\'" . gfm-mode)
   :init (setq markdown-command "multimarkdown"))
 
@@ -652,7 +519,7 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
   (corfu-history-mode)
   (corfu-popupinfo-mode)
 )
-;; (use-package corfu-terminal :ensure t
+;; (use-package corfu-terminal
 ;;   :unless (display-graphic-p)
 ;;   :after corfu
 ;;   :init (corfu-terminal-mode +1))
@@ -683,7 +550,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 
 ; company-mode
 ;; (use-package company
-;;   :ensure t
 ;;   :config
 ;;   ;; (global-company-mode 1)
 ;;   ;; (company-tng-mode)
@@ -726,12 +592,11 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 ;; ---- other completions
 
 ;; search
-(use-package consult :ensure t)
-(use-package embark-consult :ensure t)
-(use-package consult-eglot :ensure t :after consult)
+(use-package consult)
+(use-package embark-consult)
+(use-package consult-eglot :after consult)
 
 ; (use-package consult-omni
-;   :straight (consult-omni :type git :host github :repo "armindarvish/consult-omni" :branch "main" :files (:defaults "sources/*.el"))
 ;   :after consult
 ;   :custom
 ;    ;; General settings that apply to all sources
@@ -770,14 +635,12 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 ; )
 
 (use-package counsel
-  :ensure t
   :config
   (counsel-mode 1)
   (setq ivy-initial-inputs-alist nil)
 )
 
 (use-package ivy
-  :ensure t
   :diminish
   :bind (("C-s" . swiper)
 	 :map ivy-minibuffer-map
@@ -799,7 +662,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 )
 
 (use-package ivy-rich
-  :ensure t
   :init
   (ivy-rich-mode 1))
 
@@ -816,7 +678,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 (use-package tree-sitter-langs)
 (use-package ts-fold
   :after tree-sitter
-  :straight (ts-fold :type git :host github :repo "emacs-tree-sitter/ts-fold")
   :config (global-ts-fold-mode)
 )
 
@@ -835,7 +696,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 ;; ui
 ;; (use-package nord-theme :init (load-theme 'nord t))
 (use-package doom-modeline
-  :ensure t
   :hook (after-init . doom-modeline-mode)
   :config
   (setq doom-modeline-icon t)
@@ -844,7 +704,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 )
 
 (use-package doom-themes
-  :ensure t
   :config
   ;; Global settings (defaults)
   (setq doom-themes-enable-bold t    ; if nil, bold is universally disabled
@@ -864,7 +723,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 
 (use-package olivetti :init (setq olivetti-body-width .67))
 (use-package which-key
-  :ensure t
   :init (which-key-mode)
   :diminish which-key-mode
   :config
@@ -872,7 +730,6 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
 )
 
 (use-package helpful
-  :ensure t
   :custom
   (counsel-describe-function-function #'helpful-callable)
   (counsel-describe-variable-function #'helpful-variable)
@@ -895,12 +752,11 @@ If `DEVICE-NAME' is provided, it will be used instead of prompting the user."
     (setq tab-bar-tab-hints t)
 )
 ; M-x nerd-icons-install-fonts
-(use-package all-the-icons :ensure t :if (display-graphic-p))
+(use-package all-the-icons :if (display-graphic-p))
 
 
 ;; keybindings
 (use-package general
-    :ensure t
     :config
     (general-create-definer my/leader-keys
 	:keymaps '(normal insert visual emacs)
