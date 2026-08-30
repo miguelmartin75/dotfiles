@@ -3,7 +3,7 @@
 ## Status
 
 - Plan: in progress
-- Implementation: Phases 1-3 complete; Phase 4 pending
+- Implementation: Phases 1-4 complete; Phase 5 pending
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
@@ -25,6 +25,7 @@ Times are wall-clock process durations. Deltas compare each row's mean with the 
 | After Phase 1 | Phase 1 commit | 3.966 s +/- 0.093 s | 4.002 s | 3.817-4.042 s | -4.164 s (-51.2%) |
 | After Phase 2 | Phase 2 commit | 2.807 s +/- 0.061 s | 2.810 s | 2.734-2.898 s | -1.159 s (-29.2%) |
 | After Phase 3 | Phase 3 commit | 2.665 s +/- 0.020 s | 2.661 s | 2.637-2.686 s | -0.142 s (-5.1%) |
+| After Phase 4 | Phase 4 commit | 2.826 s +/- 0.054 s | 2.815 s | 2.781-2.919 s | +0.161 s (+6.0%) |
 
 The baseline completed with exit status 0 on every measured run, but logged a non-fatal `use-package` error because `corfu-map` was unbound.
 
@@ -537,7 +538,7 @@ Status: complete
 
 ## Phase 4: Vendor the active theme
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -559,6 +560,15 @@ Status: pending
 - The active theme is repo-owned and independent of Doom Themes.
 - `init.el` remains readable and does not contain a generated theme dump.
 - The phase has its own startup benchmark and commit so the theme delta is attributable.
+
+### Outcome
+
+- Added the 294-line standalone `profiles/common/.config/emacs/themes/mig-one-light-theme.el` with 221 intentional face settings and one theme variable. It preserves the active One Light palette across core UI, syntax, completion, Xref, diagnostics, diffs, prose, Org, Org Agenda, Org Cite, Org Ref, Magit, Which Key, Doom Modeline, Evil, Flyspell, and Gptel.
+- Included the upstream MIT notice and source attribution for Doom Themes commit `556598955c67540eac8811835b327f299ffb58c7`. Direct colors replace Doom's runtime blending, unused compatibility faces are omitted, and lower-color terminals deliberately use Emacs's nearest-color approximation.
+- Removed the Doom Themes package declaration, its Gnus compatibility override, and its visual bell, Neotree, and Org helpers. The existing explicit no-bell policy remains, Doom Modeline stays independent, and `custom-enabled-themes` contains only `mig-one-light`.
+- The theme byte-compiled without warnings. Two guarded full loads, two isolated loads without Doom Themes, retained package face realization, Isearch and line-number parity, Org research faces, CSS/Gnus cycle checks, dead-face checks, and a real pseudo-TTY load all passed.
+- No live graphical frame was available for a manual visual comparison. Programmatic face parity and true-color pseudo-TTY acceptance passed; the manual graphical comparison remains in Phase 7.
+- Startup mean increased from 2.665 s to 2.826 s across the recorded five-run sample. The 0.161 s regression is retained in the benchmark record for later final optimization rather than hidden.
 
 ## Phase 5: Rebuild project retrieval and direct mappings
 

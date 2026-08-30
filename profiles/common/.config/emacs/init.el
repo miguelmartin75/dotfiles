@@ -641,7 +641,11 @@
 )
 
 ;; ui
-;; (use-package nord-theme :init (load-theme 'nord t))
+(add-to-list
+ 'custom-theme-load-path
+ (expand-file-name "themes" (file-name-directory (or load-file-name user-init-file))))
+(load-theme 'mig-one-light t)
+
 (use-package doom-modeline
   :hook (after-init . doom-modeline-mode)
   :config
@@ -649,31 +653,6 @@
   (setq doom-modeline-major-mode-color-icon t)
   (setq doom-modeline-minor-modes t)
 )
-
-(use-package doom-themes
-  :config
-  ;; Global settings (defaults)
-  (setq doom-themes-enable-bold t    ; if nil, bold is universally disabled
-        doom-themes-enable-italic t) ; if nil, italics is universally disabled
-  ;; (load-theme 'doom-nord-light t)
-  ;; (load-theme 'doom-nord t)
-  ;; (load-theme 'doom-opera-light t)
-  ;; (load-theme 'doom-flatwhite t)
-  (load-theme 'doom-one-light t)
-  ;; Doom Themes 20250920.430 makes this face inherit
-  ;; `gnus-group-news-low', while Emacs 31 makes that face inherit this one.
-  ;; Break the installed package's cycle without loading Gnus during startup.
-  (custom-theme-set-faces
-   'doom-one-light
-   '(gnus-group-news-low-empty
-     ((t (:inherit gnus-group-mail-1-empty :weight normal)))))
-
-  ;; Enable flashing mode-line on errors
-  (doom-themes-visual-bell-config)
-  ;; Enable custom neotree theme (all-the-icons must be installed!)
-  (doom-themes-neotree-config)
-  ;; Corrects (and improves) org-mode's native fontification.
-  (doom-themes-org-config))
 
 (use-package olivetti :init (setq olivetti-body-width .67))
 (use-package which-key
