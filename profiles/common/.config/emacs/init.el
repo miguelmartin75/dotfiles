@@ -650,34 +650,73 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
           js-ts-mode
           typescript-ts-mode
           tsx-ts-mode
-          markdown-ts-mode))
+          markdown-ts-mode
+          zig-mode
+          nim-mode
+          odin-mode))
 
 (defun my/parser-tools-mode ()
   "Enable native folding and function context in parser-backed buffers."
-  (when (eq major-mode 'markdown-ts-mode)
-    (setq-local treesit-thing-settings '((markdown (list "section")))
-                hs-treesit-things 'list
-                hs-c-start-regexp nil
-                hs-block-start-regexp nil
-                hs-block-end-regexp nil
-                hs-forward-sexp-function #'treesit-forward-list
-                hs-find-block-beginning-function
-                #'treesit-hs-find-block-beginning
-                hs-find-next-block-function #'treesit-hs-find-next-block
-                hs-looking-at-block-start-predicate
-                #'treesit-hs-looking-at-block-start-p
-                hs-inside-comment-predicate
-                #'treesit-hs-inside-comment-p))
-  (hs-minor-mode 1)
-  (unless which-function-mode
-    (which-function-mode 1))
-  (when (or treesit-defun-type-regexp
-            (treesit-thing-defined-p 'defun nil))
-    (dolist (state '(normal visual operator))
-      (evil-local-set-key state (kbd "[m") #'evil-backward-section-begin)
-      (evil-local-set-key state (kbd "]m") #'evil-forward-section-begin)
-      (evil-local-set-key state (kbd "[M") #'evil-backward-section-end)
-      (evil-local-set-key state (kbd "]M") #'evil-forward-section-end))))
+  (let ((parser-settings
+         (pcase major-mode
+           ('zig-mode '(zig "function_declaration" "block"))
+           ('nim-mode
+            '(nim
+              "\\(converter\\|func\\|iterator\\|macro\\|method\\|proc\\|template\\)_declaration"
+              "\\(converter\\|func\\|iterator\\|macro\\|method\\|proc\\|template\\)_declaration"))
+           ('odin-mode '(odin "procedure_declaration" "block")))))
+    (when (and parser-settings
+               (treesit-ready-p (car parser-settings) t))
+      (let ((language (car parser-settings))
+            (defun-regexp (cadr parser-settings))
+            (block-regexp (caddr parser-settings)))
+        (treesit-parser-create language)
+        (setq-local treesit-defun-type-regexp defun-regexp
+                    treesit-thing-settings
+                    `((,language
+                       (defun ,defun-regexp)
+                       (list ,block-regexp)))
+                    treesit-defun-name-function
+                    (lambda (node)
+                      (when (string-match-p defun-regexp
+                                            (treesit-node-type node))
+                        (let ((name
+                               (or (treesit-node-child-by-field-name node "name")
+                                   (treesit-node-child node 0 t))))
+                          (when name
+                            (treesit-node-text name t)))))
+                    beginning-of-defun-function #'treesit-beginning-of-defun
+                    end-of-defun-function #'treesit-end-of-defun
+                    add-log-current-defun-function
+                    #'treesit-add-log-current-defun)))
+    (when (treesit-parser-list)
+      (when (eq major-mode 'markdown-ts-mode)
+        (setq-local treesit-thing-settings '((markdown (list "section")))))
+      (when (or parser-settings (eq major-mode 'markdown-ts-mode))
+        (setq-local hs-treesit-things 'list
+                    hs-c-start-regexp nil
+                    hs-block-start-regexp nil
+                    hs-block-end-regexp
+                    (unless (memq major-mode '(nim-mode markdown-ts-mode))
+                      #'treesit-hs-block-end)
+                    hs-forward-sexp-function #'treesit-forward-list
+                    hs-find-block-beginning-function
+                    #'treesit-hs-find-block-beginning
+                    hs-find-next-block-function #'treesit-hs-find-next-block
+                    hs-looking-at-block-start-predicate
+                    #'treesit-hs-looking-at-block-start-p
+                    hs-inside-comment-predicate
+                    #'treesit-hs-inside-comment-p))
+      (hs-minor-mode 1)
+      (unless which-function-mode
+        (which-function-mode 1))
+      (when (or treesit-defun-type-regexp
+                (treesit-thing-defined-p 'defun nil))
+        (dolist (state '(normal visual operator))
+          (evil-local-set-key state (kbd "[m") #'evil-backward-section-begin)
+          (evil-local-set-key state (kbd "]m") #'evil-forward-section-begin)
+          (evil-local-set-key state (kbd "[M") #'evil-backward-section-end)
+          (evil-local-set-key state (kbd "]M") #'evil-forward-section-end))))))
 
 (dolist (hook '(c-ts-mode-hook
                 c++-ts-mode-hook
@@ -687,7 +726,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
                 js-ts-mode-hook
                 typescript-ts-mode-hook
                 tsx-ts-mode-hook
-                markdown-ts-mode-hook))
+                markdown-ts-mode-hook
+                zig-mode-hook
+                nim-mode-hook
+                odin-mode-hook))
   (add-hook hook #'my/parser-tools-mode))
 (add-to-list
  'auto-mode-alist

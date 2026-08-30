@@ -3,7 +3,7 @@
 ## Status
 
 - Plan: complete
-- Implementation: Phases 1-7 complete
+- Implementation: Phases 1-8 complete
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
@@ -31,6 +31,8 @@ immediately preceding row.
 | After Phase 5 | Phase 5 commit | 2.972 s +/- 0.169 s | 2.911 s | 2.863-3.271 s | +0.146 s (+5.2%) |
 | After Phase 6 | Phase 6 commit | 2.907 s +/- 0.157 s | 2.856 s | 2.806-3.185 s | -0.064 s (-2.2%) |
 | After Phase 7 | Phase 7 commit | 2.333 s +/- 0.743 s | 1.967 s | 1.933-3.654 s | -0.574 s (-19.8%) |
+| Before Phase 8 remediation | `45d20f8` | 1.988 s +/- 0.052 s | 1.961 s | 1.947-2.073 s | audit baseline |
+| After Phase 8 | Phase 8 commit | 1.977 s +/- 0.018 s | 1.988 s | 1.950-1.991 s | -0.011 s (-0.5%) |
 
 The baseline completed with exit status 0 on every measured run, but logged a non-fatal `use-package` error because `corfu-map` was unbound.
 
@@ -728,11 +730,45 @@ Status: complete
 - Zig is unavailable, so a temporary source build of the Ghostel module is deferred. Local zmx is available and its create, detach, list, history, send, reattach-through-Ghostel, and kill lifecycle passed under `/tmp`. Remote TRAMP, remote Eglot, remote Python, and remote zmx remain deferred because acceptance has no live remote host.
 - Startup mean decreased from 2.907 s to 2.333 s across the recorded five-run sample. The 0.574 s improvement is 19.8 percent for the phase and 71.3 percent from the 8.130 s baseline. The final sample retains a 3.654 s cold first-run outlier; its 1.967 s median records the steady process cost without discarding that outlier.
 
+## Phase 8: Close project catalog and parser activation gaps
+
+Status: complete
+
+### Audit findings
+
+1. The Phase 6 outcome claimed that this repository had a validated project task catalog, but no reviewed `.dir-locals.el` or equivalent project-local catalog existed. `my/project-run-command` therefore rejected this repository because `Compile` and `Test` were absent, and its generic `./run.py check` and `./run.py check --fix` fallbacks did not match the actual `run.py` command surface.
+2. The Zig, Nim, and Odin grammars were pinned and provisioned, but their package major modes never called `treesit-parser-create`. Their buffers therefore had no parser and could not participate in the maintained native motion, folding, or function-context contract.
+
+### Changes
+
+1. Add a reviewed root `.dir-locals.el` catalog with concrete commands for this repository: Python byte compilation, the public controller help smoke test, Ruff checking, and Ruff fixes. Keep the existing validated `my/project-commands` data contract and the single Ghostel-backed runner unchanged.
+2. Extend the existing parser-tools hook to `zig-mode`, `nim-mode`, and `odin-mode`. When the corresponding pinned grammar is available, create its native parser and configure its reviewed function and fold node types, Tree-sitter defun navigation, function context, Hideshow, and the existing counted Evil motions.
+3. Preserve each package mode's fontification and indentation. The native parser augments those modes structurally and does not add a third-party parser package or load the legacy `tree-sitter` feature.
+
+### Verification
+
+- Opening `run.py` from this repository loads all four directory-local task pairs without a prompt, passes the existing safe-local-variable predicate, and resolves `project-current` to the Git root. Stubbed Ghostel execution verified the exact command, root directory, default `Compile` selection, and distinct compilation-buffer name for every label.
+- All four catalog commands are concrete: `python -m py_compile run.py`, `./run.py --help`, `uv run --with ruff ruff check run.py`, and `uv run --with ruff ruff check --fix run.py` completed successfully. The Fix command was a no-op after Check reported a clean file.
+- Real `.zig`, `.nim`, and `.odin` sample buffers selected `zig-mode`, `nim-mode`, and `odin-mode`; created parsers for `zig`, `nim`, and `odin`; reported the enclosing function name; followed counted Evil function motions; and created native Hideshow folds. Python, C, TypeScript, and Markdown native Tree-sitter buffers retained their expected modes, parsers, and Hideshow setup.
+- `check-parens`, two startup loads with package, VC, URL, and grammar installation APIs guarded by errors, byte compilation to `/private/tmp`, focused catalog and parser checks, and `git diff --check` passed.
+
+### Residual limitations
+
+- This repository intentionally has no persistent test module. Its `Test` catalog entry is the maintained public CLI bootstrap and argument-parser smoke check, not a full behavior suite.
+- Zig, Nim, and Odin retain the fontification and indentation supplied by their installed package modes. Native Tree-sitter owns their parser-backed function navigation, context, and folds, but the rejected query-backed `af`, `if`, `aa`, and `ia` text-object surface remains the documented Phase 5 gap.
+
+### Startup measurement
+
+- Before any tracked Phase 8 edit at `45d20f8`, the five samples were 2.003491, 2.072649, 1.960917, 1.955468, and 1.947334 seconds. Mean was 1.987972 seconds, sample standard deviation was 0.052084 seconds, median was 1.960917 seconds, and range was 1.947334-2.072649 seconds.
+- After the runtime implementation was final, the five samples were 1.991119, 1.949684, 1.988087, 1.966643, and 1.989660 seconds. Mean was 1.977039 seconds, sample standard deviation was 0.018275 seconds, median was 1.988087 seconds, and range was 1.949684-1.991119 seconds.
+- The measured mean changed by -0.010933 seconds (-0.5 percent), which is smaller than the before-sample standard deviation and does not indicate a material startup regression.
+
 ## References
 
 ### Codebase
 
 - `refs/editor-philosophy.md:1`
+- `.dir-locals.el:1`
 - `profiles/common/.config/emacs/init.el:2`
 - `profiles/common/.config/emacs/init.el:545`
 - `profiles/common/.config/emacs/init.el:623`
