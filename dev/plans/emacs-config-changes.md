@@ -2,8 +2,8 @@
 
 ## Status
 
-- Plan: in progress
-- Implementation: Phases 1-6 complete; Phase 7 pending
+- Plan: complete
+- Implementation: Phases 1-7 complete
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
@@ -17,7 +17,9 @@ Measure each accepted phase with Hyperfine using one warmup and five timed runs 
 emacs -Q --batch -l profiles/common/.config/emacs/init.el --eval '(princ "CONFIG_LOADED\\n")'
 ```
 
-Times are wall-clock process durations. Deltas compare each row's mean with the immediately preceding row.
+Times are wall-clock process durations. `+/-` values are sample standard
+deviations, matching Hyperfine. Deltas compare each row's mean with the
+immediately preceding row.
 
 | State | Revision | Mean | Median | Range | Delta |
 | --- | --- | --- | --- | --- | --- |
@@ -26,8 +28,9 @@ Times are wall-clock process durations. Deltas compare each row's mean with the 
 | After Phase 2 | Phase 2 commit | 2.807 s +/- 0.061 s | 2.810 s | 2.734-2.898 s | -1.159 s (-29.2%) |
 | After Phase 3 | Phase 3 commit | 2.665 s +/- 0.020 s | 2.661 s | 2.637-2.686 s | -0.142 s (-5.1%) |
 | After Phase 4 | Phase 4 commit | 2.826 s +/- 0.054 s | 2.815 s | 2.781-2.919 s | +0.161 s (+6.0%) |
-| After Phase 5 | Phase 5 commit | 2.972 s +/- 0.151 s | 2.911 s | 2.863-3.271 s | +0.146 s (+5.2%) |
-| After Phase 6 | Phase 6 commit | 2.907 s +/- 0.140 s | 2.856 s | 2.806-3.185 s | -0.064 s (-2.2%) |
+| After Phase 5 | Phase 5 commit | 2.972 s +/- 0.169 s | 2.911 s | 2.863-3.271 s | +0.146 s (+5.2%) |
+| After Phase 6 | Phase 6 commit | 2.907 s +/- 0.157 s | 2.856 s | 2.806-3.185 s | -0.064 s (-2.2%) |
+| After Phase 7 | Phase 7 commit | 2.333 s +/- 0.743 s | 1.967 s | 1.933-3.654 s | -0.574 s (-19.8%) |
 
 The baseline completed with exit status 0 on every measured run, but logged a non-fatal `use-package` error because `corfu-map` was unbound.
 
@@ -246,8 +249,8 @@ Keep one ordered configuration in `profiles/common/.config/emacs/init.el`; the c
 Link these dotfiles into `~/.config` before starting Emacs, then run the explicit provisioners in this order:
 
 ```sh
-emacs -Q --batch -l ~/.config/emacs/install-packages.el
-emacs -Q --batch -l ~/.config/emacs/install-tree-sitter-grammars.el
+emacs --batch -Q -l ~/.config/emacs/install-packages.el
+emacs --batch -Q -l ~/.config/emacs/install-tree-sitter-grammars.el
 ```
 
 Document those commands and their prerequisites in comments at the top of `profiles/common/.config/emacs/init.el`. Normal startup must never invoke either provisioner, refresh package archives, clone repositories, compile native code, or install software. The final package audit must make `install-packages.el` cover every retained third-party declaration before the two-command bootstrap is accepted from an empty package and grammar directory.
@@ -679,7 +682,7 @@ Status: complete
 
 ## Phase 7: Final cleanup and acceptance
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -712,6 +715,18 @@ Status: pending
 - Annotation collection works from any buffer and reaches any terminal coding agent through the same named-session transport as `SPC t r`.
 - Build, test, check, fix, and future project tasks are data in one per-project catalog and execute through the same Ghostel-backed runner.
 - The documented explicit bootstrap recreates every retained package and grammar from empty directories without relying on normal startup.
+
+### Outcome
+
+- Normal startup remains offline and never provisions software. The top of `init.el` names ripgrep, zmx, the selected language servers, aspell, multimarkdown, LaTeX, and dvisvgm as prerequisites, identifies Difftastic as optional, preserves the package and grammar provisioner commands in their required order, and records the explicit post-package Ghostel module download or compilation commands.
+- Removed Undo Tree in favor of Evil's native `undo-redo` integration, removed dead package declarations and commented replacement systems, and deferred retained workflows that do not need to load during startup. The repo-owned `mig-one-light` theme remains the active inline/vendor decision.
+- The 25-package direct archive inventory is now `dape`, `doom-modeline`, `evil`, `evil-better-visual-line`, `evil-collection`, `evil-numbers`, `evil-org`, `evil-surround`, `evil-visualstar`, `exec-path-from-shell`, `gptel`, `gscholar-bibtex`, `load-env-vars`, `magit`, `markdown-mode`, `nim-mode`, `ob-async`, `olivetti`, `org-fragtog`, `org-ref`, `org-roam`, `org-roam-bibtex`, `php-mode`, `yasnippet`, and `zig-mode`. Doom Modeline declares Nerd Icons as its archive dependency, so the dead All the Icons declaration and direct provisioner entry are removed without a replacement dependency. Which Key remains configured from Emacs 31.1's built-in copy. Other package dependencies remain archive-resolved. Pinned VC inventory remains Ghostel, Evil Ghostel, term-sessions.el, Odin mode, and optional Difftastic.
+- Org Roam BibTeX now follows Org Roam without an installed-feature gate; its package dependency loads Bibtex Completion when the ORB command or Org Roam buffer activates the workflow, then loads Org Ref and applies the retained template customization. Flyspell now covers plain text, programming comments, and Git commit messages, with Magit's idempotent commit setup installing its comment-aware predicate.
+- The exact final provisioners passed from a new empty temporary root. Package provisioning completed in 121.65 seconds with 25 direct archive packages, 5 reviewed VC packages, and exactly 61 installed descriptors; All the Icons was absent and Doom Modeline resolved Nerd Icons through its declared dependency. All five VC checkouts matched their reviewed revisions. All 14 pinned grammar libraries provisioned and validated in 52.50 seconds.
+- Isolated acceptance passed native completion and mappings, Evil states and native undo/redo, project retrieval and ripgrep search, Eglot configuration, dormant Dape, optional Difftastic and its no-`difft` fallback, project task catalogs, generalized session and annotation transport, native Python Comint, all grammar readiness checks, and repeated repo-theme loading. A temporary Ghostel module downloaded and loaded in 3.38 seconds; a live local Ghostel PTY and a live Ghostel-attached zmx session both passed without writing to the active module or session directories.
+- Two deployment-equivalent loads against only the exact final fresh package and grammar trees passed with package refresh, package installation, VC installation, URL retrieval, and grammar installation replaced by errors. The loads passed ORB hook, explicit-command, dependency, Org Ref, customization, text and Git commit Flyspell, built-in Which Key, dormant Ghostel, theme reload, native undo, completion, Xref, Flymake, and leader-map checks. Init, both provisioners, and the vendored theme byte-compiled to `/private/tmp` with warnings but no errors.
+- Zig is unavailable, so a temporary source build of the Ghostel module is deferred. Local zmx is available and its create, detach, list, history, send, reattach-through-Ghostel, and kill lifecycle passed under `/tmp`. Remote TRAMP, remote Eglot, remote Python, and remote zmx remain deferred because acceptance has no live remote host.
+- Startup mean decreased from 2.907 s to 2.333 s across the recorded five-run sample. The 0.574 s improvement is 19.8 percent for the phase and 71.3 percent from the 8.130 s baseline. The final sample retains a 3.654 s cold first-run outlier; its 1.967 s median records the steady process cost without discarding that outlier.
 
 ## References
 

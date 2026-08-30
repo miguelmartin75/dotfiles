@@ -1,4 +1,16 @@
 ;; SECTION: fundamental  -*- lexical-binding: t; -*-
+;; Fresh machines require Emacs 31.1+ with modules and native Tree-sitter, Git,
+;; a C/C++ compiler and linker, ripgrep (`rg'), zmx, aspell, multimarkdown,
+;; LaTeX, dvisvgm, and the selected language servers: clangd, rust-analyzer,
+;; lua-language-server, ty, typescript-language-server, zls, nimlangserver, and
+;; ols.  Difftastic (`difft') is optional and enables structural Magit diffs.
+;; After linking this profile into ~/.config, provision it explicitly in this
+;; order:
+;; emacs --batch -Q -l ~/.config/emacs/install-packages.el
+;; emacs --batch -Q -l ~/.config/emacs/install-tree-sitter-grammars.el
+;; Then install Ghostel's native module with `M-x ghostel-download-module' or,
+;; with Zig available, `M-x ghostel-module-compile'.  Normal startup and the
+;; first terminal use remain offline and never install software implicitly.
 (require 'package)
 
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
@@ -80,31 +92,11 @@
   (load-env-vars "~/.zshrc")
 )
 
-(use-package websocket)
-(use-package simple-httpd)
-;;(use-package org-super-agenda)
-;;(use-package org-ql)
-;; (use-package org-ql)
-
-
 (setq config-path "~/.config/emacs/init.el")
-;; (load "~/.config/emacs/defaults.el")
 
 (electric-indent-mode)
-
-;; (defun my/remove-datetree-day-heading ()
-;;   "Remove the intermediate day-level heading under a weekly capture."
-;;   (save-excursion
-;;     (goto-char (point-min))
-;;     ;; Look for the day heading ("*** YYYY-MM-DD Weekday")
-;;     (when (re-search-forward "^\\*\\*\\* [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} .*$" nil t)
-;;       (let ((beg (line-beginning-position))
-;;             (end (progn (forward-line 1) (point))))
-;;         (delete-region beg end)))))
-
-
-
-(use-package magit)
+(use-package magit
+  :commands magit-status)
 (when (and (executable-find "difft")
            (package-installed-p 'difftastic))
   (require 'difftastic-bindings)
@@ -198,9 +190,9 @@
       )
   )
 
-  (defun my/org-summary-todo (n‑done n‑not‑done)
+  (defun my/org-summary-todo (n-done n-not-done)
     "Set parent to DONE if all children are done, TODO if none, DOING otherwise."
-    (let (org-log-done org-log-states)  ;; suppress change logging
+    (let (org-log-done)  ;; suppress change logging
         (org-todo
         (cond ((= n-not-done 0)     "DONE")
             ((= n-done 0)         "TODO")
@@ -235,27 +227,24 @@
 
 
 
-  ;;(add-hook 'org-after-todo-state-change-hook (lambda ()
-  ;;   (when
-  ;;     (string= org-state "DONE")
-  ;;     (org-refile-to-datetree "~/org/journal.org")
-  ;;   )
-  ;;))
-
 )
 
 (require 'org-tempo)
 
 (use-package org-fragtog
-    :config
-    (add-hook 'org-mode-hook 'org-fragtog-mode)
-    (setq org-odt-pixels-per-inch 192.0)
-    (setq org-latex-create-formula-image-program 'dvisvgm)
-    (setq org-format-latex-options '(:foreground default :background default :scale 2.5 :html-foreground "Black" :html-background "Transparent" :html-scale 1.0 :matchers ("begin" "$1" "$" "$$" "\\(" "\\[")))
-)
+  :hook (org-mode . org-fragtog-mode)
+  :init
+  (setq org-odt-pixels-per-inch 192.0
+        org-preview-latex-default-process 'dvisvgm
+        org-format-latex-options
+        '(:foreground default :background default :scale 2.5
+          :html-foreground "Black" :html-background "Transparent"
+          :html-scale 1.0
+          :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))))
 
 ;; AI
 (use-package gptel
+  :commands (gptel gptel-rewrite gptel-send)
   :config
   (setq
     gptel-model 'claude-sonnet-4-20250514
@@ -268,41 +257,23 @@
     )
   )
 )
-(use-package inline-diff
-  :after gptel-rewrite) ;or use :defer
-
 (use-package org-roam
-      :hook
-      (after-init . org-roam-mode)
-      :custom
-      ;; (org-roam-directory (file-truename "~/org/roam"))
-      (org-roam-directory (file-truename "~/org/"))
-      (setq org-roam-db-location "~/.org-roam.db")
-      :config
-      ;; (setq org-roam-v2-ack t)
-      (add-hook 'org-roam-hook (org-roam-db-autosync-mode))
-      (setq org-roam-display-template (concat "${title:*} " (propertize "${tags:*}" 'face 'org-tag)))
-)
-
-;;(use-package org-roam-ui
-;;    :after org-roam
-;;;;         normally we'd recommend hooking orui after org-roam, but since org-roam does not have
-;;;;         a hookable mode anymore, you're advised to pick something yourself
-;;;;         if you don't care about startup time, use
-;;;;  :hook (after-init . org-roam-ui-mode)
-;;    :config
-;;    (setq org-roam-ui-sync-theme t
-;;          org-roam-ui-follow t
-;;          org-roam-ui-update-on-save t
-;;          org-roam-ui-open-on-start t))
-(use-package command-log-mode)
+  :commands (org-roam-node-find org-roam-node-insert)
+  :hook (after-init . org-roam-db-autosync-mode)
+  :custom
+  (org-roam-directory (file-truename "~/org/"))
+  (org-roam-db-location "~/.org-roam.db")
+  (org-roam-display-template
+   (concat "${title:*} " (propertize "${tags:*}" 'face 'org-tag))))
 
 ;; research
-(use-package bibtex-completion)
-
+(use-package org-ref
+  :commands (org-ref-insert-cite-link
+             org-ref-open-pdf-at-point
+             org-ref-open-url-at-point))
 (use-package org-roam-bibtex
   :after org-roam
-  :requires bibtex-completion
+  :commands org-roam-bibtex-mode
   :hook (org-roam-mode . org-roam-bibtex-mode)
   :config (require 'org-ref)
   :custom
@@ -315,24 +286,14 @@
      "author-or-editor"
      "keywords")))
 
-(use-package org-ref
-  :commands (org-ref-insert-cite-link
-             org-ref-open-pdf-at-point
-             org-ref-open-url-at-point))
-(use-package gscholar-bibtex)
+(use-package gscholar-bibtex
+  :commands gscholar-bibtex)
 
-
-;; TODO: fix this up
 
 (use-package ob-async)
-;;(setq ob-async-no-async-languages-alist '("ipython"))
-;;(use-package org-datetree)
 
 ;; evil
-(use-package undo-tree :init (global-undo-tree-mode))
-
 (use-package evil
-   :after undo-tree
    :init
    (setq evil-want-integration t)
    (setq evil-want-keybinding nil)
@@ -340,6 +301,7 @@
    (setq evil-want-C-i-jump t)
    (setq evil-want-C-w-delete t)
    (setq evil-want-C-w-in-emacs-state t)
+   (setq evil-undo-system 'undo-redo)
    (setq-default evil-symbol-word-search t)
 
    :config
@@ -352,22 +314,13 @@
    (define-key evil-normal-state-map (kbd "K") #'eldoc-doc-buffer)
    (define-key evil-normal-state-map (kbd "[d") #'flymake-goto-prev-error)
    (define-key evil-normal-state-map (kbd "]d") #'flymake-goto-next-error)
-   ;; Use visual line motions even outside of visual-line-mode buffers
-   ;;(evil-global-set-key 'motion "j" 'evil-next-visual-line)
-   ;;(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
-   ;;(evil-global-set-key 'insert "C-w" 'evil-delete-backward-word)
-   ;;(evil-global-set-key 'insert "A-DEL" 'evil-delete-backward-word)
-   ;;(evil-global-set-key 'insert "M-DEL" 'evil-delete-whole-line)
-
    (evil-set-initial-state 'messages-buffer-mode 'normal)
-   (evil-set-initial-state 'dashboard-mode 'normal)
    (setq evil-search-module 'evil-search)
    (evil-select-search-module 'evil-search-module 'evil-search)
+   (evil-set-undo-system 'undo-redo)
 
    ;; minor mode
    (add-hook 'org-capture-mode-hook 'evil-insert-state)
-
-   (setq evil-undo-system 'undo-tree)
 
    (global-visual-line-mode)
 )
@@ -400,11 +353,6 @@
   (evil-better-visual-line-on)
 )
 
-;; TODO removeme
-;; (use-package vi-tilde-fringe
-;;   :config
-;;   (global-vi-tilde-fringe-mode 1))
-
 (use-package
   evil-numbers
   :config
@@ -412,19 +360,15 @@
   (evil-define-key '(normal visual) 'global (kbd "C-c -") 'evil-numbers/dec-at-pt)
 )
 
-;; TODO move me
-(global-undo-tree-mode)
-(evil-set-undo-system 'undo-tree)
-(setq undo-tree-history-directory-alist '(("." . "~/.config/emacs/undo")))
-
 ;; terminal
 (use-package ghostel
   :commands ghostel-project
   :init
-  ;; First terminal use prompts for an explicit download or source build.
+  ;; Install the native module explicitly with `ghostel-download-module' or
+  ;; `ghostel-module-compile'; terminal use never installs it implicitly.
   (setq ghostel-module-directory
         (expand-file-name "ghostel/" user-emacs-directory)
-        ghostel-module-auto-install 'ask))
+        ghostel-module-auto-install nil))
 
 (use-package evil-ghostel
   :after (ghostel evil)
@@ -639,16 +583,15 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
              flymake-show-project-diagnostics))
 
 ;; languages
-(use-package nim-mode)
+(use-package nim-mode
+  :mode "\\.nim\\'")
 (use-package odin-mode
   :mode ("\\.odin\\'" . odin-mode))
 (use-package php-mode
   :mode ("\\.php\\'" . php-mode)
   :hook (php-mode . (lambda () (setq-local php-indent-offset 2))))
-(use-package zig-mode)
-(use-package swift-mode)
-;; https://justinramel.github.io/2013/09/25/vim-to-emacs-smart-tab/
-;; (use-package smart-tab :config (global-smart-tab-mode t) (setq smart-tab-using-hippie-expand t))
+(use-package zig-mode
+  :mode "\\.zig\\'")
 
 (use-package markdown-mode
   :mode ("README\\.md\\'" . gfm-mode)
@@ -686,7 +629,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (recentf-mode 1)
 
 ;; Install the pinned native grammars separately with
-;; `emacs --batch -l ~/.config/emacs/install-tree-sitter-grammars.el'.
+;; `emacs --batch -Q -l ~/.config/emacs/install-tree-sitter-grammars.el'.
 (require 'treesit)
 (setopt treesit-auto-install-grammar 'never
         treesit-enabled-modes
@@ -760,16 +703,16 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
           (markdown-mode))))))
 
 
-;; (flyspell-mode) this is a test on comments
 (use-package flyspell
+  :hook ((prog-mode . flyspell-prog-mode)
+         (text-mode . flyspell-mode))
   :config
-  (flyspell-prog-mode)
-  ;; disable for strings:
-  ;; https://emacs.stackexchange.com/questions/31300/can-you-turn-on-flyspell-for-comments-but-not-strings
   (setq flyspell-prog-text-faces
       (delq 'font-lock-string-face
              flyspell-prog-text-faces))
 )
+(use-package git-commit
+  :hook (git-commit-setup . git-commit-setup-flyspell))
 
 ;; ui
 (add-to-list
@@ -785,21 +728,15 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
   (setq doom-modeline-minor-modes t)
 )
 
-(use-package olivetti :init (setq olivetti-body-width .67))
+(use-package olivetti
+  :commands olivetti-mode
+  :init (setq olivetti-body-width .67))
 (use-package which-key
   :init (which-key-mode)
   :diminish which-key-mode
   :config
   (setq which-key-idle-delay 1)
 )
-
-(use-package helpful
-  :bind
-  ([remap describe-function] . helpful-callable)
-  ([remap describe-command] . helpful-command)
-  ([remap describe-variable] . helpful-variable)
-  ([remap describe-key] . helpful-key))
-
 
 (use-package tab-bar
     :config
@@ -813,8 +750,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     (setq tab-bar-tab-hints t)
 )
 ; M-x nerd-icons-install-fonts
-(use-package all-the-icons :if (display-graphic-p))
-
 
 ;; keybindings
 (defun my/project-find-regexp-at-point ()
@@ -961,19 +896,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "w" "windows"
     "w t" "tabs"))
 
-(defun my/linear-load-api-key-from-auth-source ()
-  "Load Linear API key from auth-source."
-  (interactive)
-  (require 'auth-source)
-  (let* ((auth-info (auth-source-search :host "api.linear.app" :user "apikey" :max 1))
-         (secret (when auth-info
-                   (funcall (plist-get (car auth-info) :secret)))))
-    (if secret
-        (progn
-          (setq linear-emacs-api-key secret)
-          (message "Successfully loaded Linear API key from auth-source"))
-      (message "Failed to retrieve Linear API key from auth-source"))))
-
 (require 'tramp)
 
 (tramp-set-completion-function "ssh"
@@ -1011,7 +933,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 (setq ob-async-inject-variables "\\borg-babel.+")
 (add-hook 'ob-async-pre-execute-src-block-hook
-        '(lambda ()
+        (lambda ()
            ;; tramp config for async emacs process
            (setq tramp-completion-reread-directory-timeout nil)
            (setq tramp-default-method "sshx")
@@ -1034,7 +956,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 ;; disbaled in these modes
 (dolist (mode '(term-mode-hook
 		shell-mode-hook
-		treemacs-mode-hook
 		eshell-mode-hook
 		ghostel-mode-hook))
   (add-hook mode (lambda () (display-line-numbers-mode 0))))
@@ -1042,46 +963,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (setq-default indent-tabs-mode nil)  ;; no tabs
 
 
-
-;; https://yiming.dev/blog/2018/03/02/my-org-refile-workflow/
-;; (defun org-search-heading ()
-;;   (interactive)
-;;   (org-refile '(4)))
-
-;; source: http://steve.yegge.googlepages.com/my-dot-emacs-file
-(defun rename-file-and-buffer (new-name)
-  "Renames both current buffer and file it's visiting to NEW-NAME."
-  (interactive "sNew name: ")
-  (let ((name (buffer-name))
-        (filename (buffer-file-name)))
-    (if (not filename)
-        (message "Buffer '%s' is not visiting a file!" name)
-      (if (get-buffer new-name)
-          (message "A buffer named '%s' already exists!" new-name)
-        (progn
-          (rename-file filename new-name 1)
-          (rename-buffer new-name)
-          (set-visited-file-name new-name)
-          (set-buffer-modified-p nil))))))
-
-(defun delete-file-and-buffer ()
-  "Deletes the current buffer and file"
-  (interactive)
-  ;; https://gist.github.com/hyOzd/23b87e96d43bca0f0b52
-  (let
-      ((filename (buffer-file-name)))
-    (if filename
-        (if (y-or-n-p (concat "Really delete " filename " ?"))
-            (progn
-                (delete-file filename)
-                (message "Deleted file %s" filename)
-                (kill-buffer)
-            )
-          )
-      (message "Not a file buffer: %s" filename)
-      )
-    )
-  )
 
 (defun copy-current-file-path ()
   "Copy the full path of the current buffer's file to the kill ring."
@@ -1093,34 +974,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
           (message "Copied file path: %s" file-path))
       (message "Current buffer is not associated with a file."))))
 
-(defun org-get-logbook-notes ()
-  (save-excursion
-    (unless (org-at-heading-p)
-      (outline-previous-heading))
-    (when (re-search-forward ":LOGBOOK:" (save-excursion
-                                           (outline-next-heading)
-                                           (point))
-                             t)
-      (let* ((elt (org-element-property-drawer-parser nil))
-             (beg (org-element-property :contents-begin elt))
-             (end (org-element-property :contents-end elt)))
-        (buffer-substring-no-properties beg end)))))
-
-(defun my/compute-stats-time-for-heading () (interactive)
-    (save-excursion
-        (unless (org-at-heading-p)
-            (outline-previous-heading))
-        (let* (
-              (logbook (org-get-logbook-notes))
-              (logbook-entries (split-string logbook "\n"))
-              )
-           (message (car logbook-entries))
-              ;;(let prev_t (my/compute-stats-get-time (car logbook))
-        )
-    )
-)
-
-
 (defun my/refile-to-journal () (interactive)
        (save-excursion
          (org-refile-to-datetree "~/org/journal.org")
@@ -1130,39 +983,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (defun my/soft-reload () (interactive)
   (load config-path)
 )
-(defun my/entries-from-last-week () (interactive)
-    (org-ql-search (org-agenda-files)
-        '(ts :from -7 :to today)
-        :title "Recent Items"
-        :sort '(todo priority date)
-        :super-groups '((:auto-ts t)))
-)
-
-(defun my/test-org-ql () (interactive)
-    (org-ql-search "~/src/emacs/org-super-agenda/test/test.org"
-        '(and (or (ts-active :on today)
-                (deadline auto)
-                (scheduled :to today))
-            (not (done)))
-        :title "My Agenda View"
-        ;; The `org-super-agenda-groups' setting is used automatically when set, or it
-        ;; may be overriden by specifying it here:
-        :super-groups '((:name "Bills"
-                            :tag "bills")
-                        (:todo ("SOMEDAY" "TO-READ" "CHECK" "TO-WATCH" "WATCHING")
-                            :order 7)
-                        (:name "Personal"
-                            :habit t
-                            :tag "personal"
-                            :order 3)
-                        (:todo "WAITING"
-                            :order 6)
-                        (:priority "A" :order 1)
-                        (:priority "B" :order 2)
-                        (:priority "C" :order 2)))
-)
-
-
 (defvar my/default-font-size 13)
 (defvar my/default-variable-font-size 13)
 (setq my/default-font-size 13.5)
@@ -1196,8 +1016,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (setq mac-command-modifier 'super)
 (global-set-key [kp-delete] 'delete-word) ;; sets alt-delete to be right-delete
 
-(setq visual-fill-column-width 120)
-(setq visual-fill-column-fringes-outside-margins nil)
 (setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
 
 
@@ -1210,7 +1028,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 )
 
 (defun my/reset-font-size () (interactive)
-   (text-scale-adjust)
+   (text-scale-adjust 0)
 )
 
 
@@ -1237,11 +1055,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 
 (with-eval-after-load 'which-key
-      ;; TODO figure out which-key here
     (global-set-key (kbd "C-=") 'my/increase-font-size)
     (global-set-key (kbd "C--") 'my/decrease-font-size)
     (global-set-key (kbd "C-0") 'my/reset-font-size)
-    ;; (global-set-key (kbd "M-x") 'execute-extended-command)
     (global-set-key (kbd "C-x C") (lambda () (interactive) (find-file "~/.config/emacs/init.el")))
     (global-set-key (kbd "C-x R") (lambda () (interactive) (my/soft-reload)))
     (global-set-key (kbd "C-c C-c") 'eval-region)
@@ -1268,7 +1084,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (defun my/copy () (interactive)
     (cond
           ((region-active-p) (kill-ring-save (region-beginning) (region-end)))
-          ('t (evil-yank-line))
+          ('t (kill-ring-save (line-beginning-position)
+                              (line-beginning-position 2)))
     )
 )
 
@@ -1296,7 +1113,7 @@ is nil, refile in the current file."
         (if file (find-file file))
         (org-datetree-find-date-create date)
         (org-narrow-to-subtree)
-        (show-subtree)
+        (outline-show-subtree)
         (org-end-of-subtree t)
         (newline)
         (goto-char (point-max))
@@ -1322,7 +1139,7 @@ is nil, refile in the current file."
         (if file (find-file file))
         (org-datetree-find-date-create date)
         (org-narrow-to-subtree)
-        (show-subtree)
+        (outline-show-subtree)
         (org-end-of-subtree t)
         (newline)
         (goto-char (point-max))
