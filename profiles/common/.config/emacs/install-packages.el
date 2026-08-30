@@ -11,6 +11,10 @@
         '((ghostel
            (:url "https://github.com/dakra/ghostel.git")
            "7c4cbd9f487b545c3d0452ab749f65eaa3c18b7e")
+          (evil-ghostel
+           (:url "https://github.com/dakra/ghostel.git"
+            :lisp-dir "extensions/evil-ghostel")
+           "7c4cbd9f487b545c3d0452ab749f65eaa3c18b7e")
           (term-sessions
            (:url "https://github.com/ArthurHeymans/emacs-term-sessions.git")
            "0815dbea006128df1d61e9d29e5a8ada53b349c1")

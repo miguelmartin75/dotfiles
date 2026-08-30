@@ -361,8 +361,6 @@
 
    (evil-set-initial-state 'messages-buffer-mode 'normal)
    (evil-set-initial-state 'dashboard-mode 'normal)
-   (evil-set-initial-state 'vterm-mode 'insert)
-
    (setq evil-search-module 'evil-search)
    (evil-select-search-module 'evil-search-module 'evil-search)
 
@@ -420,57 +418,156 @@
 (setq undo-tree-history-directory-alist '(("." . "~/.config/emacs/undo")))
 
 ;; terminal
-(use-package vterm
-  :hook (vterm-mode . compilation-shell-minor-mode)
-  :config
-  (setq vterm-keymap-exceptions nil)
-;; TODO re-map some of these with CMD prefix
-  (evil-define-key 'insert vterm-mode-map (kbd "C-e")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-f")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-a")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-v")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-b")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-w")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-u")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-d")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-n")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-m")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-p")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-j")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-k")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-r")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-t")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-g")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-c")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "C-SPC")    #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "s-<left>")  #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "s-<right>") #'vterm--self-insert)
+(use-package ghostel
+  :commands ghostel-project
+  :init
+  ;; First terminal use prompts for an explicit download or source build.
+  (setq ghostel-module-directory
+        (expand-file-name "ghostel/" user-emacs-directory)
+        ghostel-module-auto-install 'ask))
 
-  (evil-define-key 'normal vterm-mode-map (kbd "C-d")      #'vterm--self-insert)
-  (evil-define-key 'normal vterm-mode-map (kbd "i")        #'evil-insert-resume)
-  (evil-define-key 'normal vterm-mode-map (kbd "o")        #'evil-insert-resume)
-  (evil-define-key 'normal vterm-mode-map (kbd "<return>") #'evil-insert-resume)
-  (evil-define-key 'insert vterm-mode-map (kbd "<escape>")      #'vterm--self-insert)
-  (evil-define-key 'insert vterm-mode-map (kbd "s-<escape>")    #'evil-normal-state)
+(use-package evil-ghostel
+  :after (ghostel evil)
+  :hook (ghostel-mode . evil-ghostel-mode))
 
-  ;; (setq vterm-term-environment-variable "xterm-24bit")
+(defvar ghostel-compile-buffer-name)
+(use-package ghostel-compile
+  :commands (ghostel-compile ghostel-recompile))
 
-  (add-hook 'vterm-mode-hook (lambda () (visual-line-mode 0)))
-  (add-hook 'vterm-mode-hook (lambda () (vi-tilde-fringe-mode 0)))
-)
+(use-package term-sessions-core
+  :defer t
+  :init (setq term-sessions-preferred-frontend 'ghostel))
+(use-package term-sessions-frontends
+  :commands term-sessions-open)
+(use-package term-sessions-list
+  :commands term-sessions-list)
+(use-package term-sessions-zmx
+  :commands term-sessions-history)
+(use-package term-sessions-org
+  :commands term-sessions-store-org-link)
+(use-package term-sessions-actions
+  :commands term-sessions-action-send-text-to-session)
 
-(defun my/run-in-vterm (command)
-  "Run COMMAND in a dedicated vterm buffer with compilation parsing."
+(defun my/term-sessions-send-text (text)
+  "Select a named terminal session and send TEXT followed by Return."
+  (term-sessions-action-send-text-to-session (concat text "\r")))
+
+(defun my/term-sessions-send-region-or-buffer ()
+  "Send the active region, or the full buffer, to a named terminal session."
+  (interactive)
+  (my/term-sessions-send-text
+   (if (use-region-p)
+       (buffer-substring-no-properties (region-beginning) (region-end))
+     (buffer-substring-no-properties (point-min) (point-max)))))
+
+(defvar my/annotations nil
+  "Queued source annotations awaiting terminal-session delivery.")
+
+(defun my/annotate-region (begin end annotation)
+  "Queue the region from BEGIN to END with ANNOTATION."
   (interactive
-   (list (read-shell-command "Run or Compile (vterm): "
-                             compile-command)))
-  (let ((buf (get-buffer-create "*vterm-compile*")))
-    (with-current-buffer buf
-      (unless (eq major-mode 'vterm-mode) (vterm))
-      (compilation-shell-minor-mode)
-      (vterm-send-string command)
-      (vterm-send-return))
-    (pop-to-buffer buf)))
+   (if (use-region-p)
+       (list (region-beginning) (region-end)
+             (read-string "Annotation: "))
+     (user-error "Select a region to annotate")))
+  (push (list :source (or buffer-file-name (buffer-name))
+              :start-line (line-number-at-pos begin)
+              :end-line (line-number-at-pos (max begin (1- end)))
+              :mode major-mode
+              :annotation annotation
+              :text (buffer-substring-no-properties begin end))
+        my/annotations)
+  (message "Queued annotation %d" (length my/annotations)))
+
+(defun my/annotate-send-all (request)
+  "Send queued annotations with optional overall REQUEST."
+  (interactive (list (read-string "Overall request (optional): ")))
+  (unless my/annotations
+    (user-error "No annotations are queued"))
+  (let ((prompt "# Review annotations\n"))
+    (unless (string-empty-p request)
+      (setq prompt (concat prompt "\n## Overall request\n\n" request "\n")))
+    (dolist (item (reverse my/annotations))
+      (setq prompt
+            (concat prompt
+                    "\n## " (plist-get item :source)
+                    ":" (number-to-string (plist-get item :start-line))
+                    "-" (number-to-string (plist-get item :end-line))
+                    " (" (symbol-name (plist-get item :mode)) ")\n\n"
+                    (plist-get item :annotation) "\n\n```\n"
+                    (plist-get item :text) "\n```\n")))
+    (my/term-sessions-send-text prompt)
+    (setq my/annotations nil)))
+
+(defun my/gptel-compose-region (begin end)
+  "Open a new Gptel conversation composed from the region BEGIN to END."
+  (interactive "r")
+  (unless (use-region-p)
+    (user-error "Select a region to compose"))
+  (let ((prompt
+         (format "Source: %s\nLines: %d-%d\nMode: %s\n\n```\n%s\n```\n\nRequest:\n"
+                 (or buffer-file-name (buffer-name))
+                 (line-number-at-pos begin)
+                 (line-number-at-pos (max begin (1- end)))
+                 major-mode
+                 (buffer-substring-no-properties begin end))))
+    (gptel (generate-new-buffer-name "*gptel-region*") nil prompt t)))
+
+(defvar my/project-commands nil
+  "Project-local alist of task labels and shell commands.
+Define at least `Compile' and `Test' in the project's .dir-locals.el.")
+
+(put 'my/project-commands 'safe-local-variable
+     (lambda (value)
+       (and (listp value)
+            (seq-every-p
+             (lambda (entry)
+               (and (consp entry)
+                    (stringp (car entry))
+                    (stringp (cdr entry))
+                    (not (string-empty-p (car entry)))
+                    (not (string-empty-p (cdr entry)))))
+             value))))
+
+(defun my/project-run-command ()
+  "Select and run a catalogued task at the current project root."
+  (interactive)
+  (let* ((project (project-current t))
+         (root (project-root project))
+         labels)
+    (unless (funcall (get 'my/project-commands 'safe-local-variable)
+                     my/project-commands)
+      (user-error "Project catalog must contain nonempty string pairs"))
+    (setq labels (mapcar #'car my/project-commands))
+    (unless (and (assoc "Compile" my/project-commands)
+                 (assoc "Test" my/project-commands))
+      (user-error "Project catalog must define Compile and Test"))
+    (when (not (= (length labels) (length (delete-dups (copy-sequence labels)))))
+      (user-error "Project catalog contains duplicate task labels"))
+    (let* ((catalog
+            (append
+             (list (assoc "Compile" my/project-commands)
+                   (assoc "Test" my/project-commands)
+                   (or (assoc "Check" my/project-commands)
+                       '("Check" . "./run.py check"))
+                   (or (assoc "Fix" my/project-commands)
+                       '("Fix" . "./run.py check --fix")))
+             (seq-remove
+              (lambda (entry)
+                (member (car entry) '("Compile" "Test" "Check" "Fix")))
+              my/project-commands)))
+           (table
+            (completion-table-with-metadata
+             catalog '((display-sort-function . identity)
+                       (cycle-sort-function . identity))))
+           (label (completing-read "Project task: " table nil t
+                                   nil nil "Compile"))
+           (command (cdr (assoc label catalog)))
+           (default-directory root)
+           (compile-command command)
+           (ghostel-compile-buffer-name
+            (format "*ghostel-compile: %s %s*" (project-name project) label)))
+      (ghostel-compile command))))
 
 ;; language services
 (use-package yasnippet
@@ -731,7 +828,7 @@
 (defvar my/leader-map (make-sparse-keymap)
   "Leader map shared by Evil normal and visual states.")
 
-(dolist (prefix '("a" "b" "c" "d" "f" "g" "h" "o" "s" "w" "w t"))
+(dolist (prefix '("a" "b" "c" "d" "f" "g" "h" "o" "r" "s" "t" "w" "w t"))
   (keymap-set my/leader-map prefix (make-sparse-keymap)))
 
 (dolist
@@ -785,6 +882,14 @@
        ("d D" . dape)
        ("g g" . magit-status)
        ("a s" . gptel-send)
+       ("t p" . ghostel-project)
+       ("t t" . term-sessions-open)
+       ("t l" . term-sessions-list)
+       ("t h" . term-sessions-history)
+       ("t o" . term-sessions-store-org-link)
+       ("t c" . my/project-run-command)
+       ("t r" . my/term-sessions-send-region-or-buffer)
+       ("r s" . my/annotate-send-all)
        ("o a" . org-agenda)
        ("o c" . org-capture)
        ("o n" . org-roam-node-find)
@@ -810,6 +915,8 @@
   "Leader map for Evil visual state.")
 (defvar my/visual-ai-map (make-sparse-keymap)
   "AI leader map for Evil visual state.")
+(defvar my/visual-review-map (make-sparse-keymap)
+  "Review leader map for Evil visual state.")
 
 (set-keymap-parent my/normal-leader-map my/leader-map)
 (set-keymap-parent my/normal-ai-map (keymap-lookup my/leader-map "a"))
@@ -817,19 +924,27 @@
 (keymap-set my/normal-leader-map "a" my/normal-ai-map)
 (set-keymap-parent my/visual-leader-map my/leader-map)
 (set-keymap-parent my/visual-ai-map (keymap-lookup my/leader-map "a"))
+(keymap-set my/visual-ai-map "c" #'my/gptel-compose-region)
 (keymap-set my/visual-ai-map "r" #'gptel-rewrite)
 (keymap-set my/visual-leader-map "a" my/visual-ai-map)
+(set-keymap-parent my/visual-review-map (keymap-lookup my/leader-map "r"))
+(keymap-set my/visual-review-map "a" #'my/annotate-region)
+(keymap-set my/visual-leader-map "r" my/visual-review-map)
 (evil-define-key 'normal 'global (kbd "SPC") my/normal-leader-map)
 (evil-define-key 'visual 'global (kbd "SPC") my/visual-leader-map)
 
 (evil-define-key '(normal visual) 'global
   (kbd "C-p") #'project-find-file)
+(evil-define-key 'visual 'global
+  (kbd "C-c C-c") #'my/term-sessions-send-region-or-buffer)
 
 (with-eval-after-load 'which-key
   (which-key-add-keymap-based-replacements
     my/normal-leader-map "a" (cons "ai" my/normal-ai-map))
   (which-key-add-keymap-based-replacements
     my/visual-leader-map "a" (cons "ai" my/visual-ai-map))
+  (which-key-add-keymap-based-replacements
+    my/visual-leader-map "r" (cons "review" my/visual-review-map))
   (which-key-add-keymap-based-replacements
     my/leader-map
     "a" "ai"
@@ -840,7 +955,9 @@
     "g" "git"
     "h" "help"
     "o" "org"
+    "r" "review"
     "s" "search"
+    "t" "terminals"
     "w" "windows"
     "w t" "tabs"))
 
@@ -919,32 +1036,12 @@
 		shell-mode-hook
 		treemacs-mode-hook
 		eshell-mode-hook
-		vterm-mode-hook))
+		ghostel-mode-hook))
   (add-hook mode (lambda () (display-line-numbers-mode 0))))
-
-;; (dolist (mode '(vterm-mode-hook)) (add-hook mode (lambda () (turn-off-evil-mode))))
 
 (setq-default indent-tabs-mode nil)  ;; no tabs
 
 
-
-;; TODO refactor this?
-(setq my/current-test "test_lexer")
-(defun my/build-path ()
-  (concat (locate-dominating-file "." "CMakeLists.txt") "build"))
-(defun my/current-test-path () () (concat (my/build-path) "/" my/current-test))
-(defun my/run-current-test () (interactive)
-    (async-shell-command (my/current-test-path)))
-
-(defun my/compile ()
-  (interactive)
-  (let ((default-directory (my/build-path)))
-    (compile "cmake --build . -j")))
-
-(defun my/run-app ()
-  (interactive)
-  (let ((default-directory (my/build-path)))
-    (eshell-command "ctest")))
 
 ;; https://yiming.dev/blog/2018/03/02/my-org-refile-workflow/
 ;; (defun org-search-heading ()

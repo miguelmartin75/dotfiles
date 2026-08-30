@@ -3,7 +3,7 @@
 ## Status
 
 - Plan: in progress
-- Implementation: Phases 1-5 complete; Phase 6 pending
+- Implementation: Phases 1-6 complete; Phase 7 pending
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
@@ -27,6 +27,7 @@ Times are wall-clock process durations. Deltas compare each row's mean with the 
 | After Phase 3 | Phase 3 commit | 2.665 s +/- 0.020 s | 2.661 s | 2.637-2.686 s | -0.142 s (-5.1%) |
 | After Phase 4 | Phase 4 commit | 2.826 s +/- 0.054 s | 2.815 s | 2.781-2.919 s | +0.161 s (+6.0%) |
 | After Phase 5 | Phase 5 commit | 2.972 s +/- 0.151 s | 2.911 s | 2.863-3.271 s | +0.146 s (+5.2%) |
+| After Phase 6 | Phase 6 commit | 2.907 s +/- 0.140 s | 2.856 s | 2.806-3.185 s | -0.064 s (-2.2%) |
 
 The baseline completed with exit status 0 on every measured run, but logged a non-fatal `use-package` error because `corfu-map` was unbound.
 
@@ -626,7 +627,7 @@ Status: complete
 
 ## Phase 6: Replace Vterm with Ghostel and persistent sessions
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -664,6 +665,17 @@ Status: pending
 - Ghostel is the only interactive terminal renderer.
 - `zmx` owns persistent session lifecycle and `term-sessions.el` remains a thin native-UI client.
 - Every project task runs through its project-local command catalog and the one Ghostel-backed runner.
+
+### Outcome
+
+- Removed Vterm, its Evil forwarding map and hooks, `my/run-in-vterm`, and the bespoke CMake command helpers. Ghostel is configured with a stable module directory at `~/.config/emacs/ghostel/`; first interactive use asks before download or compilation, while normal startup remains dormant and offline.
+- Added pinned `evil-ghostel` provisioning, the Ghostel Evil hook, explicit Ghostel compilation commands, and component-level `term-sessions.el` configuration with Ghostel as the sole frontend. Loading the selected public components does not load Consult or the umbrella integration.
+- Added one public named-session text primitive, explicit region-or-buffer delivery, and an agent-neutral annotation queue. The transport appends one carriage return, preserves source snapshots and local or TRAMP identity, and clears annotations only after a successful send.
+- Added non-submitting Gptel region composition and retained explicit rewrite and send operations. Added the terminal and review leader groups, including the visual-only `C-c C-c` sender without changing Python's native mapping outside visual state.
+- Added a validated directory-local project task catalog. Native completion preserves `Compile`, `Test`, `Check`, `Fix`, then additional labels; `Compile` remains the default, Check and Fix have reviewed defaults, and each local or TRAMP task receives a distinct Ghostel compilation buffer.
+- Omitted the optional tmux adapter because the retained configuration had no source-to-pane workflow. No private Ghostel or term-session APIs, Consult integration, or global Ghostel compilation advice were introduced.
+- Guarded offline double startup, focused transport and catalog tests, Emacs 31 Icomplete ordering, byte compilation, and a fresh final review passed. The first review's native completion ordering finding was corrected. The native Ghostel module, durable zmx lifecycle, real SSH reconnection, graphical terminal, and remote session checks remain in Phase 7 because those runtimes were unavailable.
+- Startup mean decreased from 2.972 s to 2.907 s across the recorded five-run sample. The 0.064 s improvement includes a 3.185 s first-run outlier and remains subject to the final performance audit.
 
 ## Phase 7: Final cleanup and acceptance
 
