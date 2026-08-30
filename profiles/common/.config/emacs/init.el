@@ -31,7 +31,7 @@
  '(org-agenda-files '("/Users/migmartin/org/journal.org"))
  '(tramp-completion-reread-directory-timeout nil)
  '(tramp-default-method "sshx")
- '(tramp-use-ssh-controlmaster-options nil)
+ '(tramp-use-connection-share nil)
  '(warning-suppress-log-types
    '((org-element org-element-cache) (org-element org-element-parser)
      (comp))))
@@ -105,6 +105,19 @@
 
 
 (use-package magit)
+(when (and (executable-find "difft")
+           (package-installed-p 'difftastic))
+  (require 'difftastic-bindings)
+  (setq difftastic-bindings-alist
+        '((((prefixes . ((magit-diff (-1 -1) magit-diff))))
+           . (("M-d" difftastic-magit-diff "Difftastic diff (dwim)")
+              ("M-c" difftastic-magit-show "Difftastic show")))
+          (((prefixes . ((magit-blame "b" magit-blame)))
+            (keymaps . ((magit-blame-read-only-mode-map . magit-blame))))
+           . (("M-RET" difftastic-magit-show "Difftastic show")))
+          (((prefixes . ((magit-file-dispatch (0 1 -1) magit-files))))
+           . (("M-d" difftastic-magit-diff-buffer-file "Difftastic")))))
+  (difftastic-bindings-mode 1))
 (setq server-kill-new-buffers t)
 
 (use-package org
@@ -474,7 +487,15 @@
             (lambda () completion-in-region-mode)))
 
 (use-package eglot
-  :commands eglot
+  :commands (eglot
+             eglot-code-actions
+             eglot-find-declaration
+             eglot-find-implementation
+             eglot-find-typeDefinition
+             eglot-format
+             eglot-inlay-hints-mode
+             eglot-rename
+             eglot-show-call-hierarchy)
   :config
   ;; Install clangd, rust-analyzer, lua-language-server, ty,
   ;; typescript-language-server, zls, nimlangserver, and ols outside Emacs.
@@ -513,6 +534,12 @@
   :commands dape
   :config
   (setq dape-configs (list (assq 'lldb-dap dape-configs))))
+
+(use-package flymake
+  :commands (flymake-goto-next-error
+             flymake-goto-prev-error
+             flymake-show-buffer-diagnostics
+             flymake-show-project-diagnostics))
 
 ;; languages
 (use-package nim-mode)
@@ -603,7 +630,14 @@
                 #'treesit-hs-inside-comment-p))
   (hs-minor-mode 1)
   (unless which-function-mode
-    (which-function-mode 1)))
+    (which-function-mode 1))
+  (when (or treesit-defun-type-regexp
+            (treesit-thing-defined-p 'defun nil))
+    (dolist (state '(normal visual operator))
+      (evil-local-set-key state (kbd "[m") #'evil-backward-section-begin)
+      (evil-local-set-key state (kbd "]m") #'evil-forward-section-begin)
+      (evil-local-set-key state (kbd "[M") #'evil-backward-section-end)
+      (evil-local-set-key state (kbd "]M") #'evil-forward-section-end))))
 
 (dolist (hook '(c-ts-mode-hook
                 c++-ts-mode-hook
@@ -686,12 +720,129 @@
 
 
 ;; keybindings
-(use-package general
-    :config
-    (general-create-definer my/leader-keys
-	:keymaps '(normal insert visual emacs)
-	:prefix "SPC")
-)
+(defun my/project-find-regexp-at-point ()
+  "Search the current project for the symbol at point."
+  (interactive)
+  (let ((symbol (thing-at-point 'symbol t)))
+    (if symbol
+        (project-find-regexp (regexp-quote symbol))
+      (user-error "No symbol at point"))))
+
+(defvar my/leader-map (make-sparse-keymap)
+  "Leader map shared by Evil normal and visual states.")
+
+(dolist (prefix '("a" "b" "c" "d" "f" "g" "h" "o" "s" "w" "w t"))
+  (keymap-set my/leader-map prefix (make-sparse-keymap)))
+
+(dolist
+    (binding
+     '(("," . switch-to-buffer)
+       ("/" . occur)
+       ("m" . evil-show-marks)
+       ("j" . evil-show-jumps)
+       ("f f" . project-find-file)
+       ("f o" . recentf-open-files)
+       ("b b" . switch-to-buffer)
+       ("w h" . evil-window-left)
+       ("w j" . evil-window-down)
+       ("w k" . evil-window-up)
+       ("w l" . evil-window-right)
+       ("w q" . delete-window)
+       ("w x" . window-swap-states)
+       ("w =" . balance-windows)
+       ("w |" . maximize-window)
+       ("w z" . delete-other-windows)
+       ("w u" . winner-undo)
+       ("w r" . winner-redo)
+       ("w t c" . tab-bar-new-tab)
+       ("w t q" . tab-bar-close-tab)
+       ("w t [" . tab-bar-switch-to-prev-tab)
+       ("w t ]" . tab-bar-switch-to-next-tab)
+       ("s l" . occur)
+       ("s g" . project-find-regexp)
+       ("s w" . my/project-find-regexp-at-point)
+       ("s s" . imenu)
+       ("s S" . xref-find-apropos)
+       ("s d" . xref-find-definitions)
+       ("s D" . eglot-find-declaration)
+       ("s r" . xref-find-references)
+       ("s i" . eglot-find-implementation)
+       ("s t" . eglot-find-typeDefinition)
+       ("s I" . eglot-show-call-hierarchy)
+       ("s b" . multi-occur)
+       ("s H" . describe-face)
+       ("s m" . evil-show-marks)
+       ("s j" . evil-show-jumps)
+       ("c f" . eglot-format)
+       ("c r" . eglot-rename)
+       ("c a" . eglot-code-actions)
+       ("c h" . eldoc-doc-buffer)
+       ("c i" . eglot-inlay-hints-mode)
+       ("d p" . flymake-goto-prev-error)
+       ("d n" . flymake-goto-next-error)
+       ("d f" . flymake-show-buffer-diagnostics)
+       ("d l" . flymake-show-project-diagnostics)
+       ("d D" . dape)
+       ("g g" . magit-status)
+       ("a s" . gptel-send)
+       ("o a" . org-agenda)
+       ("o c" . org-capture)
+       ("o n" . org-roam-node-find)
+       ("o i" . org-roam-node-insert)
+       ("o t" . org-set-tags-command)
+       ("o r" . org-table-recalculate-buffer-tables)
+       ("o RET" . org-babel-execute-src-block)
+       ("h o" . customize)
+       ("h h" . info)
+       ("h m" . man)
+       ("h f" . describe-function)
+       ("h v" . describe-variable)
+       ("h c" . describe-command)
+       ("h k" . describe-key)
+       ("h l" . display-line-numbers-mode)))
+  (keymap-set my/leader-map (car binding) (cdr binding)))
+
+(defvar my/normal-leader-map (make-sparse-keymap)
+  "Leader map for Evil normal state.")
+(defvar my/normal-ai-map (make-sparse-keymap)
+  "AI leader map for Evil normal state.")
+(defvar my/visual-leader-map (make-sparse-keymap)
+  "Leader map for Evil visual state.")
+(defvar my/visual-ai-map (make-sparse-keymap)
+  "AI leader map for Evil visual state.")
+
+(set-keymap-parent my/normal-leader-map my/leader-map)
+(set-keymap-parent my/normal-ai-map (keymap-lookup my/leader-map "a"))
+(keymap-set my/normal-ai-map "c" #'gptel)
+(keymap-set my/normal-leader-map "a" my/normal-ai-map)
+(set-keymap-parent my/visual-leader-map my/leader-map)
+(set-keymap-parent my/visual-ai-map (keymap-lookup my/leader-map "a"))
+(keymap-set my/visual-ai-map "r" #'gptel-rewrite)
+(keymap-set my/visual-leader-map "a" my/visual-ai-map)
+(evil-define-key 'normal 'global (kbd "SPC") my/normal-leader-map)
+(evil-define-key 'visual 'global (kbd "SPC") my/visual-leader-map)
+
+(evil-define-key '(normal visual) 'global
+  (kbd "C-p") #'project-find-file)
+
+(with-eval-after-load 'which-key
+  (which-key-add-keymap-based-replacements
+    my/normal-leader-map "a" (cons "ai" my/normal-ai-map))
+  (which-key-add-keymap-based-replacements
+    my/visual-leader-map "a" (cons "ai" my/visual-ai-map))
+  (which-key-add-keymap-based-replacements
+    my/leader-map
+    "a" "ai"
+    "b" "buffers"
+    "c" "code"
+    "d" "diagnostics"
+    "f" "files"
+    "g" "git"
+    "h" "help"
+    "o" "org"
+    "s" "search"
+    "w" "windows"
+    "w t" "tabs"))
 
 (defun my/linear-load-api-key-from-auth-source ()
   "Load Linear API key from auth-source."
@@ -705,93 +856,6 @@
           (setq linear-emacs-api-key secret)
           (message "Successfully loaded Linear API key from auth-source"))
       (message "Failed to retrieve Linear API key from auth-source"))))
-
-;; (use-package
-;;   linear-emacs
-;;   :load-path "~/emacs/linear-emacs/"
-;;   :config
-;;   (setq linear-emacs-org-file-path (expand-file-name "work/linear.org" org-directory))
-;;   (linear-emacs-load-api-key-from-env)
-;;   (setq linear-emacs-issues-state-mapping
-;;         '(("Todo" . "TODO")
-;;           ("In Progress" . "DOING")
-;;           ("In Review" . "REVIEW")
-;;           ("Blocked" . "BLOCKED")
-;;           ("Done" . "DONE")))
-;;
-;;   (defun my/enable-linear-org-sync ()
-;;     "Enable Linear-org synchronization when linear.org is opened."
-;;     (when (and buffer-file-name
-;;                (string-match-p "linear\\.org$" buffer-file-name))
-;;       (linear-emacs-enable-org-sync)
-;;       (message "Linear-org synchronization enabled for this buffer")))
-;;
-;;   (add-hook 'find-file-hook #'my/enable-linear-org-sync)
-;;   (my/leader-keys "G"  '((lambda () (interactive) (find-file (expand-file-name "work/linear.org" org-directory)))  :which-key "goto linear file"))
-;;   (my/leader-keys "gl"  '(linear-emacs-list-issues          :which-key "List Linear issues"))
-;;   (my/leader-keys "gn"  '(linear-emacs-new-issue            :which-key "Create new issue"  ))
-;;   (my/leader-keys "gs"  '(linear-emacs-sync-org-to-linear   :which-key "Sync current issue"))
-;;   (my/leader-keys "ge"  '(linear-emacs-enable-org-sync      :which-key "Enable org sync"   ))
-;;   (my/leader-keys "gd"  '(linear-emacs-disable-org-sync     :which-key "Disable org sync"  ))
-;;   (my/leader-keys "gt"  '(linear-emacs-test-connection      :which-key "Test connection"   ))
-;;   (my/leader-keys "gd"  '(linear-emacs-toggle-debug         :which-key "Toggle debug mode" ))
-;; )
-
-(my/leader-keys "[" '(flymake-goto-prev-error :which-key "prev error"))
-(my/leader-keys "]" '(flymake-goto-next-error :which-key "next error"))
-(my/leader-keys "b" '(compile :which-key "compile"))
-(my/leader-keys "c" '(my/compile :which-key "compile"))
-(my/leader-keys "r" '(my/run-app :which-key "run"))
-;;(my/leader-keys "t" '(my/run-current-test :which-key "run current test"))
-;; todo
-(my/leader-keys "t" '(org-todo :which-key "change todo state"))
-
-(my/leader-keys "Z" '(my/write-mode :which-key "zen mode"))
-(my/leader-keys "z" '(my/write-mode-no-zoom :which-key "zen mode no zoom"))
-(my/leader-keys "v" '(my/default-mode :which-key "code mode"))
-
-(my/leader-keys "/" '(comment-or-uncomment-region :which-key "toggle comment"))
-
-;; TODO fixme
-
-(my/leader-keys "e" '(org-set-effort :which-key "set effort for org-mode"))
-(my/leader-keys "x" '(org-capture :which-key "capture task"))
-(my/leader-keys "n" '(org-roam-node-find :which-key "roam files"))
-(my/leader-keys "j" '(my/goto-journal :which-key "goto journal"))
-
-(my/leader-keys "oc" '(org-table-recalculate-buffer-tables :which-key "recaclc tables in buffer"))
-(my/leader-keys "on" '(org-id-get-create :which-key "create node"))
-
-(my/leader-keys "wz" '(delete-other-windows :which-key "zoom window"))
-(my/leader-keys "wj" '(evil-window-down :which-key "win down"))
-(my/leader-keys "wk" '(evil-window-up :which-key "win up"))
-(my/leader-keys "wh" '(evil-window-left :which-key "win left"))
-(my/leader-keys "wl" '(evil-window-right :which-key "win right"))
-(my/leader-keys "wm" '(evil-window-right :which-key "win right"))
-(my/leader-keys "wu" '(winner-undo :which-key "winner undo"))
-(my/leader-keys "wr" '(winner-redo :which-key "winner redo"))
-(my/leader-keys "wm" '(maximize-window :which-key "maximize window"))
-
-(my/leader-keys "RET" '(org-babel-execute-src-block :which-key "execute org-mode source block"))
-(my/leader-keys "h" '(evil-ex-nohighlight :which-key "disable current highlight"))
-
-(my/leader-keys "f" '(org-narrow-to-subtree :which-key "narrow to subtree"))
-(my/leader-keys "F" '(widen :which-key "widen narrow"))
-
-(my/leader-keys "E" '(eglot :which-key "start eglot/LSP"))
-
-(my/leader-keys "L" '(org-insert-link :which-key "insert link in org-mode"))
-(my/leader-keys "l" '(display-line-numbers-mode :which-key "toggle line numbers"))
-
-;; TODO: need this operation
-(my/leader-keys "i" '(org-roam-node-insert :which-key "insert roam link"))
-(my/leader-keys "mt" '(org-roam-tag-add :which-key "add tag"))
-(my/leader-keys "mT" '(org-roam-tag-remove :which-key "remove tag"))
-
-(my/leader-keys "k" '(describe-key :which-key "describe key"))
-
-; gptel bindings
-
 
 (require 'tramp)
 
@@ -834,19 +898,12 @@
            ;; tramp config for async emacs process
            (setq tramp-completion-reread-directory-timeout nil)
            (setq tramp-default-method "sshx")
-           (setq tramp-use-ssh-controlmaster-options nil))
+           (setq tramp-use-connection-share nil))
 )
 
 ;; Speed up TRAMP
 (setq tramp-auto-save-directory "~/tmp/tramp-autosave")
 (setq tramp-chunksize 2000)
-
-;; Disable version control for remote files (faster)
-(setq vc-ignore-dir-regexp
-      (format "\\(%s\\)\\|\\(%s\\)"
-              vc-ignore-dir-regexp
-              tramp-file-name-regexp))
-
 
 ;; iterate over all bindings
 (setq ispell-program-name "aspell")

@@ -3,7 +3,7 @@
 ## Status
 
 - Plan: in progress
-- Implementation: Phases 1-4 complete; Phase 5 pending
+- Implementation: Phases 1-5 complete; Phase 6 pending
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
@@ -26,6 +26,7 @@ Times are wall-clock process durations. Deltas compare each row's mean with the 
 | After Phase 2 | Phase 2 commit | 2.807 s +/- 0.061 s | 2.810 s | 2.734-2.898 s | -1.159 s (-29.2%) |
 | After Phase 3 | Phase 3 commit | 2.665 s +/- 0.020 s | 2.661 s | 2.637-2.686 s | -0.142 s (-5.1%) |
 | After Phase 4 | Phase 4 commit | 2.826 s +/- 0.054 s | 2.815 s | 2.781-2.919 s | +0.161 s (+6.0%) |
+| After Phase 5 | Phase 5 commit | 2.972 s +/- 0.151 s | 2.911 s | 2.863-3.271 s | +0.146 s (+5.2%) |
 
 The baseline completed with exit status 0 on every measured run, but logged a non-fatal `use-package` error because `corfu-map` was unbound.
 
@@ -572,7 +573,7 @@ Status: complete
 
 ## Phase 5: Rebuild project retrieval and direct mappings
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -603,6 +604,25 @@ Status: pending
 - No removed picker command is referenced.
 - Search, navigation, and history work through native commands and the minibuffer.
 - Review annotations have their own `SPC r` prefix, and optional Difftastic support is contained within Magit.
+
+### Implementation decisions
+
+- Native project discovery retains Emacs's default VC directory exclusions, so `project-try-vc` can inspect both local and TRAMP Git roots. TRAMP connection sharing is configured only through Emacs 31's public `tramp-use-connection-share` option.
+- Parser-backed defun motions use `treesit-thing-defined-p`, the same public predicate used by `treesit-major-mode-setup`, so modes such as `python-ts-mode` that define defuns through language-scoped `treesit-thing-settings` receive the mappings.
+- The normal and visual leader overlays are named maps. Which Key annotates each overlay's actual `SPC a` binding, preserving state-specific AI commands while leaving insert and Emacs states unchanged and giving Phase 6 direct extension points.
+- Phase 5 binds only commands that exist at this stage. `SPC t`, `SPC r`, and visual `SPC a c` remain unbound until Phase 6 defines the terminal transport, annotation queue, project command runner, and Gptel region composer. Their Phase 6 mapping work is not duplicated here.
+- `SPC o j` remains unbound because the old configuration referenced an undefined `my/goto-journal`, and the target contract forbids adding an owned compatibility wrapper where no implemented journal workflow exists.
+- `evil-textobj-tree-sitter` revision `fecc0e11615df31a6651ce11b012388e53cad4e9` was rejected. Its built-in `treesit` mode-language table omits `nim-mode`, `odin-mode`, and `markdown-ts-mode`; Markdown has no built-in text-object query; and the retained surface therefore cannot pass the required mapping and query gates without repo-owned compatibility mappings or queries. The package's optional `(require 'tree-sitter nil t)` does not load the legacy feature when it is absent, but legacy-feature isolation alone is insufficient for adoption. Counted `af`, `if`, `aa`, and `ia` remain a deliberate residual gap.
+
+### Outcome
+
+- Replaced General and the duplicate legacy bindings with one native sparse leader map, plus named normal and visual overlays for the intentionally state-specific Gptel commands. `SPC` is a leader only in Evil normal and visual states, and Which Key annotates the actual maps users invoke.
+- Added the complete Phase 5 native file, buffer, window, tab, project search, symbol, Eglot, Flymake, Dape, Magit, Org, help, mark, jump, highlight, and selected-buffer search mappings. Every bound leaf resolves to an interactive command or valid autoload, while Python's native `C-c` bindings remain intact.
+- Added native counted Tree-sitter function-start and function-end motions through Evil's jump-aware section commands. Real Python and C parsers passed count, direction, and jump-list checks.
+- Enabled the pinned Difftastic package only when `difft` is available and limited it to the reviewed Magit diff, blame, and file-dispatch entries. Both the Difftastic-present branch and ordinary-Magit fallback passed.
+- Restored local and TRAMP VC project discovery by removing the broad remote exclusion and using Emacs 31's public TRAMP connection-sharing option. Local Git and synthetic `/sshx:` project-root discovery passed; no live SSH host was available.
+- Guarded offline startup, byte compilation, mapping-state checks, native parser checks, project search delegation, optional Difftastic branches, and two independent review rounds passed. The first review's remote-project, Python-motion, and Which Key findings were corrected; the fresh final review reported no findings.
+- Startup mean increased from 2.826 s to 2.972 s across the recorded five-run sample. The 0.146 s regression, including the 3.271 s first-run outlier, remains recorded for the final performance audit.
 
 ## Phase 6: Replace Vterm with Ghostel and persistent sessions
 
