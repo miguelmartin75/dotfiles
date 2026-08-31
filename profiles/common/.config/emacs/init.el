@@ -4,6 +4,9 @@
 ;; LaTeX, dvisvgm, and the selected language servers: clangd, rust-analyzer,
 ;; lua-language-server, ty, typescript-language-server, zls, nimlangserver, and
 ;; ols.  Difftastic (`difft') is optional and enables structural Magit diffs.
+;; Graphical Emacs also requires JetBrains Mono and Symbols Nerd Font Mono.  The
+;; macOS provisioner installs Symbols Nerd Font Mono; other systems must install
+;; the same font family through their system font installation path.
 ;; After linking this profile into ~/.config, provision it explicitly in this
 ;; order:
 ;; emacs --batch -Q -l ~/.config/emacs/install-packages.el
@@ -1054,13 +1057,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
                    :fallback '("Apple Color Emoji"
                               "Apple Symbols"
                               "Menlo")))
-;; Use 'prepend for the NS and Mac ports or Emacs will crash.
-(set-fontset-font t 'unicode (font-spec :family "all-the-icons") nil 'append)
-(set-fontset-font t 'unicode (font-spec :family "file-icons") nil 'append)
-(set-fontset-font t 'unicode (font-spec :family "Material Icons") nil 'append)
-(set-fontset-font t 'unicode (font-spec :family "github-octicons") nil 'append)
-(set-fontset-font t 'unicode (font-spec :family "FontAwesome") nil 'append)
-(set-fontset-font t 'unicode (font-spec :family "Weather Icons") nil 'append)
+(set-fontset-font t '(#xe000 . #xf8ff)
+                  (font-spec :family "Symbols Nerd Font Mono") nil 'prepend)
+(set-fontset-font t '(#xf0000 . #xffffd)
+                  (font-spec :family "Symbols Nerd Font Mono") nil 'prepend)
 
 (show-paren-mode 1)
 (tool-bar-mode -1)          ; Disable the toolbar

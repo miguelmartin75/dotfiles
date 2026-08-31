@@ -307,7 +307,7 @@ Status: complete
 
 ## Phase 3: Provision and scope the Nerd Font fallback
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -355,6 +355,21 @@ Status: pending
   removed Nerd Icons Lisp package.
 - The fallback is limited to the exact character ranges that require it and does
   not interfere with ordinary Unicode or Ghostel's Kitty graphics placeholder.
+
+### Measured outcome
+
+- On 2026-08-31, `bash -n`, `check-parens`, byte compilation of `init.el` to
+  `/private/tmp`, a guarded full batch load, and `git diff --check` passed with
+  only the existing deferred-package and free-variable warnings.
+- Runtime interception confirmed exactly two `Symbols Nerd Font Mono` mappings,
+  both prepended: U+E000-U+F8FF and U+F0000-U+FFFFD. No whole-Unicode or U+10EEEE
+  mapping was introduced, and the JetBrains Mono and Apple fallback face
+  configuration remained intact.
+- Homebrew installed `font-symbols-only-nerd-font` 3.5.1 successfully. Repeating
+  the same command reported the latest version already installed, confirming the
+  scoped provisioning step is idempotent. Fontconfig resolves `Symbols Nerd
+  Font Mono`; graphical Emacs and Ghostel/Neovim glyph rendering remain part of
+  Phase 5 acceptance.
 
 ## Phase 4: Generalize text delivery with explicit selection and per-tab replay
 
