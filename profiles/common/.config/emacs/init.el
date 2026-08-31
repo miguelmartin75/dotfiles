@@ -604,6 +604,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
       completion-category-defaults nil
       completion-category-overrides nil
       icomplete-in-buffer t
+      icomplete-show-matches-on-no-input t
       icomplete-vertical-in-buffer-adjust-list t)
 (icomplete-vertical-mode 1)
 

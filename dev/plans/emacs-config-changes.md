@@ -3,7 +3,7 @@
 ## Status
 
 - Plan: complete
-- Implementation: Phases 1-8 complete
+- Implementation: Phases 1-9 complete
 - Target: Emacs 31.1+ with dynamic-module support, `package-vc`, Eglot, Flymake, Xref, project.el, Icomplete, and native Tree-sitter
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal references: `refs/ghostel/README.org`, `refs/emacs-term-sessions/README.org`
@@ -762,6 +762,33 @@ Status: complete
 - Before any tracked Phase 8 edit at `45d20f8`, the five samples were 2.003491, 2.072649, 1.960917, 1.955468, and 1.947334 seconds. Mean was 1.987972 seconds, sample standard deviation was 0.052084 seconds, median was 1.960917 seconds, and range was 1.947334-2.072649 seconds.
 - After the runtime implementation was final, the five samples were 1.991119, 1.949684, 1.988087, 1.966643, and 1.989660 seconds. Mean was 1.977039 seconds, sample standard deviation was 0.018275 seconds, median was 1.988087 seconds, and range was 1.949684-1.991119 seconds.
 - The measured mean changed by -0.010933 seconds (-0.5 percent), which is smaller than the before-sample standard deviation and does not indicate a material startup regression.
+
+## Phase 9: Show minibuffer candidates immediately
+
+Status: complete
+
+### Changes
+
+1. Enable Icomplete candidate rendering while minibuffer input still equals its initial value, including empty `M-x` input and the initial directory in `find-file`.
+2. Preserve vertical Icomplete, the existing native completion styles, explicit CAPF triggering, and Emacs's grow-only minibuffer resizing. Do not add a completion package or force a fixed-height minibuffer.
+
+### Verification
+
+- A guarded batch load completes without package installation, archive refresh, VC installation, URL retrieval, or grammar installation.
+- After loading the configuration, vertical Icomplete remains enabled and `icomplete-show-matches-on-no-input` is non-nil.
+- Completion styles, explicit CAPF bindings, and transient candidate navigation remain unchanged.
+
+### Success criteria
+
+- `M-x` and file prompts render their initial candidate sets before the user changes the minibuffer input.
+- Candidate rendering no longer waits for the first typed character before growing the minibuffer.
+- Completion remains native and code completion remains explicitly triggered.
+
+### Outcome
+
+- Enabled `icomplete-show-matches-on-no-input` in the existing native completion configuration. No completion style, key binding, resize setting, or package changed.
+- A guarded full startup load passed with installation and network entry points replaced by errors. Runtime assertions confirmed vertical Icomplete, the existing completion styles, explicit CAPF bindings, and transient candidate navigation.
+- An Emacs 31.1 rendering probe confirmed that unchanged initial input produces no candidate overlay with the option disabled and a populated overlay with it enabled. `check-parens` and `git diff --check` passed.
 
 ## References
 
