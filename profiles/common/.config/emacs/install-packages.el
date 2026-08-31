@@ -46,7 +46,6 @@
                (seq-remove
                 #'package-installed-p
                 '(dape                   ; explicit DAP launch and attach
-                  doom-modeline          ; active modeline presentation
                   evil                   ; modal editing core
                   evil-better-visual-line ; display-line motions
                   evil-collection        ; Evil keys in retained modes

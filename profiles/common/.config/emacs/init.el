@@ -292,6 +292,24 @@
 
 (use-package ob-async)
 
+;; mode line
+(setopt mode-line-compact 'long
+        project-mode-line t)
+(setq-default mode-line-format
+              '("%e"
+                mode-line-front-space
+                mode-line-modified
+                mode-line-remote
+                mode-line-window-dedicated
+                mode-line-buffer-identification
+                (project-mode-line project-mode-line-format)
+                (vc-mode vc-mode)
+                mode-line-format-right-align
+                mode-line-misc-info
+                mode-line-modes
+                mode-line-position
+                mode-line-end-spaces))
+
 ;; evil
 (use-package evil
    :init
@@ -302,6 +320,17 @@
    (setq evil-want-C-w-delete t)
    (setq evil-want-C-w-in-emacs-state t)
    (setq evil-undo-system 'undo-redo)
+   (setq evil-mode-line-format '(after . mode-line-front-space)
+         evil-normal-state-tag (propertize " NORMAL " 'face 'success)
+         evil-insert-state-tag (propertize " INSERT " 'face 'mode-line-emphasis)
+         evil-visual-state-tag (propertize " VISUAL " 'face 'warning)
+         evil-visual-char-tag (propertize " VISUAL " 'face 'warning)
+         evil-visual-line-tag (propertize " V-LINE " 'face 'warning)
+         evil-visual-block-tag (propertize " V-BLOCK " 'face 'warning)
+         evil-replace-state-tag (propertize " REPLACE " 'face 'error)
+         evil-operator-state-tag (propertize " OPERATOR " 'face 'warning)
+         evil-motion-state-tag (propertize " MOTION " 'face 'shadow)
+         evil-emacs-state-tag (propertize " EMACS " 'face 'mode-line-emphasis))
    (setq-default evil-symbol-word-search t)
 
    :config
@@ -642,22 +671,11 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
           js-ts-mode
           typescript-ts-mode
           tsx-ts-mode))
-(setopt which-func-modes
-        '(c-ts-mode
-          c++-ts-mode
-          rust-ts-mode
-          lua-ts-mode
-          python-ts-mode
-          js-ts-mode
-          typescript-ts-mode
-          tsx-ts-mode
-          markdown-ts-mode
-          zig-mode
-          nim-mode
-          odin-mode))
+(setopt which-func-modes t)
+(which-function-mode 1)
 
 (defun my/parser-tools-mode ()
-  "Enable native folding and function context in parser-backed buffers."
+  "Enable native folding and Evil motions in parser-backed buffers."
   (let ((parser-settings
          (pcase major-mode
            ('zig-mode '(zig "function_declaration" "block"))
@@ -709,8 +727,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
                     hs-inside-comment-predicate
                     #'treesit-hs-inside-comment-p))
       (hs-minor-mode 1)
-      (unless which-function-mode
-        (which-function-mode 1))
       (when (or treesit-defun-type-regexp
                 (treesit-thing-defined-p 'defun nil))
         (dolist (state '(normal visual operator))
@@ -763,14 +779,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
  (expand-file-name "themes" (file-name-directory (or load-file-name user-init-file))))
 (load-theme 'mig-one-light t)
 
-(use-package doom-modeline
-  :hook (after-init . doom-modeline-mode)
-  :config
-  (setq doom-modeline-icon t)
-  (setq doom-modeline-major-mode-color-icon t)
-  (setq doom-modeline-minor-modes t)
-)
-
 (use-package olivetti
   :commands olivetti-mode
   :init (setq olivetti-body-width .67))
@@ -792,7 +800,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
     (setq tab-bar-tab-hints t)
 )
-; M-x nerd-icons-install-fonts
 
 ;; keybindings
 (defun my/project-find-regexp-at-point ()
