@@ -373,7 +373,7 @@ Status: complete
 
 ## Phase 4: Generalize text delivery with explicit selection and per-tab replay
 
-Status: pending
+Status: complete locally; upstream pin reachability pending Phase 5 acceptance
 
 ### Source contract
 
@@ -526,8 +526,8 @@ solely to discover identity.
    it. Otherwise insert exact plain text at its current point, leaving point after
    the text and the buffer modified without saving, displaying, switching to, or
    interpreting it. Never use `inhibit-read-only` or a same-named replacement.
-8. Bind `SPC t r` and visual `C-c C-c` to the chooser source command. Bind
-   `SPC t R` and visual `C-c C-r` to the replay source command. Update Which Key
+8. Bind `SPC t R` and visual `C-c C-c` to the chooser source command. Bind
+   `SPC t r` and visual `C-c C-r` to the replay source command. Update Which Key
    descriptions, docstrings, mapping documentation, and tests to use these names
    and the exact target labels. `my/annotate-send-all` always calls the chooser
    transport and clears `my/annotations` only after successful delivery; it never
@@ -632,8 +632,8 @@ solely to discover identity.
 
 - Any live Emacs buffer can provide an active region or accessible buffer
   contents without a mode, file, mutability, process, or location allowlist.
-- `SPC t r` and visual `C-c C-c` always select one exact target class and a
-  concrete target. `SPC t R` and visual `C-c C-r` replay only the current tab's
+- `SPC t R` and visual `C-c C-c` always select one exact target class and a
+  concrete target. `SPC t r` and visual `C-c C-r` replay only the current tab's
   last successful target and never prompt.
 - Target state is a public-tab-bar property with the documented tab lifetime and
   never leaks between tabs or falls back to a name-, index-, window-, or
@@ -651,6 +651,30 @@ solely to discover identity.
   accessible-text and absolute-location contracts. Annotation Markdown remains
   structurally valid for any contiguous backtick run, and its queue survives any
   signaled selection or delivery failure.
+
+### Measured outcome
+
+- Ghostel commit `53c73e9b78a21b0a9d7b66e4db38e80ef1fc93e3` adds the public
+  liveness and failure-signaling send boundary. Its 64 focused pure-Elisp tests,
+  byte compilation, Checkdoc checks, `check-parens`, and `git diff --check`
+  passed. Native-module tests remain part of final acceptance.
+- term-sessions commit `acc872676ad2476187984056e7896aa0ea2b2dfc` adds the
+  public location-aware existing-session reader. Its 123-test suite passed under
+  UTC, and focused loading, byte compilation, `check-parens`, and
+  `git diff --check` passed. The local-time suite retains one pre-existing
+  epoch-zero assertion that formats as 1969 in `America/Los_Angeles`.
+- The configuration's four focused ERT tests passed, including source and
+  annotation behavior, all four transports, stale-target handling, per-tab
+  lifetime, the flipped `SPC t r` replay and `SPC t R` chooser mappings, and both
+  split creation flows. A real public `tab-bar-tabs` persistence probe reported
+  `TAB_STATE_OK`; `check-parens`, temporary byte compilation, guarded startup,
+  and `git diff --check` also passed.
+- The original Ghostel and term-sessions repository URLs are retained. The two
+  new pinned commits currently exist only in the local reference repositories
+  and are not yet reachable from those upstream URLs. Phase 5 acceptance must
+  resolve that publication boundary before fresh provisioning can pass.
+- Real Ghostel PTY, zmx, TRAMP, graphical, and interactive TTY checks remain in
+  the Phase 5 acceptance suite.
 
 ## Phase 5: Final acceptance and documentation reconciliation
 

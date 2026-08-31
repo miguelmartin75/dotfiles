@@ -424,30 +424,195 @@
   :defer t
   :init (setq term-sessions-preferred-frontend 'ghostel))
 (use-package term-sessions-frontends
-  :commands term-sessions-open)
+  :commands (term-sessions-open term-sessions-read-existing-session-entry))
 (use-package term-sessions-list
   :commands term-sessions-list)
 (use-package term-sessions-zmx
-  :commands term-sessions-history)
+  :commands (term-sessions-history term-sessions-send))
 (use-package term-sessions-org
   :commands term-sessions-store-org-link)
-(use-package term-sessions-actions
-  :commands term-sessions-action-send-text-to-session)
 
-(defun my/term-sessions-send-text (text)
-  "Select a named terminal session and send TEXT followed by Return."
-  (term-sessions-action-send-text-to-session (concat text "\r")))
+(require 'tab-bar)
 
-(defun my/term-sessions-send-region-or-buffer ()
-  "Send the active region, or the full buffer, to a named terminal session."
+(defun my/send-text-save-last-target (target)
+  "Save TARGET as the current tab's last successful text target."
+  (let ((tabs
+         (mapcar (lambda (tab)
+                   (if (eq (car tab) 'current-tab)
+                       (let ((properties (cdr tab)))
+                         (setf (alist-get 'my/send-text-last-target properties) target)
+                         (cons 'current-tab properties))
+                     tab))
+                 (tab-bar-tabs))))
+    (tab-bar-tabs-set tabs)))
+
+(defun my/send-text-deliver (target text replay)
+  "Deliver TEXT to TARGET, clearing stale REPLAY object targets."
+  (pcase (plist-get target :type)
+    ('zmx
+     (let ((default-directory (plist-get target :directory)))
+       (term-sessions-send (plist-get target :name) (concat text "\r"))))
+    ('ghostel
+     (require 'ghostel)
+     (let ((buffer (plist-get target :buffer)))
+       (unless (and (buffer-live-p buffer)
+                    (memq buffer (ghostel-buffer-list))
+                    (ghostel-buffer-live-p buffer))
+         (when replay
+           (my/send-text-save-last-target nil))
+         (user-error "Ghostel target is no longer available"))
+       (with-current-buffer buffer
+         (ghostel-paste-string text)
+         (ghostel-send-key "return"))))
+    ('process
+     (let ((buffer (plist-get target :buffer))
+           (process (plist-get target :process)))
+       (unless (and (buffer-live-p buffer)
+                    (process-live-p process)
+                    (eq process (get-buffer-process buffer)))
+         (when replay
+           (my/send-text-save-last-target nil))
+         (user-error "Process target is no longer available"))
+       (process-send-string process text)))
+    ('buffer
+     (let ((buffer (plist-get target :buffer)))
+       (unless (buffer-live-p buffer)
+         (when replay
+           (my/send-text-save-last-target nil))
+         (user-error "Writable buffer target is no longer available"))
+       (with-current-buffer buffer
+         (when buffer-read-only
+           (user-error "Writable buffer target is now read-only"))
+         (insert text))))
+    (_
+     (user-error "Unknown text target"))))
+
+(defun my/send-text-to-target (text)
+  "Prompt for a concrete target and deliver TEXT to it."
+  (let ((target-class
+         (completing-read
+          "Target class: "
+          '("Durable zmx session"
+            "Ghostel buffer"
+            "Emacs process buffer (raw text)"
+            "Writable Emacs buffer (insert at point)")
+          nil t))
+        target)
+    (pcase target-class
+      ("Durable zmx session"
+       (let ((entry (term-sessions-read-existing-session-entry "zmx session: ")))
+         (setq target (list :type 'zmx
+                            :name (plist-get entry :name)
+                            :directory (plist-get entry :directory)))))
+      ("Ghostel buffer"
+       (require 'ghostel)
+       (let (candidates)
+         (dolist (buffer (ghostel-buffer-list))
+           (when (ghostel-buffer-live-p buffer)
+             (push (cons (buffer-name buffer) buffer) candidates)))
+         (setq candidates (nreverse candidates))
+         (unless candidates
+           (user-error "No Ghostel buffers can accept input"))
+         (let ((name (completing-read "Ghostel buffer: " candidates nil t)))
+           (setq target (list :type 'ghostel
+                              :buffer (alist-get name candidates nil nil #'string=))))))
+      ("Emacs process buffer (raw text)"
+       (let (candidates)
+         (dolist (buffer (buffer-list))
+           (let ((process (get-buffer-process buffer)))
+             (when (process-live-p process)
+               (push (cons (buffer-name buffer) (cons buffer process)) candidates))))
+         (setq candidates (nreverse candidates))
+         (unless candidates
+           (user-error "No Emacs process buffers are available"))
+         (let* ((name (completing-read "Emacs process buffer: " candidates nil t))
+                (entry (alist-get name candidates nil nil #'string=)))
+           (setq target (list :type 'process
+                              :buffer (car entry)
+                              :process (cdr entry))))))
+      ("Writable Emacs buffer (insert at point)"
+       (let (candidates)
+         (dolist (buffer (buffer-list))
+           (with-current-buffer buffer
+             (unless buffer-read-only
+               (push (cons (buffer-name buffer) buffer) candidates))))
+         (setq candidates (nreverse candidates))
+         (unless candidates
+           (user-error "No writable Emacs buffers are available"))
+         (let ((name (completing-read "Writable Emacs buffer: " candidates nil t)))
+           (setq target (list :type 'buffer
+                              :buffer (alist-get name candidates nil nil #'string=))))))
+      (_
+       (user-error "Unknown text target class")))
+    (my/send-text-deliver target text nil)
+    (my/send-text-save-last-target target)))
+
+(defun my/send-text-send-to-last-target (text)
+  "Replay the current tab's last successful target with TEXT."
+  (let (target)
+    (dolist (tab (tab-bar-tabs))
+      (when (eq (car tab) 'current-tab)
+        (setq target (alist-get 'my/send-text-last-target (cdr tab)))))
+    (unless target
+      (user-error "No saved text target in this tab; use the target chooser"))
+    (my/send-text-deliver target text t)))
+
+(defun my/send-region-or-buffer ()
+  "Select a target for the active region or accessible buffer contents."
   (interactive)
-  (my/term-sessions-send-text
+  (my/send-text-to-target
    (if (use-region-p)
        (buffer-substring-no-properties (region-beginning) (region-end))
      (buffer-substring-no-properties (point-min) (point-max)))))
 
+(defun my/send-region-or-buffer-to-last-target ()
+  "Replay the current target with the active region or accessible contents."
+  (interactive)
+  (my/send-text-send-to-last-target
+   (if (use-region-p)
+       (buffer-substring-no-properties (region-beginning) (region-end))
+     (buffer-substring-no-properties (point-min) (point-max)))))
+
+(defun my/create-ghostel-terminal-in-split (&optional name directory)
+  "Create a Ghostel terminal in a right-side split and remember it."
+  (interactive
+   (let ((directory default-directory))
+     (list (read-string "Ghostel buffer name (optional): ") directory)))
+  (unless directory
+    (setq directory default-directory))
+  (require 'ghostel)
+  (let* ((default-directory directory)
+         (buffer
+          (ghostel-create name
+                           '((display-buffer-in-direction)
+                             (direction . right)
+                             (window-width . 0.5)))))
+    (unless (ghostel-buffer-live-p buffer)
+      (user-error "Created Ghostel buffer cannot accept input"))
+    (my/send-text-save-last-target (list :type 'ghostel :buffer buffer))))
+
+(defun my/open-or-create-zmx-session-in-split (&optional name command directory)
+  "Open or create a zmx session in a right-side split and remember it."
+  (interactive
+   (let ((directory default-directory)
+         (name (read-string "zmx session name: "))
+         command)
+     (when current-prefix-arg
+       (setq command (read-string "Command for new session: ")))
+     (list name command directory)))
+  (unless directory
+    (setq directory default-directory))
+  (let ((default-directory directory)
+        (display-buffer-overriding-action
+         '((display-buffer-in-direction)
+           (direction . right)
+           (window-width . 0.5))))
+    (term-sessions-open (list :name name :directory directory) command)
+    (my/send-text-save-last-target
+     (list :type 'zmx :name name :directory directory))))
+
 (defvar my/annotations nil
-  "Queued source annotations awaiting terminal-session delivery.")
+  "Queued source annotations awaiting explicit target selection.")
 
 (defun my/annotate-region (begin end annotation)
   "Queue the region from BEGIN to END with ANNOTATION."
@@ -457,8 +622,8 @@
              (read-string "Annotation: "))
      (user-error "Select a region to annotate")))
   (push (list :source (or buffer-file-name (buffer-name))
-              :start-line (line-number-at-pos begin)
-              :end-line (line-number-at-pos (max begin (1- end)))
+              :start-line (line-number-at-pos begin t)
+              :end-line (line-number-at-pos (max begin (1- end)) t)
               :mode major-mode
               :annotation annotation
               :text (buffer-substring-no-properties begin end))
@@ -474,15 +639,23 @@
     (unless (string-empty-p request)
       (setq prompt (concat prompt "\n## Overall request\n\n" request "\n")))
     (dolist (item (reverse my/annotations))
-      (setq prompt
-            (concat prompt
-                    "\n## " (plist-get item :source)
-                    ":" (number-to-string (plist-get item :start-line))
-                    "-" (number-to-string (plist-get item :end-line))
-                    " (" (symbol-name (plist-get item :mode)) ")\n\n"
-                    (plist-get item :annotation) "\n\n```\n"
-                    (plist-get item :text) "\n```\n")))
-    (my/term-sessions-send-text prompt)
+      (let ((text (plist-get item :text))
+            (fence "```")
+            (start 0))
+        (while (string-match "`+" text start)
+          (setq fence
+                (make-string (max (length fence)
+                                  (1+ (length (match-string 0 text)))) ?`)
+                start (match-end 0)))
+        (setq prompt
+              (concat prompt
+                      "\n## " (plist-get item :source)
+                      ":" (number-to-string (plist-get item :start-line))
+                      "-" (number-to-string (plist-get item :end-line))
+                      " (" (symbol-name (plist-get item :mode)) ")\n\n"
+                      (plist-get item :annotation) "\n\n" fence "\n"
+                      text "\n" fence "\n"))))
+    (my/send-text-to-target prompt)
     (setq my/annotations nil)))
 
 (defun my/gptel-compose-region (begin end)
@@ -886,7 +1059,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("t h" . term-sessions-history)
        ("t o" . term-sessions-store-org-link)
        ("t c" . my/project-run-command)
-       ("t r" . my/term-sessions-send-region-or-buffer)
+       ("t r" . my/send-region-or-buffer-to-last-target)
+       ("t R" . my/send-region-or-buffer)
+       ("t g" . my/create-ghostel-terminal-in-split)
+       ("t z" . my/open-or-create-zmx-session-in-split)
        ("r s" . my/annotate-send-all)
        ("o a" . org-agenda)
        ("o c" . org-capture)
@@ -934,7 +1110,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (evil-define-key '(normal visual) 'global
   (kbd "C-p") #'project-find-file)
 (evil-define-key 'visual 'global
-  (kbd "C-c C-c") #'my/term-sessions-send-region-or-buffer)
+  (kbd "C-c C-c") #'my/send-region-or-buffer)
+(evil-define-key 'visual 'global
+  (kbd "C-c C-r") #'my/send-region-or-buffer-to-last-target)
 
 (with-eval-after-load 'which-key
   (which-key-add-keymap-based-replacements
@@ -956,6 +1134,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "r" "review"
     "s" "search"
     "t" "terminals"
+    "t r" "replay region/buffer target"
+    "t R" "send region/buffer"
+    "t g" "create Ghostel split"
+    "t z" "open zmx split"
     "w" "windows"
     "w t" "tabs"))
 

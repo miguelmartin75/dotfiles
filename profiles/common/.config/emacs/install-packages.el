@@ -11,16 +11,16 @@
         '((ghostel
            ;; Native PTY terminal renderer and explicit compilation UI.
            (:url "https://github.com/dakra/ghostel.git")
-           "7c4cbd9f487b545c3d0452ab749f65eaa3c18b7e")
+           "53c73e9b78a21b0a9d7b66e4db38e80ef1fc93e3")
           (evil-ghostel
            ;; Evil state integration for Ghostel terminal buffers.
            (:url "https://github.com/dakra/ghostel.git"
             :lisp-dir "extensions/evil-ghostel")
-           "7c4cbd9f487b545c3d0452ab749f65eaa3c18b7e")
+           "53c73e9b78a21b0a9d7b66e4db38e80ef1fc93e3")
           (term-sessions
            ;; Named, durable zmx sessions and their Emacs/Org interfaces.
            (:url "https://github.com/ArthurHeymans/emacs-term-sessions.git")
-           "0815dbea006128df1d61e9d29e5a8ada53b349c1")
+           "acc872676ad2476187984056e7896aa0ea2b2dfc")
           (odin-mode
            ;; Odin editing mode for the retained language surface.
            (:url "https://github.com/mattt-b/odin-mode.git")
