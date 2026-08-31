@@ -227,7 +227,7 @@ Function presentation can serve every major mode that supports it.
 
 ## Phase 2: Make minibuffer word killing and Ghostel key ownership predictable
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -291,6 +291,19 @@ Status: pending
   alternate-screen detection.
 - Normal terminal input needs no custom forwarding map, and outer navigation has
   one explicit entry and exit path.
+
+### Measured outcome
+
+- On 2026-08-31, `check-parens`, byte compilation of `init.el` to
+  `/private/tmp`, and `git diff --check` passed with only the existing deferred
+  package and free-variable warnings.
+- A guarded batch load confirmed `kill-region-dwim` is `unix-word`, `C-w`
+  remains the inherited standard `kill-region` binding in minibuffer maps, a
+  punctuation-containing shell word is removed as one token, and an active
+  region retains exact region-kill behavior.
+- Loading Evil Ghostel confirmed its initial state is registered as `insert` and
+  its Escape routing default is `terminal`. Real Ghostel, Neovim, and mode-line
+  interaction checks remain part of Phase 5 acceptance.
 
 ## Phase 3: Provision and scope the Nerd Font fallback
 

@@ -401,6 +401,16 @@
 
 (use-package evil-ghostel
   :after (ghostel evil)
+  :init
+  (setopt evil-ghostel-initial-state 'insert
+          evil-ghostel-escape 'terminal)
+  ;; Outer Evil state and Ghostel input mode are independent axes.  In outer
+  ;; insert state, plain Escape always reaches the inner terminal; normal-state
+  ;; Escape keeps its usual meaning.  Outside char mode, C-c ESC enters outer
+  ;; normal state once, and i returns only the outer axis to insert.  C-c C-j
+  ;; returns the Ghostel axis to semi-char; C-c M-d enters char mode, where
+  ;; C-c ESC goes inward until M-RET exits char mode.  In semi-char plus outer
+  ;; insert, C-w reaches the PTY; outer normal retains its C-w window prefix.
   :hook (ghostel-mode . evil-ghostel-mode))
 
 (defvar ghostel-compile-buffer-name)
@@ -1124,6 +1134,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 )
 
 ;; editing basics
+(setopt kill-region-dwim 'unix-word)
+
 (defun my/cut () (interactive)
     (cond
           ((region-active-p) (kill-region (region-beginning) (region-end)))
