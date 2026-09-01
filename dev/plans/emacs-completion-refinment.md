@@ -573,12 +573,12 @@ state, not configuration that belongs inline in the main init file.
 
 - Plan ID: `emacs-completion-refinement`
 - Status: in progress
-- Next milestone: Phase 5
+- Next milestone: Phase 6
 - Phase 1: complete
 - Phase 2: complete
 - Phase 3: complete
 - Phase 4: complete
-- Phase 5: pending
+- Phase 5: complete
 - Phase 6: pending
 - Phase 7: pending
 - Phase 8: pending
@@ -784,6 +784,19 @@ state, not configuration that belongs inline in the main init file.
   directories and contents, and does not follow symlinked directories.
 - Paths with spaces, `~`, absolute roots, explicit remote users, and missing
   remote `fd` behave correctly.
+
+### Execution notes
+
+- File-picker state now lives in `my-file-picker.el`. A dynamically shared
+  transaction cell propagates a nested success through suspended prompts,
+  while a nested quit leaves the outer minibuffer intact and refreshes its
+  public completion display.
+- Five focused ERT tests cover both toggle directions, one-open success,
+  cancellation restoration, literal and Consult query transfer, public
+  `read-file-name` initial arguments, local and remote backend choice, explicit
+  remote users, missing remote `fd`, `.git` pruning, hidden files, and remote
+  symlink non-traversal. Live Consult processes and real TRAMP connections
+  remain in the interactive validation matrix.
 
 ## Phase 6: Complete LSP entity routing
 

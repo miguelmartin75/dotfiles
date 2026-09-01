@@ -1,0 +1,212 @@
+;;; my-file-picker-test.el --- Tests for my-file-picker -*- lexical-binding: t; -*-
+
+(require 'ert)
+(require 'cl-lib)
+(require 'my-file-picker)
+
+(defvar consult-async-split-style)
+(defvar consult-async-split-styles-alist)
+(defvar consult-fd-args)
+(defvar consult-find-args)
+
+(ert-deftest my/file-picker-toggle-successfully-selects-once ()
+  (let ((root (file-name-as-directory (make-temp-file "picker root " t))))
+    (unwind-protect
+        (dolist (case '((hierarchical "nested/file name.txt" "file name\\.txt")
+                        (recursive "file name\\.txt" "file name.txt")))
+          (let ((opened (list nil))
+                captured-root
+                captured-initial
+                (aborts 0)
+                (my/file-picker-transaction (list nil)))
+            (cl-letf (((symbol-function 'my/file-picker-recursive-session)
+                       (lambda (dir initial)
+                         (setq captured-root dir
+                               captured-initial initial)
+                         (let ((file (expand-file-name "file name.txt" dir))
+                               (buffer (generate-new-buffer
+                                        " *my-file-picker-test*")))
+                           (setcar opened (cons file (car opened)))
+                           (with-current-buffer buffer
+                             (setq buffer-file-name file))
+                           buffer)))
+                      ((symbol-function 'my/file-picker-hierarchical-session)
+                       (lambda (dir initial)
+                         (setq captured-root dir
+                               captured-initial initial)
+                         (expand-file-name initial dir)))
+                      ((symbol-function 'find-file)
+                       (lambda (file &rest _ignored)
+                         (setcar opened (cons file (car opened)))
+                         (let ((buffer (generate-new-buffer
+                                        " *my-file-picker-test*")))
+                           (with-current-buffer buffer
+                             (setq buffer-file-name file))
+                           buffer)))
+                      ((symbol-function 'abort-recursive-edit)
+                       (lambda ()
+                         (setq aborts (1+ aborts))
+                         (signal 'quit nil))))
+              (with-current-buffer (window-buffer (minibuffer-window))
+                (let ((inhibit-read-only t))
+                  (erase-buffer)
+                  (insert (cadr case))
+                  (setq-local my/file-picker-kind (car case)
+                              my/file-picker-root root)
+                  (should
+                   (eq (condition-case nil
+                           (my/file-picker-toggle)
+                         (quit 'quit))
+                       'quit))))
+              (should (= aborts 2))
+              (should (= (length (car opened)) 1))
+              (if (eq (car case) 'hierarchical)
+                  (progn
+                    (should (string-equal captured-root
+                                          (expand-file-name "nested/" root)))
+                    (should (string-equal captured-initial (caddr case))))
+                (should (string-suffix-p (caddr case)
+                                         (car (car opened))))))))
+      (delete-directory root t))))
+
+(ert-deftest my/file-picker-hierarchical-read-file-name-arguments ()
+  (let ((root "/tmp/picker-root/")
+        (nested-root "/tmp/picker-root/nested/")
+        calls
+        opened)
+    (cl-letf (((symbol-function 'read-file-name)
+               (lambda (prompt &optional directory default-filename mustmatch
+                               initial predicate)
+                 (push (list prompt directory default-filename mustmatch
+                             initial predicate)
+                       calls)
+                 "/tmp/selected"))
+              ((symbol-function 'find-file)
+               (lambda (file &rest _ignored)
+                 (setq opened file))))
+      (my/file-picker-hierarchical-session nested-root "file name.txt")
+      (let ((default-directory root))
+        (my/find-file-sshx)))
+    (should
+     (equal (nreverse calls)
+            `(("Find file: " ,nested-root nil nil "file name.txt" nil)
+              ("Find file: " ,root nil nil "/sshx:" nil))))
+    (should (string-equal opened "/tmp/selected"))))
+
+(ert-deftest my/file-picker-nested-cancel-restores-outer-state ()
+  (let ((root (file-name-as-directory (make-temp-file "picker-cancel-" t))))
+    (unwind-protect
+        (dolist (case '((hierarchical "folder/file.txt")
+                        (recursive "file.* -- --extension el")))
+          (let ((refreshed nil)
+                (my/file-picker-transaction (list nil)))
+            (cl-letf (((symbol-function 'my/file-picker-recursive-session)
+                       (lambda (&rest _ignored) (signal 'quit nil)))
+                      ((symbol-function 'my/file-picker-hierarchical-session)
+                       (lambda (&rest _ignored) (signal 'quit nil)))
+                      ((symbol-function 'my/file-picker-refresh)
+                       (lambda (buffer)
+                         (with-current-buffer buffer
+                           (setq refreshed
+                                 (list my/file-picker-kind
+                                       my/file-picker-root
+                                       (minibuffer-contents-no-properties)))))))
+              (with-current-buffer (window-buffer (minibuffer-window))
+                (let ((inhibit-read-only t))
+                  (erase-buffer)
+                  (insert (cadr case))
+                  (setq-local my/file-picker-kind (car case)
+                              my/file-picker-root root)
+                  (my/file-picker-toggle)))
+              (should (eq (car refreshed) (car case)))
+              (should (string-equal (cadr refreshed) root))
+              (should (string-suffix-p (cadr case) (caddr refreshed))))))
+      (delete-directory root t))))
+
+(ert-deftest my/file-picker-query-and-path-transfer ()
+  (let ((old-style (and (boundp 'consult-async-split-style)
+                        consult-async-split-style))
+        (old-styles (and (boundp 'consult-async-split-styles-alist)
+                         consult-async-split-styles-alist)))
+    (setq consult-async-split-style 'perl
+          consult-async-split-styles-alist '((perl :initial 35)))
+    (dolist (case '(("plain name.txt" . "plain name.txt")
+                    ("name\\.txt" . "name.txt")
+                    ("dir/name.txt" . "dir/name.txt")
+                    ("file.*" . nil)
+                    ("#literal" . nil)
+                    ("plain -- --extension el" . nil)
+                    ("--hidden" . nil)))
+      (should (equal (my/file-picker-literal-query (car case)) (cdr case))))
+    (setq consult-async-split-style old-style
+          consult-async-split-styles-alist old-styles))
+  (dolist (case '(("/sshx:user@host:/repo/src/file.el"
+                   "/sshx:user@host:/repo/src/" "file.el")
+                  ("/absolute/root/file.el" "/absolute/root/" "file.el")
+                  ("~/source/file.el" "~/source/" "file.el")
+                  ("folder with spaces/file.el" "folder with spaces/" "file.el")))
+    (should (string-equal (file-name-directory (car case)) (cadr case)))
+    (should (string-equal (file-name-nondirectory (car case)) (caddr case)))))
+
+(ert-deftest my/file-picker-selects-recursive-backend-and-find-contract ()
+  (dolist (case '(("/tmp/root/" nil consult-fd)
+                  ("/sshx:user@host:/repo/" "/remote/fd" consult-fd)
+                  ("/sshx:user@host:/repo/" nil consult-find)))
+    (let (called executable-default executable-remote captured-args)
+      (cl-letf (((symbol-function 'file-remote-p)
+                 (lambda (file &optional _identification _connected)
+                   (and (string-prefix-p "/sshx:" file) "/sshx:user@host:")))
+                ((symbol-function 'executable-find)
+                 (lambda (_command &optional remote)
+                   (setq executable-default default-directory
+                         executable-remote remote)
+                   (cadr case)))
+                ((symbol-function 'consult-fd)
+                 (lambda (_root _initial)
+                   (setq called 'consult-fd
+                         captured-args consult-fd-args)
+                   (current-buffer)))
+                ((symbol-function 'consult-find)
+                 (lambda (_root _initial)
+                   (setq called 'consult-find
+                         captured-args consult-find-args)
+                   (current-buffer))))
+        (my/file-picker-recursive-session (car case) nil)
+        (should (eq called (caddr case)))
+        (if (string-prefix-p "/sshx:" (car case))
+            (progn
+              (should executable-remote)
+              (should (string-equal executable-default (car case))))
+          (should-not executable-remote))
+        (should (member "f" captured-args))
+        (if (eq called 'consult-find)
+            (progn
+              (should (member "-prune" captured-args))
+              (should-not (member "-L" captured-args)))
+          (should (member "--hidden" captured-args))
+          (should (member "--no-ignore" captured-args))))))
+  (let* ((root (file-name-as-directory (make-temp-file "picker-find-" t)))
+         (default-directory root)
+         (visible (expand-file-name "visible.txt" root))
+         (hidden (expand-file-name ".hidden" root))
+         (git-dir (expand-file-name ".git" root))
+         (target-dir (expand-file-name "target" root))
+         (link-dir (expand-file-name "linked" root)))
+    (unwind-protect
+        (progn
+          (write-region "" nil visible nil 'silent)
+          (write-region "" nil hidden nil 'silent)
+          (make-directory git-dir)
+          (write-region "" nil (expand-file-name "ignored" git-dir) nil 'silent)
+          (make-directory target-dir)
+          (write-region "" nil (expand-file-name "through-link" target-dir)
+                        nil 'silent)
+          (make-symbolic-link target-dir link-dir)
+          (let ((files (apply #'process-lines my/file-picker-remote-find-args)))
+            (should (member "./visible.txt" files))
+            (should (member "./.hidden" files))
+            (should-not (member "./.git/ignored" files))
+            (should-not (member "./linked/through-link" files))))
+      (delete-directory root t))))
+
+;;; my-file-picker-test.el ends here

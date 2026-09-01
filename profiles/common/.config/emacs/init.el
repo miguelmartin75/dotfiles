@@ -932,7 +932,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (use-package embark-consult
   :after (consult embark))
 
-(defvar consult-fd-args)
+(require 'my-file-picker)
+(global-set-key (kbd "C-x C-f") #'my/find-file)
 
 (setq completion-styles '(basic partial-completion flex)
       completion-category-overrides '((eglot-capf (styles flex))
@@ -1167,40 +1168,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     (deactivate-mark)
     (consult-ripgrep nil (regexp-quote text))))
 
-(defun my/consult-fd-all-files ()
-  "Search all files below the project or current default directory."
-  (interactive)
-  (let* ((project (project-current))
-         (root (if project (project-root project) default-directory)))
-    (when (file-remote-p root)
-      (user-error "Remote recursive file search is not configured yet"))
-    (let ((consult-fd-args '("fd"
-                             "--full-path"
-                             "--color=never"
-                             "--hidden"
-                             "--no-ignore"
-                             "--follow"
-                             "--type" "f"
-                             "--exclude" ".git")))
-      (consult-fd root))))
-
-(defun my/consult-fd-current-file-directory ()
-  "Search all files below the current file's directory."
-  (interactive)
-  (unless buffer-file-name
-    (user-error "Current buffer is not visiting a file"))
-  (when (file-remote-p buffer-file-name)
-    (user-error "Remote recursive file search is not configured yet"))
-  (let ((consult-fd-args '("fd"
-                           "--full-path"
-                           "--color=never"
-                           "--hidden"
-                           "--no-ignore"
-                           "--follow"
-                           "--type" "f"
-                           "--exclude" ".git")))
-    (consult-fd (file-name-directory buffer-file-name))))
-
 (defun my/set-default-directory-to-project-root ()
   "Set the current buffer's default directory to its project root."
   (interactive)
@@ -1212,11 +1179,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
   (unless buffer-file-name
     (user-error "Current buffer is not visiting a file"))
   (setq default-directory (file-name-directory buffer-file-name)))
-
-(defun my/find-file-sshx ()
-  "Open a remote file with an SSH host prompt."
-  (interactive)
-  (find-file (read-file-name "Find file: " nil nil nil "/sshx:")))
 
 (defvar my/leader-map (make-sparse-keymap)
   "Leader map shared by Evil normal and visual states.")
@@ -1231,10 +1193,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("?" . consult-isearch-history)
        ("m" . evil-show-marks)
        ("j" . evil-show-jumps)
-       ("f f" . project-find-file)
-       ("f F" . my/consult-fd-all-files)
-       ("f D" . my/consult-fd-current-file-directory)
-       ("f h" . find-file)
+       ("f f" . my/find-file-project)
+       ("f F" . my/find-file-recursive-root)
+       ("f D" . my/find-file-recursive-current-directory)
+       ("f h" . my/find-file)
        ("f r" . my/set-default-directory-to-project-root)
        ("f d" . my/set-default-directory-to-current-file)
        ("f R" . my/find-file-sshx)
@@ -1340,7 +1302,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (evil-define-key 'visual 'global (kbd "SPC") my/visual-leader-map)
 
 (evil-define-key '(normal visual) 'global
-  (kbd "C-p") #'my/consult-fd-all-files)
+  (kbd "C-p") #'my/find-file-recursive-root)
 (evil-define-key 'visual 'global
   (kbd "C-c C-c") #'my/send-region-or-buffer)
 (evil-define-key 'visual 'global
