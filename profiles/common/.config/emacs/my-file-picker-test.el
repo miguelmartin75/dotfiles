@@ -104,6 +104,64 @@
               ("Find file: " ,root nil nil "/sshx:" nil))))
     (should (string-equal opened "/tmp/selected"))))
 
+(ert-deftest my/file-picker-project-toggle-transfers-input-literally ()
+  (let ((root "/tmp/project-root/")
+        captured-kind
+        captured-root
+        captured-initial
+        (parser-calls 0)
+        (split-style-bound (boundp 'consult-async-split-style))
+        (split-style-value (and (boundp 'consult-async-split-style)
+                                consult-async-split-style)))
+    (unwind-protect
+        (progn
+          (makunbound 'consult-async-split-style)
+          (cl-letf (((symbol-function 'project-current)
+                     (lambda (&optional _maybe-prompt _directory) 'project))
+                    ((symbol-function 'project-root)
+                     (lambda (_project) root))
+                    ((symbol-function 'project-find-file)
+                     (lambda (&optional _include-all)
+                       (run-hooks 'minibuffer-setup-hook)
+                       (setq captured-kind my/file-picker-kind
+                             captured-root my/file-picker-root)))
+                    ((symbol-function 'my/file-picker-literal-query)
+                     (lambda (_query)
+                       (setq parser-calls (1+ parser-calls))
+                       (error "Consult parser must not run"))))
+            (with-current-buffer (window-buffer (minibuffer-window))
+              (my/find-file-project))
+            (should (eq captured-kind 'project))
+            (should (string-equal captured-root root))
+            (dolist (query '(".hidden" "#notes" "file.*" "/async/filter"))
+              (let ((my/file-picker-transaction (list nil)))
+                (cl-letf (((symbol-function 'my/file-picker-hierarchical-session)
+                           (lambda (dir initial)
+                             (setq captured-root dir
+                                   captured-initial initial)
+                             (expand-file-name "selected" dir)))
+                          ((symbol-function 'find-file)
+                           (lambda (&rest _ignored) nil))
+                          ((symbol-function 'abort-recursive-edit)
+                           (lambda () (signal 'quit nil))))
+                  (with-current-buffer (window-buffer (minibuffer-window))
+                    (let ((inhibit-read-only t))
+                      (erase-buffer)
+                      (insert query)
+                      (setq-local my/file-picker-kind 'project
+                                  my/file-picker-root root)
+                      (should
+                       (eq (condition-case nil
+                               (my/file-picker-toggle)
+                             (quit 'quit))
+                           'quit))))
+                  (should (string-equal captured-root root))
+                  (should (string-equal captured-initial query)))))
+            (should (= parser-calls 0))))
+      (if split-style-bound
+          (set 'consult-async-split-style split-style-value)
+        (makunbound 'consult-async-split-style)))))
+
 (ert-deftest my/file-picker-nested-cancel-restores-outer-state ()
   (let ((root (file-name-as-directory (make-temp-file "picker-cancel-" t))))
     (unwind-protect

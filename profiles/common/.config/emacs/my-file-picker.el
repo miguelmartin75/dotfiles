@@ -139,7 +139,9 @@
                    (selected (buffer-file-name buffer)))
               (setcar my/file-picker-transaction selected)
               (abort-recursive-edit))
-          (let* ((initial (my/file-picker-literal-query outer-input))
+          (let* ((initial (if (eq kind 'project)
+                              outer-input
+                            (my/file-picker-literal-query outer-input)))
                  (selected (my/file-picker-hierarchical-session root initial)))
             (find-file selected)
             (setcar my/file-picker-transaction selected)
@@ -180,14 +182,14 @@
      (if project (project-root project) default-directory))))
 
 (defun my/find-file-project ()
-  "Select and open a project file with recursive picker toggle context."
+  "Select and open a project file with project picker toggle context."
   (interactive)
   (let* ((project (project-current t))
          (root (project-root project))
          (my/file-picker-transaction (list nil)))
     (condition-case error-data
         (minibuffer-with-setup-hook
-            (lambda () (my/file-picker-setup 'recursive root))
+            (lambda () (my/file-picker-setup 'project root))
           (project-find-file))
       (quit
        (unless (car my/file-picker-transaction)
