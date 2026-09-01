@@ -14,10 +14,6 @@
 ;; Then install Ghostel's native module with `M-x ghostel-download-module' or,
 ;; with Zig available, `M-x ghostel-module-compile'.  Normal startup and the
 ;; first terminal use remain offline and never install software implicitly.
-(let ((init-file (or load-file-name user-init-file)))
-  (when init-file
-    (add-to-list 'load-path (file-name-directory init-file))))
-
 (require 'package)
 
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
@@ -938,7 +934,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (use-package embark-consult
   :after (consult embark))
 
-(require 'my-file-picker)
+(require 'my-file-picker
+         (expand-file-name
+          "my-file-picker.el"
+          (file-name-directory (or load-file-name user-init-file))))
 (global-set-key (kbd "C-x C-f") #'my/find-file)
 
 (setq completion-styles '(basic partial-completion flex)
