@@ -3,8 +3,9 @@
 (require 'cl-lib)
 (require 'ert)
 
-(load (expand-file-name "init.el" (file-name-directory (or load-file-name buffer-file-name)))
-      nil nil nil t)
+(add-to-list 'load-path
+             (file-name-directory (or load-file-name buffer-file-name)))
+(require 'my-send-text)
 
 (defmacro my/send-text-test-with-tabs (tabs &rest body)
   "Run BODY with TABS behind the public tab-bar accessors."
@@ -140,18 +141,7 @@
               (kill-buffer destination))
             (should (equal classes '("zmx" "buffer" "ghostty")))
             (should required)
-            (should (equal require-matches '(t t))))
-          (should (eq (keymap-lookup my/leader-map "t r")
-                      #'my/send-region-or-buffer-to-last-target))
-          (should (eq (keymap-lookup my/leader-map "t R") #'my/send-region-or-buffer))
-          (should (eq (keymap-lookup my/leader-map "t g")
-                      #'my/create-ghostel-terminal-in-split))
-          (should (eq (keymap-lookup my/leader-map "t z")
-                      #'my/open-or-create-zmx-session-in-split))
-          (should (eq (lookup-key evil-visual-state-map (kbd "C-c C-c"))
-                      #'my/send-region-or-buffer))
-          (should (eq (lookup-key evil-visual-state-map (kbd "C-c C-r"))
-                      #'my/send-region-or-buffer-to-last-target)))
+            (should (equal require-matches '(t t)))))
       (dolist (buffer buffers)
         (when (buffer-live-p buffer)
           (kill-buffer buffer)))

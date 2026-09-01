@@ -93,4 +93,18 @@
       (when (bound-and-true-p transient--prefix)
         (transient-quit-one))))))
 
+(ert-deftest my/leader-bindings-send-text-integration ()
+  (should (eq (keymap-lookup my/leader-map "t r")
+              #'my/send-region-or-buffer-to-last-target))
+  (should (eq (keymap-lookup my/leader-map "t R")
+              #'my/send-region-or-buffer))
+  (should (eq (keymap-lookup my/leader-map "t g")
+              #'my/create-ghostel-terminal-in-split))
+  (should (eq (keymap-lookup my/leader-map "t z")
+              #'my/open-or-create-zmx-session-in-split))
+  (should (eq (lookup-key evil-visual-state-map (kbd "C-c C-c"))
+              #'my/send-region-or-buffer))
+  (should (eq (lookup-key evil-visual-state-map (kbd "C-c C-r"))
+              #'my/send-region-or-buffer-to-last-target)))
+
 ;;; leader-bindings-test.el ends here

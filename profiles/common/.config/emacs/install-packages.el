@@ -70,7 +70,6 @@
                   org-roam               ; personal linked-note graph
                   org-roam-bibtex        ; bibliography-backed Roam notes
                   php-mode               ; PHP editing and indentation
-                  yasnippet              ; Eglot completion placeholders only
                   zig-mode))))           ; Zig editing and Eglot mode identity
           (when missing-packages
             (package-refresh-contents))

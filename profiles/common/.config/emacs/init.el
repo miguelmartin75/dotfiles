@@ -1,4 +1,4 @@
-;; SECTION: fundamental  -*- lexical-binding: t; -*-
+;; Bootstrap and environment  -*- lexical-binding: t; -*-
 ;; Fresh machines require Emacs 31.1+ with modules and native Tree-sitter, Git,
 ;; a C/C++ compiler and linker, ripgrep (`rg'), fd, zmx, aspell, multimarkdown,
 ;; LaTeX, dvisvgm, and the selected language servers: clangd, rust-analyzer,
@@ -14,7 +14,13 @@
 ;; Then install Ghostel's native module with `M-x ghostel-download-module' or,
 ;; with Zig available, `M-x ghostel-module-compile'.  Normal startup and the
 ;; first terminal use remain offline and never install software implicitly.
+
 (require 'package)
+
+(setq my/config-directory
+      (file-name-directory (or load-file-name user-init-file))
+      config-path (expand-file-name "init.el" my/config-directory))
+(add-to-list 'load-path my/config-directory)
 
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
                          ("elpa" . "https://elpa.gnu.org/packages/")))
@@ -57,6 +63,38 @@
  ;; If there is more than one, they won't work right.
  )
 
+
+
+(setq gc-cons-threshold (* 1000 1024 1024)
+      read-process-output-max (* 1024 1024)
+)
+
+(save-place-mode 1)
+
+
+;; https://www.fromkk.com/posts/preview-latex-in-org-mode-with-emacs-in-macos/
+(use-package exec-path-from-shell
+  :config (exec-path-from-shell-initialize)
+)
+(use-package load-env-vars
+  :config
+  (load-env-vars "~/.secrets")
+  (load-env-vars "~/.zshrc")
+)
+
+
+(defun my/soft-reload ()
+  "Reload local packages and the active Emacs configuration."
+  (interactive)
+  (dolist (file '("my-file-picker.el"
+                  "my-org-datetree.el"
+                  "my-send-text.el"
+                  "org-autolist.el"))
+    (load (expand-file-name file my/config-directory) nil nil t))
+  (load config-path nil nil t))
+
+;; Basic editing, files, and TRAMP
+
 ;; backup files
 (let ((backup-dir "~/tmp/emacs/backups")
       (auto-saves-dir "~/tmp/emacs/auto-saves/"))
@@ -78,26 +116,452 @@
 (setq require-final-newline t)
 
 
-(setq gc-cons-threshold (* 1000 1024 1024)
-      read-process-output-max (* 1024 1024)
+(electric-indent-mode 1)
+(setq server-kill-new-buffers t)
+
+(require 'tramp)
+
+(dolist (method '("ssh" "sshx"))
+  (tramp-set-completion-function method
+    '((tramp-parse-sconfig "/etc/ssh_config")
+      (tramp-parse-sconfig "~/.ssh/config"))))
+
+(setq tramp-message-show-message nil)
+(add-to-list 'tramp-remote-path 'tramp-own-remote-path)
+
+;; https://coredumped.dev/2025/06/18/making-tramp-go-brrrr./
+(setq remote-file-name-inhibit-locks t
+      tramp-use-scp-direct-remote-copying t
+      remote-file-name-inhibit-auto-save-visited t)
+
+(setq tramp-copy-size-limit (* 1024 1024) ;; 1MB
+      tramp-verbose 2)
+
+(add-to-list 'tramp-connection-properties
+  (list (regexp-quote "/sshx:aws-login1:")
+        "remote-shell" "/bin/bash"))
+
+(connection-local-set-profile-variables
+ 'remote-direct-async-process
+ '((tramp-direct-async-process . t)))
+
+(connection-local-set-profiles
+ '(:application tramp :protocol "scp")
+ 'remote-direct-async-process)
+
+(with-eval-after-load 'tramp
+  (with-eval-after-load 'compile
+    (remove-hook 'compilation-mode-hook #'tramp-compile-disable-ssh-controlmaster-options)))
+
+(setq magit-tramp-pipe-stty-settings 'pty)
+
+(setq ob-async-inject-variables "\\borg-babel.+")
+(add-hook 'ob-async-pre-execute-src-block-hook
+        (lambda ()
+           ;; tramp config for async emacs process
+           (setq tramp-completion-reread-directory-timeout nil)
+           (setq tramp-default-method "sshx")
+           (setq tramp-use-connection-share nil))
 )
 
-(save-place-mode 1)
+;; Speed up TRAMP
+(setq tramp-auto-save-directory "~/tmp/tramp-autosave")
+(setq tramp-chunksize 2000)
+
+;; iterate over all bindings
+(setq ispell-program-name "aspell")
+(setq ispell-dictionary "english")
+
+;; line numbers
+(column-number-mode 1)
+(global-display-line-numbers-mode 0)
+(setq display-line-numbers-type 'relative)
+(add-hook 'prog-mode-hook #'display-line-numbers-mode)
+
+(setq-default indent-tabs-mode nil)  ;; no tabs
 
 
-;; https://www.fromkk.com/posts/preview-latex-in-org-mode-with-emacs-in-macos/
-(use-package exec-path-from-shell
-  :config (exec-path-from-shell-initialize)
+
+
+(defun copy-current-file-path ()
+  "Copy the full path of the current buffer's file to the kill ring."
+  (interactive)
+  (let ((file-path (buffer-file-name)))
+    (if file-path
+        (progn
+          (kill-new file-path)
+          (message "Copied file path: %s" file-path))
+      (message "Current buffer is not associated with a file."))))
+
+;; editing basics
+(setopt kill-region-dwim 'unix-word)
+
+(defun my/cut () (interactive)
+    (cond
+          ((region-active-p) (kill-region (region-beginning) (region-end)))
+          ('t (kill-whole-line))
+    )
 )
-(use-package load-env-vars
+
+(defun my/copy () (interactive)
+    (cond
+          ((region-active-p) (kill-ring-save (region-beginning) (region-end)))
+          ('t (kill-ring-save (line-beginning-position)
+                              (line-beginning-position 2)))
+    )
+)
+
+(defun region-to-some-buffer (beg end)
+  (interactive "r")
+  (let ((input (buffer-substring beg end))
+        (new-buffer (get-buffer-create "*my-buffer*")))
+    (pop-to-buffer new-buffer)
+    (fundamental-mode)  ;; replace with desired mod
+    (insert input)))
+
+
+(setq c-default-style "bsd" c-basic-offset 4)
+
+(setq indent-tabs-mode nil)
+
+(setq-default indent-tabs-mode nil)  ; Use spaces instead of tabs
+(setq-default tab-width 2)           ; Set tab width to 2
+(setq-default standard-indent 2)     ; Set standard indent to 2
+
+(setq-default lisp-indent-offset 2)  ; lisp
+(setq-default c-basic-offset 4)      ; C/C++/Java
+(setq-default js-indent-level 2)     ; JavaScript
+(setq-default css-indent-offset 2)   ; CSS
+(setq-default sgml-basic-offset 2)   ; HTML
+(setq-default python-indent-offset 4) ; Python
+
+;; UI and Evil
+
+;; mode line
+(setopt mode-line-compact 'long
+        project-mode-line t)
+(setq-default mode-line-format
+              '("%e"
+                mode-line-front-space
+                mode-line-modified
+                mode-line-remote
+                mode-line-window-dedicated
+                mode-line-buffer-identification
+                (project-mode-line project-mode-line-format)
+                (vc-mode vc-mode)
+                mode-line-format-right-align
+                mode-line-misc-info
+                mode-line-modes
+                mode-line-position
+                mode-line-end-spaces))
+
+
+(add-to-list
+ 'custom-theme-load-path
+ (expand-file-name "themes" (file-name-directory (or load-file-name user-init-file))))
+(load-theme 'mig-one-light t)
+
+(use-package olivetti
+  :commands olivetti-mode
+  :init (setq olivetti-body-width .67))
+(use-package which-key
+  :init (which-key-mode 1)
+  :diminish which-key-mode
   :config
-  (load-env-vars "~/.secrets")
-  (load-env-vars "~/.zshrc")
+  (setq which-key-idle-delay 1)
 )
 
-(setq config-path "~/.config/emacs/init.el")
+(use-package tab-bar
+  :config
+  (setq tab-bar-select-tab-modifiers '(super)
+        tab-bar-tab-hints t))
 
-(electric-indent-mode)
+(defvar my/default-font-size 13)
+(defvar my/default-variable-font-size 13)
+(setq my/default-font-size 13.5)
+(setq my/default-variable-font-size 13.5)
+
+(set-face-attribute 'default nil
+  :font (font-spec :family "JetBrains Mono"
+                   :size my/default-font-size
+                   :fallback '("Apple Color Emoji"
+                              "Apple Symbols"
+                              "Menlo")))
+(set-fontset-font t '(#xe000 . #xf8ff)
+                  (font-spec :family "Symbols Nerd Font Mono") nil 'prepend)
+(set-fontset-font t '(#xf0000 . #xffffd)
+                  (font-spec :family "Symbols Nerd Font Mono") nil 'prepend)
+
+(show-paren-mode 1)
+(tool-bar-mode -1)          ; Disable the toolbar
+(scroll-bar-mode -1)        ; Disable visible scrollbar
+(set-fringe-mode 10)        ; Give some breathing room
+(menu-bar-mode -1)          ; Disable the menu bar
+(blink-cursor-mode 0)
+(setq ring-bell-function 'ignore)
+(winner-mode 1)
+
+(setq mac-control-modifier 'control)
+(setq mac-option-modifier 'meta)
+(setq mac-command-modifier 'super)
+
+(setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
+
+
+(defun my/increase-font-size () (interactive)
+   (text-scale-adjust 0.5)
+)
+
+(defun my/decrease-font-size () (interactive)
+   (text-scale-adjust -0.5)
+)
+
+(defun my/reset-font-size () (interactive)
+   (text-scale-adjust 0)
+)
+
+
+(defun my/write-mode() (interactive)
+   (setq olivetti-body-width 60)
+   (olivetti-mode 1)
+   (text-scale-set 3.0)
+   (display-line-numbers-mode 0)
+)
+
+(defun my/write-mode-no-zoom() (interactive)
+   (setq olivetti-body-width 120)
+   (olivetti-mode 1)
+   (text-scale-set 0.0)
+   (display-line-numbers-mode 0)
+)
+
+(defun my/default-mode() (interactive)
+   (olivetti-mode 0)
+   (text-scale-set 0.0)
+   (display-line-numbers-mode 1)
+)
+(defun my/center-window() (interactive) (olivetti-mode 1))
+
+(use-package evil
+   :init
+   (setq evil-want-integration t)
+   (setq evil-want-keybinding nil)
+   (setq evil-want-C-u-scroll t)
+   (setq evil-want-C-i-jump t)
+   (setq evil-want-C-w-delete t)
+   (setq evil-want-C-w-in-emacs-state t)
+   (setq evil-undo-system 'undo-redo)
+   (setq evil-mode-line-format '(after . mode-line-front-space)
+         evil-normal-state-tag (propertize " NORMAL " 'face 'success)
+         evil-insert-state-tag (propertize " INSERT " 'face 'mode-line-emphasis)
+         evil-visual-state-tag (propertize " VISUAL " 'face 'warning)
+         evil-visual-char-tag (propertize " VISUAL " 'face 'warning)
+         evil-visual-line-tag (propertize " V-LINE " 'face 'warning)
+         evil-visual-block-tag (propertize " V-BLOCK " 'face 'warning)
+         evil-replace-state-tag (propertize " REPLACE " 'face 'error)
+         evil-operator-state-tag (propertize " OPERATOR " 'face 'warning)
+         evil-motion-state-tag (propertize " MOTION " 'face 'shadow)
+         evil-emacs-state-tag (propertize " EMACS " 'face 'mode-line-emphasis))
+   (setq-default evil-symbol-word-search t)
+
+   :config
+   (evil-mode 1)
+   (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
+   (define-key evil-insert-state-map (kbd "C-h") 'evil-delete-backward-char-and-join)
+   (define-key evil-normal-state-map (kbd "gd") #'xref-find-definitions)
+   (define-key evil-normal-state-map (kbd "gD") #'eglot-find-declaration)
+   (define-key evil-normal-state-map (kbd "gi") #'eglot-find-implementation)
+   (define-key evil-normal-state-map (kbd "K") #'eldoc-doc-buffer)
+   (define-key evil-normal-state-map (kbd "[d") #'flymake-goto-prev-error)
+   (define-key evil-normal-state-map (kbd "]d") #'flymake-goto-next-error)
+   (evil-set-initial-state 'messages-buffer-mode 'normal)
+   (setq evil-search-module 'evil-search)
+   (evil-select-search-module 'evil-search-module 'evil-search)
+   (evil-set-undo-system 'undo-redo)
+
+   ;; minor mode
+   (add-hook 'org-capture-mode-hook 'evil-insert-state)
+
+   (global-visual-line-mode 1)
+)
+
+(use-package evil-visualstar :after evil :config (global-evil-visualstar-mode 1))
+
+(use-package evil-surround
+  :after evil
+  :config
+  (global-evil-surround-mode 1))
+
+(use-package evil-collection
+  :after evil
+  :config
+  (evil-collection-init))
+
+
+(use-package evil-better-visual-line
+  :config
+  (evil-better-visual-line-on)
+)
+
+(use-package
+  evil-numbers
+  :config
+  (evil-define-key '(normal visual) 'global (kbd "C-c +") 'evil-numbers/inc-at-pt)
+  (evil-define-key '(normal visual) 'global (kbd "C-c -") 'evil-numbers/dec-at-pt)
+)
+
+
+;; Completion and navigation
+
+;; completion
+(defvar consult-async-split-style)
+
+(use-package consult
+  :commands (consult-buffer
+             consult-fd
+             consult-imenu
+             consult-isearch-history
+             consult-line
+             consult-line-multi
+             consult-recent-file
+             consult-ripgrep
+             consult-xref
+             consult-yank-from-kill-ring)
+  :init
+  (setq xref-show-xrefs-function #'consult-xref
+        xref-show-definitions-function #'consult-xref
+        consult-buffer-sources '(consult--source-buffer)))
+
+(use-package embark
+  :commands embark-act
+  :bind ("C-c ." . embark-act))
+
+(use-package embark-consult
+  :after (consult embark))
+
+
+(require 'my-file-picker)
+
+(setq completion-styles '(basic partial-completion flex)
+      completion-category-overrides '((eglot-capf (styles flex))
+                                      (project-file (styles flex))
+                                      (buffer (styles flex))
+                                      (command (styles flex))
+                                      (file (styles basic partial-completion)))
+      completion-eager-display t
+      completion-eager-update t
+      completion-show-help nil
+      completions-format 'one-column
+      completions-detailed t
+      completions-max-height 14
+      minibuffer-visible-completions nil
+      minibuffer-completion-auto-choose nil)
+
+(add-hook 'completion-list-mode-hook
+          (lambda ()
+            (setq-local window-min-height completions-max-height)))
+
+(keymap-set completion-in-region-mode-map "TAB"
+            #'minibuffer-next-completion)
+(keymap-set completion-in-region-mode-map "S-TAB"
+            #'minibuffer-previous-completion)
+(keymap-set completion-in-region-mode-map "<backtab>"
+            #'minibuffer-previous-completion)
+(keymap-set completion-in-region-mode-map "C-n"
+            #'minibuffer-next-completion)
+(keymap-set completion-in-region-mode-map "C-p"
+            #'minibuffer-previous-completion)
+(keymap-set completion-in-region-mode-map "M-g M-c"
+            #'switch-to-completions)
+
+(keymap-set completion-list-mode-map "C-n" #'next-completion)
+(keymap-set completion-list-mode-map "C-p" #'previous-completion)
+
+(keymap-set minibuffer-local-completion-map "C-n"
+            #'minibuffer-next-completion)
+(keymap-set minibuffer-local-completion-map "C-p"
+            #'minibuffer-previous-completion)
+(keymap-set minibuffer-local-filename-completion-map "C-n"
+            #'minibuffer-next-completion)
+(keymap-set minibuffer-local-filename-completion-map "C-p"
+            #'minibuffer-previous-completion)
+
+(defun my/file-completion-at-point ()
+  "Return file completion data for a path-like name at point."
+  (when-let* ((bounds (bounds-of-thing-at-point 'filename))
+              (file-name (buffer-substring-no-properties
+                          (car bounds) (cdr bounds)))
+              ((or (string-prefix-p "/" file-name)
+                   (string-prefix-p "./" file-name)
+                   (string-prefix-p "../" file-name)
+                   (string-prefix-p "~/" file-name))))
+    (list (car bounds) (cdr bounds) #'completion-file-name-table
+          :exclusive 'no)))
+
+(add-hook 'completion-at-point-functions #'my/file-completion-at-point t)
+;; Buffer-local CAPFs run before global ones, so put file completion ahead of
+;; Eglot in managed buffers.  It returns nil for ordinary code identifiers.
+(add-hook 'eglot-managed-mode-hook
+          (lambda ()
+            (add-hook 'completion-at-point-functions
+                      #'my/file-completion-at-point -90 t)))
+
+(global-completion-preview-mode -1)
+(define-key evil-insert-state-map (kbd "C-SPC") #'completion-help-at-point)
+(define-key evil-insert-state-map (kbd "M-/") #'dabbrev-expand)
+(define-key evil-insert-state-map (kbd "C-M-/") #'dabbrev-completion)
+
+(require 'savehist)
+(add-to-list 'savehist-additional-variables 'search-ring)
+(add-to-list 'savehist-additional-variables 'regexp-search-ring)
+(savehist-mode 1)
+(recentf-mode 1)
+
+
+(defun my/consult-line-multi-all-buffers ()
+  "Search for a matching line across all open buffers."
+  (interactive)
+  (consult-line-multi t))
+
+(defun my/consult-ripgrep-region-or-symbol ()
+  "Search the project for the active region or symbol at point."
+  (interactive)
+  (let ((text (if (use-region-p)
+                  (buffer-substring-no-properties
+                   (region-beginning) (region-end))
+                (thing-at-point 'symbol t)))
+        (consult-async-split-style nil))
+    (unless text
+      (user-error "No region or symbol at point"))
+    (deactivate-mark)
+    (let ((query
+           (string-replace
+            " " "\\ "
+            (replace-regexp-in-string
+             (rx (any "\n\\.^$|?*+(){}[]-"))
+             (lambda (match) (format "\\x%02x" (aref match 0)))
+             text t t))))
+      (consult-ripgrep
+       nil
+       (if (string-match-p "\n" text)
+           (concat query " -- --multiline")
+         query)))))
+
+(defun my/set-default-directory-to-project-root ()
+  "Set the current buffer's default directory to its project root."
+  (interactive)
+  (setq default-directory (project-root (project-current t))))
+
+(defun my/set-default-directory-to-current-file ()
+  "Set the current buffer's default directory to its file directory."
+  (interactive)
+  (unless buffer-file-name
+    (user-error "Current buffer is not visiting a file"))
+  (setq default-directory (file-name-directory buffer-file-name)))
+
+
+;; Development
+
 (use-package magit
   :commands magit-status)
 (when (and (executable-find "difft")
@@ -113,7 +577,195 @@
           (((prefixes . ((magit-file-dispatch (0 1 -1) magit-files))))
            . (("M-d" difftastic-magit-diff-buffer-file "Difftastic")))))
   (difftastic-bindings-mode 1))
-(setq server-kill-new-buffers t)
+
+(use-package eglot
+  :commands (eglot
+             eglot-code-actions
+             eglot-find-declaration
+             eglot-find-implementation
+             eglot-find-typeDefinition
+             eglot-format
+             eglot-inlay-hints-mode
+             eglot-rename
+             eglot-show-call-hierarchy)
+  :config
+  ;; Install clangd, rust-analyzer, lua-language-server, ty,
+  ;; typescript-language-server, zls, nimlangserver, and ols outside Emacs.
+  ;; A TRAMP project requires its server executable on the remote host PATH.
+  ;; Emacs 31 already knows the contract servers for C, C++, Rust, Lua,
+  ;; JavaScript, TypeScript, Zig, and Odin.  Prefer ty for Python because
+  ;; Eglot manages one server per buffer.  Ruff can replace ty explicitly,
+  ;; but it is not started as a concurrent second server.
+  (setf (alist-get '(python-mode python-ts-mode)
+                   eglot-server-programs nil nil #'equal)
+        '("ty" "server"))
+  (add-to-list 'eglot-server-programs '(nim-mode . ("nimlangserver")))
+
+  ;; These aliases exist only in an active Eglot buffer.  The owned leader
+  ;; hierarchy is rebuilt separately in Phase 6.
+  (keymap-set eglot-mode-map "C-c e f" #'eglot-format)
+  (keymap-set eglot-mode-map "C-c e a" #'eglot-code-actions)
+  (keymap-set eglot-mode-map "C-c e r" #'eglot-rename)
+  (keymap-set eglot-mode-map "C-c e h" #'eldoc-doc-buffer)
+  (keymap-set eglot-mode-map "C-c e d" #'xref-find-definitions)
+  (keymap-set eglot-mode-map "C-c e R" #'xref-find-references)
+  (keymap-set eglot-mode-map "C-c e D" #'eglot-find-declaration)
+  (keymap-set eglot-mode-map "C-c e i" #'eglot-inlay-hints-mode)
+  (keymap-set eglot-mode-map "C-c e t" #'eglot-find-typeDefinition))
+
+(setq xref-search-program (if (executable-find "rg") 'ripgrep 'grep))
+
+;; Install Dape explicitly with `install-packages.el'.  GUD remains the
+;; default debugger and no Dape hook or global mode is enabled.  Invoke
+;; `M-x dape', select `lldb-dap', and set `:program' to launch a local C,
+;; C++, or Rust binary.  To attach, invoke `M-x dape' with
+;; `lldb-dap :request "attach" :pid PID'.  Both forms work from a local or
+;; TRAMP project, but lldb-dap must be on PATH on the machine where the
+;; project lives.  Homebrew users can install it with `brew install llvm'.
+(use-package dape
+  :commands dape
+  :config
+  (setq dape-configs (list (assq 'lldb-dap dape-configs))))
+
+(use-package flymake
+  :commands (flymake-goto-next-error
+             flymake-goto-prev-error
+             flymake-show-buffer-diagnostics
+             flymake-show-project-diagnostics))
+
+;; languages
+(use-package nim-mode
+  :mode "\\.nim\\'")
+(use-package odin-mode
+  :mode ("\\.odin\\'" . odin-mode))
+(use-package php-mode
+  :mode ("\\.php\\'" . php-mode)
+  :hook (php-mode . (lambda () (setq-local php-indent-offset 2))))
+(use-package zig-mode
+  :mode "\\.zig\\'")
+
+(use-package markdown-mode
+  :mode ("README\\.md\\'" . gfm-mode)
+  :init (setq markdown-command "multimarkdown"))
+
+
+
+;; Install the pinned native grammars separately with
+;; `emacs --batch -Q -l ~/.config/emacs/install-tree-sitter-grammars.el'.
+(require 'treesit)
+(setopt treesit-auto-install-grammar 'never
+        treesit-enabled-modes
+        '(c-ts-mode
+          c++-ts-mode
+          rust-ts-mode
+          lua-ts-mode
+          python-ts-mode
+          js-ts-mode
+          typescript-ts-mode
+          tsx-ts-mode))
+(setopt which-func-modes t)
+(which-function-mode 1)
+
+(defun my/parser-tools-mode ()
+  "Enable native folding and Evil motions in parser-backed buffers."
+  (let ((parser-settings
+         (pcase major-mode
+           ('zig-mode '(zig "function_declaration" "block"))
+           ('nim-mode
+            '(nim
+              "\\(converter\\|func\\|iterator\\|macro\\|method\\|proc\\|template\\)_declaration"
+              "\\(converter\\|func\\|iterator\\|macro\\|method\\|proc\\|template\\)_declaration"))
+           ('odin-mode '(odin "procedure_declaration" "block")))))
+    (when (and parser-settings
+               (treesit-ready-p (car parser-settings) t))
+      (let ((language (car parser-settings))
+            (defun-regexp (cadr parser-settings))
+            (block-regexp (caddr parser-settings)))
+        (treesit-parser-create language)
+        (setq-local treesit-defun-type-regexp defun-regexp
+                    treesit-thing-settings
+                    `((,language
+                       (defun ,defun-regexp)
+                       (list ,block-regexp)))
+                    treesit-defun-name-function
+                    (lambda (node)
+                      (when (string-match-p defun-regexp
+                                            (treesit-node-type node))
+                        (let ((name
+                               (or (treesit-node-child-by-field-name node "name")
+                                   (treesit-node-child node 0 t))))
+                          (when name
+                            (treesit-node-text name t)))))
+                    beginning-of-defun-function #'treesit-beginning-of-defun
+                    end-of-defun-function #'treesit-end-of-defun
+                    add-log-current-defun-function
+                    #'treesit-add-log-current-defun)))
+    (when (treesit-parser-list)
+      (when (eq major-mode 'markdown-ts-mode)
+        (setq-local treesit-thing-settings '((markdown (list "section")))))
+      (when (or parser-settings (eq major-mode 'markdown-ts-mode))
+        (setq-local hs-treesit-things 'list
+                    hs-c-start-regexp nil
+                    hs-block-start-regexp nil
+                    hs-block-end-regexp
+                    (unless (memq major-mode '(nim-mode markdown-ts-mode))
+                      #'treesit-hs-block-end)
+                    hs-forward-sexp-function #'treesit-forward-list
+                    hs-find-block-beginning-function
+                    #'treesit-hs-find-block-beginning
+                    hs-find-next-block-function #'treesit-hs-find-next-block
+                    hs-looking-at-block-start-predicate
+                    #'treesit-hs-looking-at-block-start-p
+                    hs-inside-comment-predicate
+                    #'treesit-hs-inside-comment-p))
+      (hs-minor-mode 1)
+      (when (or treesit-defun-type-regexp
+                (treesit-thing-defined-p 'defun nil))
+        (dolist (state '(normal visual operator))
+          (evil-local-set-key state (kbd "[m") #'evil-backward-section-begin)
+          (evil-local-set-key state (kbd "]m") #'evil-forward-section-begin)
+          (evil-local-set-key state (kbd "[M") #'evil-backward-section-end)
+          (evil-local-set-key state (kbd "]M") #'evil-forward-section-end))))))
+
+(dolist (hook '(c-ts-mode-hook
+                c++-ts-mode-hook
+                rust-ts-mode-hook
+                lua-ts-mode-hook
+                python-ts-mode-hook
+                js-ts-mode-hook
+                typescript-ts-mode-hook
+                tsx-ts-mode-hook
+                markdown-ts-mode-hook
+                zig-mode-hook
+                nim-mode-hook
+                odin-mode-hook))
+  (add-hook hook #'my/parser-tools-mode))
+(add-to-list
+ 'auto-mode-alist
+ `("\\.md\\'" .
+   ,(lambda ()
+      (if (treesit-ready-p '(markdown markdown-inline) t)
+          (progn
+            (require 'markdown-ts-mode)
+            (markdown-ts-mode))
+        (if (string-equal (file-name-nondirectory buffer-file-name)
+                          "README.md")
+            (gfm-mode)
+          (markdown-mode))))))
+
+
+(use-package flyspell
+  :hook ((prog-mode . flyspell-prog-mode)
+         (text-mode . flyspell-mode))
+  :config
+  (setq flyspell-prog-text-faces
+      (delq 'font-lock-string-face
+             flyspell-prog-text-faces))
+)
+(use-package git-commit
+  :hook (git-commit-setup . git-commit-setup-flyspell))
+
+;; Org and research
 
 (use-package org
     :config
@@ -245,21 +897,17 @@
           :html-scale 1.0
           :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))))
 
-;; AI
-(use-package gptel
-  :commands (gptel gptel-rewrite gptel-send)
+
+(use-package evil-org
+  :after org
   :config
-  (setq
-    gptel-model 'claude-sonnet-4-20250514
-    gptel-backend (
-       gptel-make-anthropic
-       "Claude"
-       :stream t
-       :models '(claude-sonnet-4-20250514)
-       :key (getenv "ANTHROPIC_API_KEY")
-    )
-  )
-)
+  (add-hook 'org-mode-hook #'evil-org-mode)
+  (add-hook 'evil-org-mode-hook
+            (lambda ()
+              (evil-org-set-key-theme)))
+  (require 'evil-org-agenda)
+  (evil-org-agenda-set-keys))
+
 (use-package org-roam
   :commands (org-roam-node-find org-roam-node-insert)
   :hook (after-init . org-roam-db-autosync-mode)
@@ -295,104 +943,21 @@
 
 (use-package ob-async)
 
-;; mode line
-(setopt mode-line-compact 'long
-        project-mode-line t)
-(setq-default mode-line-format
-              '("%e"
-                mode-line-front-space
-                mode-line-modified
-                mode-line-remote
-                mode-line-window-dedicated
-                mode-line-buffer-identification
-                (project-mode-line project-mode-line-format)
-                (vc-mode vc-mode)
-                mode-line-format-right-align
-                mode-line-misc-info
-                mode-line-modes
-                mode-line-position
-                mode-line-end-spaces))
 
-;; evil
-(use-package evil
-   :init
-   (setq evil-want-integration t)
-   (setq evil-want-keybinding nil)
-   (setq evil-want-C-u-scroll t)
-   (setq evil-want-C-i-jump t)
-   (setq evil-want-C-w-delete t)
-   (setq evil-want-C-w-in-emacs-state t)
-   (setq evil-undo-system 'undo-redo)
-   (setq evil-mode-line-format '(after . mode-line-front-space)
-         evil-normal-state-tag (propertize " NORMAL " 'face 'success)
-         evil-insert-state-tag (propertize " INSERT " 'face 'mode-line-emphasis)
-         evil-visual-state-tag (propertize " VISUAL " 'face 'warning)
-         evil-visual-char-tag (propertize " VISUAL " 'face 'warning)
-         evil-visual-line-tag (propertize " V-LINE " 'face 'warning)
-         evil-visual-block-tag (propertize " V-BLOCK " 'face 'warning)
-         evil-replace-state-tag (propertize " REPLACE " 'face 'error)
-         evil-operator-state-tag (propertize " OPERATOR " 'face 'warning)
-         evil-motion-state-tag (propertize " MOTION " 'face 'shadow)
-         evil-emacs-state-tag (propertize " EMACS " 'face 'mode-line-emphasis))
-   (setq-default evil-symbol-word-search t)
+(require 'my-org-datetree)
+(require 'org-autolist)
+(add-hook 'org-mode-hook
+          (lambda ()
+            (org-autolist-mode 1)))
 
-   :config
-   (evil-mode 1)
-   (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
-   (define-key evil-insert-state-map (kbd "C-h") 'evil-delete-backward-char-and-join)
-   (define-key evil-normal-state-map (kbd "gd") #'xref-find-definitions)
-   (define-key evil-normal-state-map (kbd "gD") #'eglot-find-declaration)
-   (define-key evil-normal-state-map (kbd "gi") #'eglot-find-implementation)
-   (define-key evil-normal-state-map (kbd "K") #'eldoc-doc-buffer)
-   (define-key evil-normal-state-map (kbd "[d") #'flymake-goto-prev-error)
-   (define-key evil-normal-state-map (kbd "]d") #'flymake-goto-next-error)
-   (evil-set-initial-state 'messages-buffer-mode 'normal)
-   (setq evil-search-module 'evil-search)
-   (evil-select-search-module 'evil-search-module 'evil-search)
-   (evil-set-undo-system 'undo-redo)
+(defun my/refile-to-journal ()
+  "Refile the current Org subtree into the journal datetree."
+  (interactive)
+  (save-excursion
+    (my/org-refile-to-datetree "~/org/journal.org")))
 
-   ;; minor mode
-   (add-hook 'org-capture-mode-hook 'evil-insert-state)
+;; Terminal and execution workflows
 
-   (global-visual-line-mode)
-)
-
-(use-package evil-visualstar :after evil :config (global-evil-visualstar-mode))
-
-(use-package evil-surround
-  :after evil
-  :config
-  (global-evil-surround-mode 1))
-
-(use-package evil-collection
-  :after evil
-  :config
-  (evil-collection-init))
-
-(use-package evil-org
-  :after org
-  :config
-  (add-hook 'org-mode-hook 'evil-org-mode)
-  (add-hook 'evil-org-mode-hook
-	      (lambda ()
-		(evil-org-set-key-theme)))
-  (require 'evil-org-agenda)
-  (evil-org-agenda-set-keys)
-)
-
-(use-package evil-better-visual-line
-  :config
-  (evil-better-visual-line-on)
-)
-
-(use-package
-  evil-numbers
-  :config
-  (evil-define-key '(normal visual) 'global (kbd "C-c +") 'evil-numbers/inc-at-pt)
-  (evil-define-key '(normal visual) 'global (kbd "C-c -") 'evil-numbers/dec-at-pt)
-)
-
-;; terminal
 (use-package ghostel
   :commands ghostel-project
   :init
@@ -445,327 +1010,8 @@
 (use-package term-sessions-org
   :commands term-sessions-store-org-link)
 
-(require 'tab-bar)
 
-(defconst my/send-text-right-split-action
-  '((display-buffer-in-direction)
-    (direction . right)
-    (window-width . 0.5))
-  "Display action for equal-width terminal splits on the right.")
-
-(defun my/send-text-save-last-target (target)
-  "Save TARGET as the current tab's last successful text target."
-  (let ((tabs
-         (mapcar (lambda (tab)
-                   (if (eq (car tab) 'current-tab)
-                       (let ((properties (cdr tab)))
-                         (setf (alist-get 'my/send-text-last-target properties) target)
-                         (cons 'current-tab properties))
-                     tab))
-                 (tab-bar-tabs))))
-    (tab-bar-tabs-set tabs)))
-
-(defun my/ghostel-target-live-p (target)
-  "Return non-nil when TARGET retains its live Ghostel buffer and process pair."
-  (let ((buffer (plist-get target :buffer))
-        (process (plist-get target :process)))
-    (and (buffer-live-p buffer)
-         (memq buffer (ghostel-buffer-list))
-         (eq process (get-buffer-process buffer))
-         (process-live-p process))))
-
-(defun my/send-text-deliver (target text replay)
-  "Deliver TEXT to TARGET, clearing stale object targets during REPLAY."
-  (pcase (plist-get target :type)
-    ('zmx
-     (let ((default-directory (plist-get target :directory)))
-       (term-sessions-send (plist-get target :name) (concat text "\r"))))
-    ('ghostel
-     (require 'ghostel)
-     (let ((buffer (plist-get target :buffer)))
-       (unless (my/ghostel-target-live-p target)
-         (when replay
-           (my/send-text-save-last-target nil))
-         (user-error "Ghostel target is no longer available"))
-       (condition-case error-data
-           (with-current-buffer buffer
-             (ghostel-paste-string text))
-         (error
-          (unless (my/ghostel-target-live-p target)
-            (when replay
-              (my/send-text-save-last-target nil)))
-          (signal (car error-data) (cdr error-data))))
-       (unless (my/ghostel-target-live-p target)
-         (when replay
-           (my/send-text-save-last-target nil))
-         (user-error "Ghostel target is no longer available"))
-       (condition-case error-data
-           (with-current-buffer buffer
-             (ghostel-send-key "return"))
-         (error
-          (unless (my/ghostel-target-live-p target)
-            (when replay
-              (my/send-text-save-last-target nil)))
-          (signal (car error-data) (cdr error-data))))
-       (unless (my/ghostel-target-live-p target)
-         (when replay
-           (my/send-text-save-last-target nil))
-         (user-error "Ghostel target is no longer available"))))
-    ('process
-     (let ((buffer (plist-get target :buffer))
-           (process (plist-get target :process)))
-       (unless (and (buffer-live-p buffer)
-                    (process-live-p process)
-                    (eq process (get-buffer-process buffer)))
-         (when replay
-           (my/send-text-save-last-target nil))
-         (user-error "Process target is no longer available"))
-       (process-send-string process text)))
-    ('buffer
-     (let ((buffer (plist-get target :buffer)))
-       (unless (buffer-live-p buffer)
-         (when replay
-           (my/send-text-save-last-target nil))
-         (user-error "Writable buffer target is no longer available"))
-       (with-current-buffer buffer
-         (when buffer-read-only
-           (user-error "Writable buffer target is now read-only"))
-         (insert text))))
-    (_
-     (user-error "Unknown text target descriptor"))))
-
-(defun my/send-text-to-target (text)
-  "Prompt for a target, then deliver TEXT."
-  (let ((source-directory default-directory)
-        (target-class
-         (completing-read
-          "Target: "
-          '("zmx" "buffer" "ghostty")
-          nil t))
-        target)
-    (pcase target-class
-      ("zmx"
-       (pcase (completing-read
-               "zmx target: "
-               '("existing" "create new")
-               nil t)
-         ("existing"
-          (require 'term-sessions-list)
-          (let ((entry (term-sessions--read-existing-session-entry "zmx session: ")))
-            (setq target (list :type 'zmx
-                               :name (plist-get entry :name)
-                               :directory (plist-get entry :directory)))))
-         ("create new"
-          (let ((name (read-string "zmx session name: ")))
-            (let ((default-directory source-directory)
-                  (display-buffer-overriding-action my/send-text-right-split-action))
-              (term-sessions-open
-               (list :name name :directory source-directory)
-               nil))
-            (setq target (list :type 'zmx
-                               :name name
-                               :directory source-directory))))
-         (_
-          (user-error "Unknown zmx target selection"))))
-      ("buffer"
-       (require 'ghostel)
-       (let ((ghostel-buffers (ghostel-buffer-list))
-             candidates
-             ambiguous-buffers)
-         (dolist (buffer (buffer-list))
-           (let ((process (get-buffer-process buffer)))
-             (cond
-              ((memq buffer ghostel-buffers)
-               (when (process-live-p process)
-                 (push (cons (buffer-name buffer)
-                             (list :type 'ghostel
-                                   :buffer buffer
-                                   :process process))
-                       candidates)))
-              ((process-live-p process)
-               (with-current-buffer buffer
-                 (push (cons (buffer-name buffer)
-                             (list :type 'process
-                                   :buffer buffer
-                                   :process process))
-                       candidates)
-                 (unless buffer-read-only
-                   (push buffer ambiguous-buffers))))
-              (t
-               (with-current-buffer buffer
-                 (unless buffer-read-only
-                   (push (cons (buffer-name buffer)
-                               (list :type 'buffer :buffer buffer))
-                         candidates)))))))
-         (setq candidates (nreverse candidates))
-         (unless candidates
-           (user-error "No buffers can accept input"))
-         (let ((name (completing-read "Buffer: " candidates nil t)))
-           (setq target (alist-get name candidates nil nil #'string=))
-           (when (memq (plist-get target :buffer) ambiguous-buffers)
-             (pcase (completing-read
-                     "Buffer operation: "
-                     '("send raw text" "insert at point")
-                     nil t)
-               ("send raw text")
-               ("insert at point"
-                (setq target (list :type 'buffer
-                                   :buffer (plist-get target :buffer))))
-               (_
-                (user-error "Unknown buffer operation")))))))
-      ("ghostty"
-       (require 'ghostel)
-       (let (candidates)
-         (dolist (buffer (ghostel-buffer-list))
-           (let ((target (list :type 'ghostel
-                               :buffer buffer
-                               :process (get-buffer-process buffer))))
-             (when (my/ghostel-target-live-p target)
-               (push (cons (format "buffer: %s" (buffer-name buffer)) target)
-                     candidates))))
-         (setq candidates
-               (append (nreverse candidates)
-                       (list (cons "create new" 'create-new))))
-         (let ((selection (completing-read "Ghostty: " candidates nil t)))
-           (if (string= selection "create new")
-               (let ((name (read-string "Ghostty buffer name (optional): "))
-                     buffer)
-                 (let ((default-directory source-directory))
-                   (setq buffer
-                         (ghostel-create name my/send-text-right-split-action)))
-                 (setq target (list :type 'ghostel
-                                    :buffer buffer
-                                    :process (get-buffer-process buffer)))
-                 (unless (my/ghostel-target-live-p target)
-                   (user-error "Created Ghostty buffer cannot accept input")))
-             (setq target (alist-get selection candidates nil nil #'string=))))))
-      (_
-       (user-error "Unknown text target selection")))
-    (my/send-text-deliver target text nil)
-    (my/send-text-save-last-target target)))
-
-(defun my/send-text-send-to-last-target (text)
-  "Replay the current tab's last successful target with TEXT, or choose one."
-  (let (target)
-    (dolist (tab (tab-bar-tabs))
-      (when (eq (car tab) 'current-tab)
-        (setq target (alist-get 'my/send-text-last-target (cdr tab)))))
-    (if target
-        (my/send-text-deliver target text t)
-      (my/send-text-to-target text))))
-
-(defun my/send-region-or-buffer ()
-  "Choose a target for the active region or accessible buffer contents."
-  (interactive)
-  (my/send-text-to-target
-   (if (use-region-p)
-       (buffer-substring-no-properties (region-beginning) (region-end))
-     (buffer-substring-no-properties (point-min) (point-max)))))
-
-(defun my/send-region-or-buffer-to-last-target ()
-  "Replay active text to this tab's last target, or choose one when absent."
-  (interactive)
-  (my/send-text-send-to-last-target
-   (if (use-region-p)
-       (buffer-substring-no-properties (region-beginning) (region-end))
-     (buffer-substring-no-properties (point-min) (point-max)))))
-
-(defun my/create-ghostel-terminal-in-split (&optional name directory)
-  "Create a Ghostel terminal in a right-side split and save it for this tab."
-  (interactive
-   (let ((directory default-directory))
-     (list (read-string "Ghostel buffer name (optional): ") directory)))
-  (unless directory
-    (setq directory default-directory))
-  (require 'ghostel)
-  (let* ((default-directory directory)
-         (buffer
-          (ghostel-create name
-                          my/send-text-right-split-action))
-         (target (list :type 'ghostel
-                       :buffer buffer
-                       :process (get-buffer-process buffer))))
-    (unless (my/ghostel-target-live-p target)
-      (user-error "Created Ghostel buffer cannot accept input"))
-    (my/send-text-save-last-target target)))
-
-(defun my/open-or-create-zmx-session-in-split (&optional name command directory)
-  "Open or create a zmx session in a right-side split and save it for this tab."
-  (interactive
-   (let ((directory default-directory)
-         (name (read-string "zmx session name: "))
-         command)
-     (when current-prefix-arg
-       (setq command (read-string "Command for new session: ")))
-     (list name command directory)))
-  (unless directory
-    (setq directory default-directory))
-  (let ((default-directory directory)
-        (display-buffer-overriding-action my/send-text-right-split-action))
-    (term-sessions-open (list :name name :directory directory) command)
-    (my/send-text-save-last-target
-     (list :type 'zmx :name name :directory directory))))
-
-(defvar my/annotations nil
-  "Queued source annotations awaiting explicit target selection.")
-
-(defun my/annotate-region (begin end annotation)
-  "Queue the region from BEGIN to END with ANNOTATION."
-  (interactive
-   (if (use-region-p)
-       (list (region-beginning) (region-end)
-             (read-string "Annotation: "))
-     (user-error "Select a region to annotate")))
-  (push (list :source (or buffer-file-name (buffer-name))
-              :start-line (line-number-at-pos begin t)
-              :end-line (line-number-at-pos (max begin (1- end)) t)
-              :mode major-mode
-              :annotation annotation
-              :text (buffer-substring-no-properties begin end))
-        my/annotations)
-  (message "Queued annotation %d" (length my/annotations)))
-
-(defun my/annotate-send-all (request)
-  "Send queued annotations with optional overall REQUEST."
-  (interactive (list (read-string "Overall request (optional): ")))
-  (unless my/annotations
-    (user-error "No annotations are queued"))
-  (let ((prompt "# Review annotations\n"))
-    (unless (string-empty-p request)
-      (setq prompt (concat prompt "\n## Overall request\n\n" request "\n")))
-    (dolist (item (reverse my/annotations))
-      (let ((text (plist-get item :text))
-            (fence "```")
-            (start 0))
-        (while (string-match "`+" text start)
-          (setq fence
-                (make-string (max (length fence)
-                                  (1+ (length (match-string 0 text)))) ?`)
-                start (match-end 0)))
-        (setq prompt
-              (concat prompt
-                      "\n## " (plist-get item :source)
-                      ":" (number-to-string (plist-get item :start-line))
-                      "-" (number-to-string (plist-get item :end-line))
-                      " (" (symbol-name (plist-get item :mode)) ")\n\n"
-                      (plist-get item :annotation) "\n\n" fence "\n"
-                      text "\n" fence "\n"))))
-    (my/send-text-to-target prompt)
-    (setq my/annotations nil)))
-
-(defun my/gptel-compose-region (begin end)
-  "Open a new Gptel conversation composed from the region BEGIN to END."
-  (interactive "r")
-  (unless (use-region-p)
-    (user-error "Select a region to compose"))
-  (let ((prompt
-         (format "Source: %s\nLines: %d-%d\nMode: %s\n\n```\n%s\n```\n\nRequest:\n"
-                 (or buffer-file-name (buffer-name))
-                 (line-number-at-pos begin)
-                 (line-number-at-pos (max begin (1- end)))
-                 major-mode
-                 (buffer-substring-no-properties begin end))))
-    (gptel (generate-new-buffer-name "*gptel-region*") nil prompt t)))
+(require 'my-send-text)
 
 (defvar my/project-commands nil
   "Project-local alist of task labels and shell commands.
@@ -823,387 +1069,114 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
             (format "*ghostel-compile: %s %s*" (project-name project) label)))
       (ghostel-compile command))))
 
-;; language services
-(use-package yasnippet
-  :commands yas-minor-mode
+
+;; Gptel and AI
+
+;; AI
+(use-package gptel
+  :commands (gptel gptel-rewrite gptel-send)
   :config
-  ;; Eglot enables Yasnippet only when it expands a server-provided snippet.
-  ;; Idle TAB remains available to the major mode for ordinary indentation.
-  (keymap-unset yas-minor-mode-map "TAB")
-  (keymap-unset yas-minor-mode-map "<tab>")
-  (keymap-unset yas-minor-mode-map "S-TAB")
-  (keymap-set yas-keymap "S-TAB"
-              (yas-filtered-definition 'yas-prev-field))
-  (add-hook 'yas-keymap-disable-hook
-            (lambda () completion-in-region-mode)))
+  (setq
+    gptel-model 'claude-sonnet-4-20250514
+    gptel-backend (
+       gptel-make-anthropic
+       "Claude"
+       :stream t
+       :models '(claude-sonnet-4-20250514)
+       :key (getenv "ANTHROPIC_API_KEY")
+    )
+  )
+)
 
-(use-package eglot
-  :commands (eglot
-             eglot-code-actions
-             eglot-find-declaration
-             eglot-find-implementation
-             eglot-find-typeDefinition
-             eglot-format
-             eglot-inlay-hints-mode
-             eglot-rename
-             eglot-show-call-hierarchy)
-  :config
-  ;; Install clangd, rust-analyzer, lua-language-server, ty,
-  ;; typescript-language-server, zls, nimlangserver, and ols outside Emacs.
-  ;; A TRAMP project requires its server executable on the remote host PATH.
-  ;; Emacs 31 already knows the contract servers for C, C++, Rust, Lua,
-  ;; JavaScript, TypeScript, Zig, and Odin.  Prefer ty for Python because
-  ;; Eglot manages one server per buffer.  Ruff can replace ty explicitly,
-  ;; but it is not started as a concurrent second server.
-  (setf (alist-get '(python-mode python-ts-mode)
-                   eglot-server-programs nil nil #'equal)
-        '("ty" "server"))
-  (add-to-list 'eglot-server-programs '(nim-mode . ("nimlangserver")))
+(defun my/gptel-compose-region (begin end)
+  "Open a new Gptel conversation composed from the region BEGIN to END."
+  (interactive "r")
+  (unless (use-region-p)
+    (user-error "Select a region to compose"))
+  (let ((prompt
+         (format "Source: %s\nLines: %d-%d\nMode: %s\n\n```\n%s\n```\n\nRequest:\n"
+                 (or buffer-file-name (buffer-name))
+                 (line-number-at-pos begin)
+                 (line-number-at-pos (max begin (1- end)))
+                 major-mode
+                 (buffer-substring-no-properties begin end))))
+    (gptel (generate-new-buffer-name "*gptel-region*") nil prompt t)))
 
-  ;; These aliases exist only in an active Eglot buffer.  The owned leader
-  ;; hierarchy is rebuilt separately in Phase 6.
-  (keymap-set eglot-mode-map "C-c e f" #'eglot-format)
-  (keymap-set eglot-mode-map "C-c e a" #'eglot-code-actions)
-  (keymap-set eglot-mode-map "C-c e r" #'eglot-rename)
-  (keymap-set eglot-mode-map "C-c e h" #'eldoc-doc-buffer)
-  (keymap-set eglot-mode-map "C-c e d" #'xref-find-definitions)
-  (keymap-set eglot-mode-map "C-c e R" #'xref-find-references)
-  (keymap-set eglot-mode-map "C-c e D" #'eglot-find-declaration)
-  (keymap-set eglot-mode-map "C-c e i" #'eglot-inlay-hints-mode)
-  (keymap-set eglot-mode-map "C-c e t" #'eglot-find-typeDefinition))
+;; Global and leader bindings
 
-(setq xref-search-program (if (executable-find "rg") 'ripgrep 'grep))
-
-;; Install Dape explicitly with `install-packages.el'.  GUD remains the
-;; default debugger and no Dape hook or global mode is enabled.  Invoke
-;; `M-x dape', select `lldb-dap', and set `:program' to launch a local C,
-;; C++, or Rust binary.  To attach, invoke `M-x dape' with
-;; `lldb-dap :request "attach" :pid PID'.  Both forms work from a local or
-;; TRAMP project, but lldb-dap must be on PATH on the machine where the
-;; project lives.  Homebrew users can install it with `brew install llvm'.
-(use-package dape
-  :commands dape
-  :config
-  (setq dape-configs (list (assq 'lldb-dap dape-configs))))
-
-(use-package flymake
-  :commands (flymake-goto-next-error
-             flymake-goto-prev-error
-             flymake-show-buffer-diagnostics
-             flymake-show-project-diagnostics))
-
-;; languages
-(use-package nim-mode
-  :mode "\\.nim\\'")
-(use-package odin-mode
-  :mode ("\\.odin\\'" . odin-mode))
-(use-package php-mode
-  :mode ("\\.php\\'" . php-mode)
-  :hook (php-mode . (lambda () (setq-local php-indent-offset 2))))
-(use-package zig-mode
-  :mode "\\.zig\\'")
-
-(use-package markdown-mode
-  :mode ("README\\.md\\'" . gfm-mode)
-  :init (setq markdown-command "multimarkdown"))
-
-
-;; completion
-(defvar consult-async-split-style)
-
-(use-package consult
-  :commands (consult-buffer
-             consult-fd
-             consult-imenu
-             consult-isearch-history
-             consult-line
-             consult-line-multi
-             consult-recent-file
-             consult-ripgrep
-             consult-xref
-             consult-yank-from-kill-ring)
-  :init
-  (setq xref-show-xrefs-function #'consult-xref
-        xref-show-definitions-function #'consult-xref
-        consult-buffer-sources '(consult--source-buffer)))
-
-(use-package embark
-  :commands embark-act
-  :bind ("C-c ." . embark-act))
-
-(use-package embark-consult
-  :after (consult embark))
-
-(require 'my-file-picker
-         (expand-file-name
-          "my-file-picker.el"
-          (file-name-directory (or load-file-name user-init-file))))
+(global-set-key [kp-delete] #'delete-word)
+(global-set-key (kbd "s-c") #'my/copy)
+(global-set-key (kbd "s-x") #'my/cut)
+(global-set-key (kbd "s-v") #'yank)
+(global-set-key (kbd "s-s") #'save-buffer)
 (global-set-key (kbd "C-x C-f") #'my/find-file)
+(global-set-key (kbd "C-=") #'my/increase-font-size)
+(global-set-key (kbd "C--") #'my/decrease-font-size)
+(global-set-key (kbd "C-0") #'my/reset-font-size)
+(global-set-key
+ (kbd "C-x C")
+ (lambda ()
+   (interactive)
+   (find-file "~/.config/emacs/init.el")))
+(global-set-key (kbd "C-x R") #'my/soft-reload)
+(global-set-key (kbd "C-c C-c") #'eval-region)
+(global-set-key
+ (kbd "s-1")
+ (lambda ()
+   (interactive)
+   (tab-select 1)))
+(global-set-key
+ (kbd "s-2")
+ (lambda ()
+   (interactive)
+   (tab-select 2)))
+(global-set-key
+ (kbd "s-3")
+ (lambda ()
+   (interactive)
+   (tab-select 3)))
+(global-set-key
+ (kbd "s-4")
+ (lambda ()
+   (interactive)
+   (tab-select 4)))
+(global-set-key
+ (kbd "s-5")
+ (lambda ()
+   (interactive)
+   (tab-select 5)))
+(global-set-key
+ (kbd "s-6")
+ (lambda ()
+   (interactive)
+   (tab-select 6)))
+(global-set-key
+ (kbd "s-7")
+ (lambda ()
+   (interactive)
+   (tab-select 7)))
+(global-set-key
+ (kbd "s-8")
+ (lambda ()
+   (interactive)
+   (tab-select 8)))
+(global-set-key
+ (kbd "s-9")
+ (lambda ()
+   (interactive)
+   (tab-select 9)))
+(global-set-key (kbd "s-}") #'tab-bar-switch-to-next-tab)
+(global-set-key (kbd "s-{") #'tab-bar-switch-to-prev-tab)
+(global-set-key (kbd "s-t") #'tab-bar-new-tab)
+(global-set-key (kbd "s-w") #'tab-bar-close-tab)
 
-(setq completion-styles '(basic partial-completion flex)
-      completion-category-overrides '((eglot-capf (styles flex))
-                                      (project-file (styles flex))
-                                      (buffer (styles flex))
-                                      (command (styles flex))
-                                      (file (styles basic partial-completion)))
-      completion-eager-display t
-      completion-eager-update t
-      completion-show-help nil
-      completions-format 'one-column
-      completions-detailed t
-      completions-max-height 14
-      minibuffer-visible-completions nil
-      minibuffer-completion-auto-choose nil)
-
-(add-hook 'completion-list-mode-hook
-          (lambda ()
-            (setq-local window-min-height completions-max-height)))
-
-(keymap-set completion-in-region-mode-map "TAB"
-            #'minibuffer-next-completion)
-(keymap-set completion-in-region-mode-map "S-TAB"
-            #'minibuffer-previous-completion)
-(keymap-set completion-in-region-mode-map "<backtab>"
-            #'minibuffer-previous-completion)
-(keymap-set completion-in-region-mode-map "C-n"
-            #'minibuffer-next-completion)
-(keymap-set completion-in-region-mode-map "C-p"
-            #'minibuffer-previous-completion)
-(keymap-set completion-in-region-mode-map "M-g M-c"
-            #'switch-to-completions)
-
-(keymap-set completion-list-mode-map "C-n" #'next-completion)
-(keymap-set completion-list-mode-map "C-p" #'previous-completion)
-
-(keymap-set minibuffer-local-completion-map "C-n"
-            #'minibuffer-next-completion)
-(keymap-set minibuffer-local-completion-map "C-p"
-            #'minibuffer-previous-completion)
-(keymap-set minibuffer-local-filename-completion-map "C-n"
-            #'minibuffer-next-completion)
-(keymap-set minibuffer-local-filename-completion-map "C-p"
-            #'minibuffer-previous-completion)
-
-(defun my/file-completion-at-point ()
-  "Return file completion data for a path-like name at point."
-  (when-let* ((bounds (bounds-of-thing-at-point 'filename))
-              (file-name (buffer-substring-no-properties
-                          (car bounds) (cdr bounds)))
-              ((or (string-prefix-p "/" file-name)
-                   (string-prefix-p "./" file-name)
-                   (string-prefix-p "../" file-name)
-                   (string-prefix-p "~/" file-name))))
-    (list (car bounds) (cdr bounds) #'completion-file-name-table
-          :exclusive 'no)))
-
-(add-hook 'completion-at-point-functions #'my/file-completion-at-point t)
-;; Buffer-local CAPFs run before global ones, so put file completion ahead of
-;; Eglot in managed buffers.  It returns nil for ordinary code identifiers.
-(add-hook 'eglot-managed-mode-hook
-          (lambda ()
-            (add-hook 'completion-at-point-functions
-                      #'my/file-completion-at-point -90 t)))
-
-(global-completion-preview-mode -1)
-(define-key evil-insert-state-map (kbd "C-SPC") #'completion-help-at-point)
-(define-key evil-insert-state-map (kbd "M-/") #'dabbrev-expand)
-(define-key evil-insert-state-map (kbd "C-M-/") #'dabbrev-completion)
 (evil-define-key '(normal visual insert) 'global
   (kbd "C-s") #'isearch-forward)
 
-(require 'savehist)
-(add-to-list 'savehist-additional-variables 'search-ring)
-(add-to-list 'savehist-additional-variables 'regexp-search-ring)
-(savehist-mode 1)
-(recentf-mode 1)
-
-;; Install the pinned native grammars separately with
-;; `emacs --batch -Q -l ~/.config/emacs/install-tree-sitter-grammars.el'.
-(require 'treesit)
-(setopt treesit-auto-install-grammar 'never
-        treesit-enabled-modes
-        '(c-ts-mode
-          c++-ts-mode
-          rust-ts-mode
-          lua-ts-mode
-          python-ts-mode
-          js-ts-mode
-          typescript-ts-mode
-          tsx-ts-mode))
-(setopt which-func-modes t)
-(which-function-mode 1)
-
-(defun my/parser-tools-mode ()
-  "Enable native folding and Evil motions in parser-backed buffers."
-  (let ((parser-settings
-         (pcase major-mode
-           ('zig-mode '(zig "function_declaration" "block"))
-           ('nim-mode
-            '(nim
-              "\\(converter\\|func\\|iterator\\|macro\\|method\\|proc\\|template\\)_declaration"
-              "\\(converter\\|func\\|iterator\\|macro\\|method\\|proc\\|template\\)_declaration"))
-           ('odin-mode '(odin "procedure_declaration" "block")))))
-    (when (and parser-settings
-               (treesit-ready-p (car parser-settings) t))
-      (let ((language (car parser-settings))
-            (defun-regexp (cadr parser-settings))
-            (block-regexp (caddr parser-settings)))
-        (treesit-parser-create language)
-        (setq-local treesit-defun-type-regexp defun-regexp
-                    treesit-thing-settings
-                    `((,language
-                       (defun ,defun-regexp)
-                       (list ,block-regexp)))
-                    treesit-defun-name-function
-                    (lambda (node)
-                      (when (string-match-p defun-regexp
-                                            (treesit-node-type node))
-                        (let ((name
-                               (or (treesit-node-child-by-field-name node "name")
-                                   (treesit-node-child node 0 t))))
-                          (when name
-                            (treesit-node-text name t)))))
-                    beginning-of-defun-function #'treesit-beginning-of-defun
-                    end-of-defun-function #'treesit-end-of-defun
-                    add-log-current-defun-function
-                    #'treesit-add-log-current-defun)))
-    (when (treesit-parser-list)
-      (when (eq major-mode 'markdown-ts-mode)
-        (setq-local treesit-thing-settings '((markdown (list "section")))))
-      (when (or parser-settings (eq major-mode 'markdown-ts-mode))
-        (setq-local hs-treesit-things 'list
-                    hs-c-start-regexp nil
-                    hs-block-start-regexp nil
-                    hs-block-end-regexp
-                    (unless (memq major-mode '(nim-mode markdown-ts-mode))
-                      #'treesit-hs-block-end)
-                    hs-forward-sexp-function #'treesit-forward-list
-                    hs-find-block-beginning-function
-                    #'treesit-hs-find-block-beginning
-                    hs-find-next-block-function #'treesit-hs-find-next-block
-                    hs-looking-at-block-start-predicate
-                    #'treesit-hs-looking-at-block-start-p
-                    hs-inside-comment-predicate
-                    #'treesit-hs-inside-comment-p))
-      (hs-minor-mode 1)
-      (when (or treesit-defun-type-regexp
-                (treesit-thing-defined-p 'defun nil))
-        (dolist (state '(normal visual operator))
-          (evil-local-set-key state (kbd "[m") #'evil-backward-section-begin)
-          (evil-local-set-key state (kbd "]m") #'evil-forward-section-begin)
-          (evil-local-set-key state (kbd "[M") #'evil-backward-section-end)
-          (evil-local-set-key state (kbd "]M") #'evil-forward-section-end))))))
-
-(dolist (hook '(c-ts-mode-hook
-                c++-ts-mode-hook
-                rust-ts-mode-hook
-                lua-ts-mode-hook
-                python-ts-mode-hook
-                js-ts-mode-hook
-                typescript-ts-mode-hook
-                tsx-ts-mode-hook
-                markdown-ts-mode-hook
-                zig-mode-hook
-                nim-mode-hook
-                odin-mode-hook))
-  (add-hook hook #'my/parser-tools-mode))
-(add-to-list
- 'auto-mode-alist
- `("\\.md\\'" .
-   ,(lambda ()
-      (if (treesit-ready-p '(markdown markdown-inline) t)
-          (progn
-            (require 'markdown-ts-mode)
-            (markdown-ts-mode))
-        (if (string-equal (file-name-nondirectory buffer-file-name)
-                          "README.md")
-            (gfm-mode)
-          (markdown-mode))))))
-
-
-(use-package flyspell
-  :hook ((prog-mode . flyspell-prog-mode)
-         (text-mode . flyspell-mode))
-  :config
-  (setq flyspell-prog-text-faces
-      (delq 'font-lock-string-face
-             flyspell-prog-text-faces))
-)
-(use-package git-commit
-  :hook (git-commit-setup . git-commit-setup-flyspell))
-
-;; ui
-(add-to-list
- 'custom-theme-load-path
- (expand-file-name "themes" (file-name-directory (or load-file-name user-init-file))))
-(load-theme 'mig-one-light t)
-
-(use-package olivetti
-  :commands olivetti-mode
-  :init (setq olivetti-body-width .67))
-(use-package which-key
-  :init (which-key-mode)
-  :diminish which-key-mode
-  :config
-  (setq which-key-idle-delay 1)
-)
-
-(use-package tab-bar
-    :config
-    (global-set-key (kbd "s-}") 'tab-bar-switch-to-next-tab)
-    (global-set-key (kbd "s-{") 'tab-bar-switch-to-prev-tab)
-
-    (setq tab-bar-select-tab-modifiers '(super))
-    (global-set-key (kbd "s-t") 'tab-bar-new-tab)
-    (global-set-key (kbd "s-w") 'tab-bar-close-tab)
-
-    (setq tab-bar-tab-hints t)
-)
-
-;; keybindings
-(defun my/consult-line-multi-all-buffers ()
-  "Search for a matching line across all open buffers."
-  (interactive)
-  (consult-line-multi t))
-
-(defun my/consult-ripgrep-region-or-symbol ()
-  "Search the project for the active region or symbol at point."
-  (interactive)
-  (let ((text (if (use-region-p)
-                  (buffer-substring-no-properties
-                   (region-beginning) (region-end))
-                (thing-at-point 'symbol t)))
-        (consult-async-split-style nil))
-    (unless text
-      (user-error "No region or symbol at point"))
-    (deactivate-mark)
-    (let ((query
-           (string-replace
-            " " "\\ "
-            (replace-regexp-in-string
-             (rx (any "\n\\.^$|?*+(){}[]-"))
-             (lambda (match) (format "\\x%02x" (aref match 0)))
-             text t t))))
-      (consult-ripgrep
-       nil
-       (if (string-match-p "\n" text)
-           (concat query " -- --multiline")
-         query)))))
-
-(defun my/set-default-directory-to-project-root ()
-  "Set the current buffer's default directory to its project root."
-  (interactive)
-  (setq default-directory (project-root (project-current t))))
-
-(defun my/set-default-directory-to-current-file ()
-  "Set the current buffer's default directory to its file directory."
-  (interactive)
-  (unless buffer-file-name
-    (user-error "Current buffer is not visiting a file"))
-  (setq default-directory (file-name-directory buffer-file-name)))
-
-(defvar my/leader-map (make-sparse-keymap)
+(defvar my/leader-map nil
   "Leader map shared by Evil normal and visual states.")
+
+(setq my/leader-map (make-sparse-keymap))
 
 (dolist (prefix '("a" "b" "c" "d" "f" "g" "h" "o" "r" "s" "t" "w" "w t"))
   (keymap-set my/leader-map prefix (make-sparse-keymap)))
@@ -1306,16 +1279,23 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("h l" . display-line-numbers-mode)))
   (keymap-set my/leader-map (car binding) (cdr binding)))
 
-(defvar my/normal-leader-map (make-sparse-keymap)
+
+(defvar my/normal-leader-map nil
   "Leader map for Evil normal state.")
-(defvar my/normal-ai-map (make-sparse-keymap)
+(defvar my/normal-ai-map nil
   "AI leader map for Evil normal state.")
-(defvar my/visual-leader-map (make-sparse-keymap)
+(defvar my/visual-leader-map nil
   "Leader map for Evil visual state.")
-(defvar my/visual-ai-map (make-sparse-keymap)
+(defvar my/visual-ai-map nil
   "AI leader map for Evil visual state.")
-(defvar my/visual-review-map (make-sparse-keymap)
+(defvar my/visual-review-map nil
   "Review leader map for Evil visual state.")
+
+(setq my/normal-leader-map (make-sparse-keymap)
+      my/normal-ai-map (make-sparse-keymap)
+      my/visual-leader-map (make-sparse-keymap)
+      my/visual-ai-map (make-sparse-keymap)
+      my/visual-review-map (make-sparse-keymap))
 
 (set-keymap-parent my/normal-leader-map my/leader-map)
 (set-keymap-parent my/normal-ai-map (keymap-lookup my/leader-map "a"))
@@ -1372,274 +1352,3 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "v" "code mode"
     "w" "windows"
     "w t" "tabs"))
-
-(require 'tramp)
-
-(dolist (method '("ssh" "sshx"))
-  (tramp-set-completion-function method
-    '((tramp-parse-sconfig "/etc/ssh_config")
-      (tramp-parse-sconfig "~/.ssh/config"))))
-
-(setq tramp-message-show-message nil)
-(add-to-list 'tramp-remote-path 'tramp-own-remote-path)
-
-;; https://coredumped.dev/2025/06/18/making-tramp-go-brrrr./
-(setq remote-file-name-inhibit-locks t
-      tramp-use-scp-direct-remote-copying t
-      remote-file-name-inhibit-auto-save-visited t)
-
-(setq tramp-copy-size-limit (* 1024 1024) ;; 1MB
-      tramp-verbose 2)
-
-(add-to-list 'tramp-connection-properties
-  (list (regexp-quote "/sshx:aws-login1:")
-        "remote-shell" "/bin/bash"))
-
-(connection-local-set-profile-variables
- 'remote-direct-async-process
- '((tramp-direct-async-process . t)))
-
-(connection-local-set-profiles
- '(:application tramp :protocol "scp")
- 'remote-direct-async-process)
-
-(with-eval-after-load 'tramp
-  (with-eval-after-load 'compile
-    (remove-hook 'compilation-mode-hook #'tramp-compile-disable-ssh-controlmaster-options)))
-
-(setq magit-tramp-pipe-stty-settings 'pty)
-
-(setq ob-async-inject-variables "\\borg-babel.+")
-(add-hook 'ob-async-pre-execute-src-block-hook
-        (lambda ()
-           ;; tramp config for async emacs process
-           (setq tramp-completion-reread-directory-timeout nil)
-           (setq tramp-default-method "sshx")
-           (setq tramp-use-connection-share nil))
-)
-
-;; Speed up TRAMP
-(setq tramp-auto-save-directory "~/tmp/tramp-autosave")
-(setq tramp-chunksize 2000)
-
-;; iterate over all bindings
-(setq ispell-program-name "aspell")
-(setq ispell-dictionary "english")
-
-;; line numbers
-(column-number-mode)
-(global-display-line-numbers-mode 0)
-(setq display-line-numbers-type 'relative)
-(add-hook 'prog-mode-hook #'display-line-numbers-mode)
-
-(setq-default indent-tabs-mode nil)  ;; no tabs
-
-
-
-(defun copy-current-file-path ()
-  "Copy the full path of the current buffer's file to the kill ring."
-  (interactive)
-  (let ((file-path (buffer-file-name)))
-    (if file-path
-        (progn
-          (kill-new file-path)
-          (message "Copied file path: %s" file-path))
-      (message "Current buffer is not associated with a file."))))
-
-(defun my/refile-to-journal () (interactive)
-       (save-excursion
-         (org-refile-to-datetree "~/org/journal.org")
-       )
-)
-
-(defun my/soft-reload () (interactive)
-  (load config-path)
-)
-(defvar my/default-font-size 13)
-(defvar my/default-variable-font-size 13)
-(setq my/default-font-size 13.5)
-(setq my/default-variable-font-size 13.5)
-
-(set-face-attribute 'default nil
-  :font (font-spec :family "JetBrains Mono"
-                   :size my/default-font-size
-                   :fallback '("Apple Color Emoji"
-                              "Apple Symbols"
-                              "Menlo")))
-(set-fontset-font t '(#xe000 . #xf8ff)
-                  (font-spec :family "Symbols Nerd Font Mono") nil 'prepend)
-(set-fontset-font t '(#xf0000 . #xffffd)
-                  (font-spec :family "Symbols Nerd Font Mono") nil 'prepend)
-
-(show-paren-mode 1)
-(tool-bar-mode -1)          ; Disable the toolbar
-(scroll-bar-mode -1)        ; Disable visible scrollbar
-(set-fringe-mode 10)        ; Give some breathing room
-(menu-bar-mode -1)          ; Disable the menu bar
-(blink-cursor-mode 0)
-(setq ring-bell-function 'ignore)
-(winner-mode 1)
-
-(setq mac-control-modifier 'control)
-(setq mac-option-modifier 'meta)
-(setq mac-command-modifier 'super)
-(global-set-key [kp-delete] 'delete-word) ;; sets alt-delete to be right-delete
-
-(setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
-
-
-(defun my/increase-font-size () (interactive)
-   (text-scale-adjust 0.5)
-)
-
-(defun my/decrease-font-size () (interactive)
-   (text-scale-adjust -0.5)
-)
-
-(defun my/reset-font-size () (interactive)
-   (text-scale-adjust 0)
-)
-
-
-(defun my/write-mode() (interactive)
-   (setq olivetti-body-width 60)
-   (olivetti-mode 1)
-   (text-scale-set 3.0)
-   (display-line-numbers-mode 0)
-)
-
-(defun my/write-mode-no-zoom() (interactive)
-   (setq olivetti-body-width 120)
-   (olivetti-mode 1)
-   (text-scale-set 0.0)
-   (display-line-numbers-mode 0)
-)
-
-(defun my/default-mode() (interactive)
-   (olivetti-mode 0)
-   (text-scale-set 0.0)
-   (display-line-numbers-mode 1)
-)
-(defun my/center-window() (interactive) (olivetti-mode 1))
-
-
-(with-eval-after-load 'which-key
-    (global-set-key (kbd "C-=") 'my/increase-font-size)
-    (global-set-key (kbd "C--") 'my/decrease-font-size)
-    (global-set-key (kbd "C-0") 'my/reset-font-size)
-    (global-set-key (kbd "C-x C") (lambda () (interactive) (find-file "~/.config/emacs/init.el")))
-    (global-set-key (kbd "C-x R") (lambda () (interactive) (my/soft-reload)))
-    (global-set-key (kbd "C-c C-c") 'eval-region)
-
-    (global-set-key (kbd "s-1") (lambda () (interactive) (tab-select 1)))
-    (global-set-key (kbd "s-2") (lambda () (interactive) (tab-select 2)))
-    (global-set-key (kbd "s-3") (lambda () (interactive) (tab-select 3)))
-    (global-set-key (kbd "s-4") (lambda () (interactive) (tab-select 4)))
-    (global-set-key (kbd "s-5") (lambda () (interactive) (tab-select 5)))
-    (global-set-key (kbd "s-6") (lambda () (interactive) (tab-select 6)))
-    (global-set-key (kbd "s-7") (lambda () (interactive) (tab-select 7)))
-    (global-set-key (kbd "s-8") (lambda () (interactive) (tab-select 8)))
-    (global-set-key (kbd "s-9") (lambda () (interactive) (tab-select 9)))
-)
-
-;; editing basics
-(setopt kill-region-dwim 'unix-word)
-
-(defun my/cut () (interactive)
-    (cond
-          ((region-active-p) (kill-region (region-beginning) (region-end)))
-          ('t (kill-whole-line))
-    )
-)
-
-(defun my/copy () (interactive)
-    (cond
-          ((region-active-p) (kill-ring-save (region-beginning) (region-end)))
-          ('t (kill-ring-save (line-beginning-position)
-                              (line-beginning-position 2)))
-    )
-)
-
-(defun region-to-some-buffer (beg end)
-  (interactive "r")
-  (let ((input (buffer-substring beg end))
-        (new-buffer (get-buffer-create "*my-buffer*")))
-    (pop-to-buffer new-buffer)
-    (fundamental-mode)  ;; replace with desired mod
-    (insert input)))
-
-(defun org-copy-to-datetree (&optional file)
-  "Refile a subtree to a datetree corresponding to it's timestamp.
-
-The current time is used if the entry has no timestamp. If FILE
-is nil, refile in the current file."
-  (interactive "f")
-  (let* ((datetree-date (or (org-entry-get nil "TIMESTAMP" t)
-                            (org-read-date t nil "now")))
-         (date (org-date-to-gregorian datetree-date))
-         )
-    (with-current-buffer (current-buffer)
-      (save-excursion
-        (org-copy-subtree)
-        (if file (find-file file))
-        (org-datetree-find-date-create date)
-        (org-narrow-to-subtree)
-        (outline-show-subtree)
-        (org-end-of-subtree t)
-        (newline)
-        (goto-char (point-max))
-        (org-paste-subtree 4)
-        (widen)
-        ))
-    )
-)
-;; https://emacs.stackexchange.com/questions/10597/how-to-refile-into-a-datetree
-(defun org-refile-to-datetree (&optional file)
-  "Refile a subtree to a datetree corresponding to it's timestamp.
-
-The current time is used if the entry has no timestamp. If FILE
-is nil, refile in the current file."
-  (interactive "f")
-  (let* ((datetree-date (or (org-entry-get nil "TIMESTAMP" t)
-                            (org-read-date t nil "now")))
-         (date (org-date-to-gregorian datetree-date))
-         )
-    (with-current-buffer (current-buffer)
-      (save-excursion
-        (org-cut-subtree)
-        (if file (find-file file))
-        (org-datetree-find-date-create date)
-        (org-narrow-to-subtree)
-        (outline-show-subtree)
-        (org-end-of-subtree t)
-        (newline)
-        (goto-char (point-max))
-        (org-paste-subtree 4)
-        (widen)
-        ))
-    )
-)
-
-(global-set-key (kbd "s-c") 'my/copy)
-(global-set-key (kbd "s-x") 'my/cut)
-(global-set-key (kbd "s-v") 'yank)
-(global-set-key (kbd "s-s") 'save-buffer)
-
-;; TODO: styling
-(setq c-default-style "bsd" c-basic-offset 4)
-
-(setq indent-tabs-mode nil)
-
-(require 'org-autolist "~/.config/emacs/better-ret.el")
-(add-hook 'org-mode-hook (lambda () (org-autolist-mode)))
-
-(setq-default indent-tabs-mode nil)  ; Use spaces instead of tabs
-(setq-default tab-width 2)           ; Set tab width to 2
-(setq-default standard-indent 2)     ; Set standard indent to 2
-
-(setq-default lisp-indent-offset 2)  ; lisp
-(setq-default c-basic-offset 4)      ; C/C++/Java
-(setq-default js-indent-level 2)     ; JavaScript
-(setq-default css-indent-offset 2)   ; CSS
-(setq-default sgml-basic-offset 2)   ; HTML
-(setq-default python-indent-offset 4) ; Python
