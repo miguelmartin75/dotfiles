@@ -173,7 +173,7 @@
  '(markdown-bold-face ((t (:inherit bold :foreground "#da8548"))))
  '(markdown-blockquote-face ((t (:inherit italic :foreground "#6f7377"))))
  '(markdown-pre-face ((t (:foreground "#50a14f"))))
- '(markdown-code-face ((t (:background "#e7e7e7" :extend t))))
+ '(markdown-code-face ((t (:inherit fixed-pitch :background "#e7e7e7" :extend t))))
  '(markdown-reference-face ((t (:foreground "#6f7377"))))
  '(markdown-inline-code-face ((t (:inherit (markdown-code-face markdown-pre-face) :extend nil :height 1.0))))
  '(markdown-ts-code-span ((t (:inherit (markdown-ts-code-block font-lock-constant-face) :height 1.0))))

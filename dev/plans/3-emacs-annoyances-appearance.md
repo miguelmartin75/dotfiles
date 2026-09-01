@@ -32,7 +32,7 @@ Magit behavior.
 ## Status
 
 - Plan: complete
-- Implementation: in progress
+- Implementation: complete
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Theme: `profiles/common/.config/emacs/themes/mig-one-light-theme.el`
@@ -183,7 +183,7 @@ Status: complete
 
 ## Phase 3: Verify the independent appearance change
 
-Status: pending
+Status: complete
 
 ### Automated verification
 
@@ -227,6 +227,22 @@ temporary directory so generated files do not enter the profile.
 3. Invoke native completion with more than 14 one-column candidates, then with
    a shorter list. Confirm the maximum and compact behavior and exercise all
    four preserved navigation keys.
+
+### Implementation results
+
+- Added three behavior-focused ERT tests covering effective Eglot hint faces,
+  both Markdown implementations under text scaling, and native completion
+  settings.
+- The first ERT run exposed that the theme's `markdown-code-face` override had
+  dropped its upstream `fixed-pitch` inheritance. Restoring that parent fixed
+  the package Markdown family contract without hardcoding a font family.
+- Batch startup printed `CONFIG_LOADED`, and ERT passed 3 of 3 tests.
+- Temporary byte compilation produced all three requested `.elc` files and
+  removed them afterward. Compilation reported only existing unresolved
+  runtime-function and free-variable warnings from `init.el`.
+- Theme `check-parens` and `git diff --check` passed.
+- Interactive manual checks were not run in the batch-only execution
+  environment.
 
 ### Final success criteria
 
