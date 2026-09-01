@@ -155,7 +155,7 @@ Status: complete
 
 ## Phase 2: Raise the native completion maximum
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -172,6 +172,14 @@ Status: pending
 - Fewer candidates may produce a shorter window.
 - Completion remains eager and one-column.
 - `TAB`, `S-TAB`, `C-n`, and `C-p` retain their current behavior.
+
+### Implementation results
+
+- Raised `completions-max-height` from 10 to 14 without changing any other
+  completion setting or keybinding.
+- Batch startup printed `CONFIG_LOADED`; the sandbox only prevented Emacs from
+  updating user-state files outside the repository.
+- `init.el` `check-parens` and `git diff --check` passed.
 
 ## Phase 3: Verify the independent appearance change
 

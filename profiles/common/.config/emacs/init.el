@@ -952,7 +952,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
       completion-show-help nil
       completions-format 'one-column
       completions-detailed t
-      completions-max-height 10
+      completions-max-height 14
       minibuffer-visible-completions nil
       minibuffer-completion-auto-choose nil)
 
