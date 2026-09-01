@@ -569,6 +569,22 @@ state, not configuration that belongs inline in the main init file.
 
 ## Implementation phases
 
+## Execution status
+
+- Plan ID: `emacs-completion-refinement`
+- Status: in progress
+- Next milestone: Phase 2
+- Phase 1: complete
+- Phase 2: pending
+- Phase 3: pending
+- Phase 4: pending
+- Phase 5: pending
+- Phase 6: pending
+- Phase 7: pending
+- Phase 8: pending
+- Phase 9: pending
+- Overall success criteria: pending
+
 ## Phase 1: Install Embark and Consult without changing CAPF ownership
 
 ### Changes

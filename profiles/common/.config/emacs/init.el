@@ -909,6 +909,19 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 
 ;; completion
+(use-package consult
+  :commands consult-xref
+  :init
+  (setq xref-show-xrefs-function #'consult-xref
+        xref-show-definitions-function #'consult-xref))
+
+(use-package embark
+  :commands embark-act
+  :bind ("C-c ." . embark-act))
+
+(use-package embark-consult
+  :after (consult embark))
+
 (setq completion-styles '(basic partial-completion flex)
       completion-category-overrides '((eglot-capf (styles flex)))
       completion-eager-display t

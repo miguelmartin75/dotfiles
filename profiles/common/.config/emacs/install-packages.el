@@ -45,7 +45,10 @@
         (let ((missing-packages
                (seq-remove
                 #'package-installed-p
-                '(dape                   ; explicit DAP launch and attach
+                '(consult                ; live search, previews, and Xref display
+                  dape                   ; explicit DAP launch and attach
+                  embark                 ; contextual candidate actions and export
+                  embark-consult         ; specialized Consult candidate exports
                   evil                   ; modal editing core
                   evil-better-visual-line ; display-line motions
                   evil-collection        ; Evil keys in retained modes
