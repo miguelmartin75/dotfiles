@@ -955,6 +955,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
       minibuffer-visible-completions nil
       minibuffer-completion-auto-choose nil)
 
+(add-hook 'completion-list-mode-hook
+          (lambda ()
+            (setq-local window-min-height completions-max-height)))
+
 (keymap-set completion-in-region-mode-map "TAB"
             #'minibuffer-next-completion)
 (keymap-set completion-in-region-mode-map "S-TAB"

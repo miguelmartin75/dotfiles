@@ -13,9 +13,11 @@ both inline-code faces at relative height `1.0`.
 Eglot's built-in inlay base face uses height `0.8`. Override only that base
 face to height `1.0`; its type and parameter faces already inherit from it.
 
-The native completion block already owns the requested sizing variable.
-`completions-max-height` is a maximum, and changing it from 10 to 14 is enough.
-No display-buffer policy, advice, or resizing hook is needed.
+The native completion block owns the maximum sizing variable, but a maximum
+alone lets short candidate lists shrink the window. Keep
+`completions-max-height` at 14 and set a buffer-local `window-min-height` of 14
+from `completion-list-mode-hook`. Emacs then fits the window with identical
+minimum and maximum heights without display advice or a global window policy.
 
 This plan is independently implementable. It changes no leader maps,
 line-number defaults, workspaces, layouts, terminal state, Gptel state, or
@@ -26,7 +28,7 @@ Magit behavior.
 - Render Eglot inlay hints at the same relative text height as source text.
 - Render backtick-delimited Markdown inline code with the same font metrics as
   surrounding text in built-in and package Markdown modes.
-- Raise the maximum `*Completions*` window height from 10 to 14 while retaining
+- Keep the `*Completions*` window at a fixed height of 14 lines while retaining
   eager, one-column native completion.
 
 ## Status
@@ -38,7 +40,7 @@ Magit behavior.
 - Theme: `profiles/common/.config/emacs/themes/mig-one-light-theme.el`
 - Planned tests: `profiles/common/.config/emacs/appearance-test.el`
 
-## Current behavior and root causes
+## Baseline behavior and root causes
 
 ### Eglot inlay hints
 
@@ -65,12 +67,12 @@ Magit behavior.
 
 ### Completion height
 
-- The native completion block at
-  `profiles/common/.config/emacs/init.el:944` enables eager display, uses one
-  column, and sets `completions-max-height` to 10 at
-  `profiles/common/.config/emacs/init.el:955`.
-- The variable controls the maximum `*Completions*` window height. Fewer
-  candidates may legitimately use a shorter window.
+- The native completion block in
+  `profiles/common/.config/emacs/init.el` enables eager display, uses one
+  column, and sets `completions-max-height` to 14.
+- The variable controls only the maximum `*Completions*` window height. Fewer
+  candidates currently produce a shorter window, which does not meet the fixed
+  height requirement.
 
 ## Decisions
 
@@ -81,8 +83,8 @@ Magit behavior.
 4. Set package `markdown-inline-code-face` and built-in
    `markdown-ts-code-span` to relative height `1.0`, preserving their existing
    inheritance, colors, and backgrounds.
-5. Change `completions-max-height` directly from 10 to 14 in the existing
-   native completion settings.
+5. Keep `completions-max-height` at 14 and set `window-min-height` to 14
+   buffer-locally from `completion-list-mode-hook`.
 6. Preserve all existing mode dispatch, Eglot toggles, completion styles,
    navigation bindings, and eager one-column behavior.
 
@@ -108,10 +110,12 @@ explicit regression boundaries:
   desired metrics.
 - Add mode hooks that mutate faces buffer-locally: the theme owns appearance
   and should remain correct after reload.
-- Add a `display-buffer-alist` entry or resizing hook for `*Completions*`: the
-  native maximum-height variable already provides the exact contract.
-- Force a 14-line minimum: the request is a maximum, and short candidate lists
-  should remain compact.
+- Add a `display-buffer-alist` entry: Emacs applies its completion-specific
+  fitting function after initially displaying the window, so a display rule
+  alone does not establish the fixed-height contract.
+- Override or advise `completions--fit-window-to-buffer`: the public
+  `completion-list-mode-hook` and buffer-local minimum provide the required
+  behavior without replacing an internal Emacs function.
 
 ## Phase 1: Normalize auxiliary text metrics
 
@@ -153,33 +157,39 @@ Status: complete
   `markdown-ts-code-span` retains both upstream parents at height `1.0`.
 - Theme `check-parens` and `git diff --check` passed.
 
-## Phase 2: Raise the native completion maximum
+## Phase 2: Fix the native completion window height
 
 Status: complete
 
+Follow-up ID: `emacs-appearance-fixed-completions`
+
 ### Changes
 
-1. Change `completions-max-height` from 10 to 14 at
-   `profiles/common/.config/emacs/init.el:955`.
-2. Preserve eager display, eager updates, one-column formatting, category
+1. Keep `completions-max-height` at 14 in
+   `profiles/common/.config/emacs/init.el`.
+2. Add a `completion-list-mode-hook` function that sets `window-min-height` to
+   14 buffer-locally for `*Completions*`.
+3. Preserve eager display, eager updates, one-column formatting, category
    styles, and completion navigation.
-3. Do not add a global display rule, advice, or a resize hook.
+4. Do not add a global display rule or advice.
 
 ### Success criteria
 
-- More than 14 candidates produce a `*Completions*` window no taller than 14
-  lines.
-- Fewer candidates may produce a shorter window.
+- Both short and long candidate lists produce a 14-line `*Completions*` window
+  when the frame has enough space.
+- The minimum is buffer-local and does not constrain unrelated windows.
 - Completion remains eager and one-column.
 - `TAB`, `S-TAB`, `C-n`, and `C-p` retain their current behavior.
 
 ### Implementation results
 
-- Raised `completions-max-height` from 10 to 14 without changing any other
-  completion setting or keybinding.
-- Batch startup printed `CONFIG_LOADED`; the sandbox only prevented Emacs from
-  updating user-state files outside the repository.
-- `init.el` `check-parens` and `git diff --check` passed.
+- Kept `completions-max-height` at 14 and added a
+  `completion-list-mode-hook` function that makes the same value the
+  buffer-local `window-min-height`.
+- Focused ERT coverage confirms that both 2-line and 30-line completion
+  contents produce a 14-line window.
+- Eager display, eager updates, one-column formatting, and completion
+  navigation remain unchanged.
 
 ## Phase 3: Verify the independent appearance change
 
@@ -194,7 +204,8 @@ three tests:
 1. effective Eglot base, type, and parameter hint face height and inheritance;
 2. effective fixed-pitch and inline-code family, height, inheritance, and
    text-scale behavior in both Markdown implementations;
-3. native completion maximum height and unchanged eager one-column settings.
+3. native completion fixed height for short and long lists plus unchanged
+   eager one-column settings.
 
 Do not add tests that search source text for declarations.
 
@@ -225,21 +236,23 @@ temporary directory so generated files do not enter the profile.
    `markdown-mode` or `gfm-mode`. Compare font family, height, foreground, and
    background before and after text scaling.
 3. Invoke native completion with more than 14 one-column candidates, then with
-   a shorter list. Confirm the maximum and compact behavior and exercise all
+   a shorter list. Confirm both windows remain 14 lines high and exercise all
    four preserved navigation keys.
 
 ### Implementation results
 
 - Added three behavior-focused ERT tests covering effective Eglot hint faces,
-  both Markdown implementations under text scaling, and native completion
-  settings.
+  both Markdown implementations under text scaling, and fixed native
+  completion height for short and long contents.
 - The first ERT run exposed that the theme's `markdown-code-face` override had
   dropped its upstream `fixed-pitch` inheritance. Restoring that parent fixed
   the package Markdown family contract without hardcoding a font family.
-- Batch startup printed `CONFIG_LOADED`, and ERT passed 3 of 3 tests.
+- Batch startup printed `CONFIG_LOADED`, and ERT passed 3 of 3 tests, including
+  14-line completion windows for both tested content sizes.
 - Temporary byte compilation produced all three requested `.elc` files and
-  removed them afterward. Compilation reported only existing unresolved
-  runtime-function and free-variable warnings from `init.el`.
+  kept them outside the repository. Compilation reported existing optional
+  package-load, unresolved runtime-function, and free-variable warnings from
+  `init.el`.
 - Theme `check-parens` and `git diff --check` passed.
 - Interactive manual checks were not run in the batch-only execution
   environment.
@@ -248,7 +261,8 @@ temporary directory so generated files do not enter the profile.
 
 - Both reported text-size mismatches are removed by stable theme inheritance,
   not buffer-local compensation.
-- `*Completions*` uses a 14-line maximum and retains its current interaction.
+- `*Completions*` remains 14 lines high for short and long candidate lists and
+  retains its current interaction.
 - No keybinding, layout, workspace, terminal, Gptel, Magit, or line-number
   behavior changes.
 - Startup, ERT, byte compilation, `check-parens`, and `git diff --check` pass.

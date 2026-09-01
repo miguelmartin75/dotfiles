@@ -53,10 +53,28 @@
                                   default)))
         (should-not (assq inline-face face-remapping-alist))))))
 
-(ert-deftest my/appearance-native-completion-keeps-eager-one-column-settings ()
+(ert-deftest my/appearance-native-completion-keeps-fixed-height-settings ()
   (should (= completions-max-height 14))
   (should completion-eager-display)
   (should completion-eager-update)
-  (should (eq completions-format 'one-column)))
+  (should (eq completions-format 'one-column))
+  (save-window-excursion
+    (dolist (line-count '(2 30))
+      (with-current-buffer-window
+          "*Completions*"
+          '((display-buffer-at-bottom)
+            (window-height . completions--fit-window-to-buffer))
+          nil
+        (completion-list-mode)
+        (dotimes (_ line-count)
+          (insert "candidate\n")))
+      (let ((window (get-buffer-window "*Completions*")))
+        (should (window-live-p window))
+        (with-current-buffer (window-buffer window)
+          (should (local-variable-p 'window-min-height))
+          (should (= window-min-height completions-max-height)))
+        (should (= (window-total-height window) 14))
+        (delete-window window))
+      (kill-buffer "*Completions*"))))
 
 ;;; appearance-test.el ends here
