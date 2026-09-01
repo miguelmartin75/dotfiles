@@ -1212,6 +1212,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("?" . consult-isearch-history)
        ("m" . evil-show-marks)
        ("j" . evil-show-jumps)
+       ("l" . display-line-numbers-mode)
+       ("Z" . my/write-mode)
+       ("z" . my/write-mode-no-zoom)
+       ("v" . my/default-mode)
        ("f f" . my/find-file-project)
        ("f F" . my/find-file-recursive-root)
        ("f D" . my/find-file-recursive-current-directory)
@@ -1356,6 +1360,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "t R" "choose target for region/buffer"
     "t g" "create Ghostel split target"
     "t z" "open/create zmx split target"
+    "Z" "zen mode"
+    "z" "zen mode no zoom"
+    "v" "code mode"
     "w" "windows"
     "w t" "tabs"))
 
@@ -1415,14 +1422,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 ;; line numbers
 (column-number-mode)
 (global-display-line-numbers-mode 0)
-(setq display-line-numbers-type 'visual)
-
-;; disbaled in these modes
-(dolist (mode '(term-mode-hook
-		shell-mode-hook
-		eshell-mode-hook
-		ghostel-mode-hook))
-  (add-hook mode (lambda () (display-line-numbers-mode 0))))
+(setq display-line-numbers-type 'relative)
+(add-hook 'prog-mode-hook #'display-line-numbers-mode)
 
 (setq-default indent-tabs-mode nil)  ;; no tabs
 
