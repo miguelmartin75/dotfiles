@@ -47,6 +47,7 @@
 
  ;; Core and syntax.
  '(default ((t (:background "#fafafa" :foreground "#383a42"))))
+ '(fixed-pitch ((t (:inherit default))))
  '(bold ((t (:weight bold))))
  '(bold-italic ((t (:inherit (bold italic)))))
  '(italic ((t (:slant italic))))
@@ -56,6 +57,7 @@
  '(highlight ((t (:background "#4078f2" :foreground "#f0f0f0"))))
  '(secondary-selection ((t (:background "#9ca0a4" :extend t))))
  '(shadow ((t (:foreground "#9ca0a4"))))
+ '(eglot-inlay-hint-face ((t (:inherit shadow :height 1.0))))
  '(minibuffer-prompt ((t (:foreground "#4078f2" :weight bold))))
  '(tooltip ((t (:background "#e7e7e7" :foreground "#383a42"))))
  '(link ((t (:foreground "#4078f2" :underline t :weight bold))))
@@ -173,7 +175,8 @@
  '(markdown-pre-face ((t (:foreground "#50a14f"))))
  '(markdown-code-face ((t (:background "#e7e7e7" :extend t))))
  '(markdown-reference-face ((t (:foreground "#6f7377"))))
- '(markdown-inline-code-face ((t (:inherit (markdown-code-face markdown-pre-face) :extend nil))))
+ '(markdown-inline-code-face ((t (:inherit (markdown-code-face markdown-pre-face) :extend nil :height 1.0))))
+ '(markdown-ts-code-span ((t (:inherit (markdown-ts-code-block font-lock-constant-face) :height 1.0))))
 
  ;; Org uses direct heading colors in place of doom-themes-org-config.
  '(org-archived ((t (:foreground "#6f7377"))))
