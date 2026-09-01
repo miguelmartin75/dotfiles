@@ -910,10 +910,19 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 ;; completion
 (use-package consult
-  :commands consult-xref
+  :commands (consult-buffer
+             consult-imenu
+             consult-isearch-history
+             consult-line
+             consult-line-multi
+             consult-recent-file
+             consult-ripgrep
+             consult-xref
+             consult-yank-from-kill-ring)
   :init
   (setq xref-show-xrefs-function #'consult-xref
-        xref-show-definitions-function #'consult-xref))
+        xref-show-definitions-function #'consult-xref
+        consult-buffer-sources '(consult--source-buffer)))
 
 (use-package embark
   :commands embark-act
@@ -1138,13 +1147,22 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 )
 
 ;; keybindings
-(defun my/project-find-regexp-at-point ()
-  "Search the current project for the symbol at point."
+(defun my/consult-line-multi-all-buffers ()
+  "Search for a matching line across all open buffers."
   (interactive)
-  (let ((symbol (thing-at-point 'symbol t)))
-    (if symbol
-        (project-find-regexp (regexp-quote symbol))
-      (user-error "No symbol at point"))))
+  (consult-line-multi t))
+
+(defun my/consult-ripgrep-region-or-symbol ()
+  "Search the project for the active region or symbol at point."
+  (interactive)
+  (let ((text (if (use-region-p)
+                  (buffer-substring-no-properties
+                   (region-beginning) (region-end))
+                (thing-at-point 'symbol t))))
+    (unless text
+      (user-error "No region or symbol at point"))
+    (deactivate-mark)
+    (consult-ripgrep nil (regexp-quote text))))
 
 (defvar my/leader-map (make-sparse-keymap)
   "Leader map shared by Evil normal and visual states.")
@@ -1154,13 +1172,14 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 (dolist
     (binding
-     '(("," . switch-to-buffer)
-       ("/" . occur)
+     '(("," . consult-buffer)
+       ("/" . consult-line)
+       ("?" . consult-isearch-history)
        ("m" . evil-show-marks)
        ("j" . evil-show-jumps)
        ("f f" . project-find-file)
-       ("f o" . recentf-open-files)
-       ("b b" . switch-to-buffer)
+       ("f o" . consult-recent-file)
+       ("b b" . consult-buffer)
        ("w h" . evil-window-left)
        ("w j" . evil-window-down)
        ("w k" . evil-window-up)
@@ -1176,10 +1195,14 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("w t q" . tab-bar-close-tab)
        ("w t [" . tab-bar-switch-to-prev-tab)
        ("w t ]" . tab-bar-switch-to-next-tab)
-       ("s l" . occur)
-       ("s g" . project-find-regexp)
-       ("s w" . my/project-find-regexp-at-point)
-       ("s s" . imenu)
+       ("s l" . consult-line)
+       ("s b" . my/consult-line-multi-all-buffers)
+       ("s g" . consult-ripgrep)
+       ("s w" . my/consult-ripgrep-region-or-symbol)
+       ("s h" . consult-isearch-history)
+       ("s c" . execute-extended-command)
+       ("s k" . consult-yank-from-kill-ring)
+       ("s s" . consult-imenu)
        ("s S" . xref-find-apropos)
        ("s d" . xref-find-definitions)
        ("s D" . eglot-find-declaration)
@@ -1187,7 +1210,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("s i" . eglot-find-implementation)
        ("s t" . eglot-find-typeDefinition)
        ("s I" . eglot-show-call-hierarchy)
-       ("s b" . multi-occur)
        ("s H" . describe-face)
        ("s m" . evil-show-marks)
        ("s j" . evil-show-jumps)

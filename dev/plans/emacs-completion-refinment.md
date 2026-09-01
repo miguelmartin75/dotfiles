@@ -573,10 +573,10 @@ state, not configuration that belongs inline in the main init file.
 
 - Plan ID: `emacs-completion-refinement`
 - Status: in progress
-- Next milestone: Phase 3
+- Next milestone: Phase 4
 - Phase 1: complete
 - Phase 2: complete
-- Phase 3: pending
+- Phase 3: complete
 - Phase 4: pending
 - Phase 5: pending
 - Phase 6: pending
@@ -699,6 +699,16 @@ state, not configuration that belongs inline in the main init file.
 - Emacs 31 `occur-edit-mode` and `grep-edit-mode` work without Wgrep.
 - Visual `SPC s w` seeds from the selection; normal-state use seeds from the
   symbol at point.
+
+### Execution notes
+
+- Consult now owns the leader-facing live search, buffer, recent-file, command,
+  kill-ring, and Imenu entry points. The native `occur`, `multi-occur`, and
+  `project-find-regexp` commands remain unchanged as direct fallbacks.
+- Offline configuration loading and focused wrapper tests cover the keymap,
+  all-buffer scope, region and symbol seeding, regexp quoting, and mark
+  deactivation. Live preview restoration, asynchronous process cancellation,
+  and specialized Embark export remain in the interactive validation matrix.
 
 ## Phase 4: Add explicit recursive file modes and SSH entry
 
