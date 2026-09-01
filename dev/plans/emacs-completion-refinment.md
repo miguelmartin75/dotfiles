@@ -573,13 +573,13 @@ state, not configuration that belongs inline in the main init file.
 
 - Plan ID: `emacs-completion-refinement`
 - Status: in progress
-- Next milestone: Phase 6
+- Next milestone: Phase 7
 - Phase 1: complete
 - Phase 2: complete
 - Phase 3: complete
 - Phase 4: complete
 - Phase 5: complete
-- Phase 6: pending
+- Phase 6: complete
 - Phase 7: pending
 - Phase 8: pending
 - Phase 9: pending
@@ -814,6 +814,15 @@ state, not configuration that belongs inline in the main init file.
 
 - Definitions, references, and workspace symbols can export to Xref.
 - Incoming and outgoing call hierarchy commands show the requested direction.
+
+### Execution notes
+
+- Document and workspace symbols retain the public Consult Imenu and Xref
+  routes. The two call-hierarchy bindings now pass Emacs 31.1 Eglot's explicit
+  `incoming` and `base` direction values directly, with no one-use helper.
+- Offline keymap assertions and a stubbed public Eglot call verify both
+  directions while the existing definition, declaration, implementation, type,
+  reference, action, rename, ElDoc, and Flymake bindings remain unchanged.
 
 ## Phase 7: Complete word, spelling, and Embark multi-target workflows
 
