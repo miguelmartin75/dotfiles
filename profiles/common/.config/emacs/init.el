@@ -923,14 +923,44 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
   :after (consult embark))
 
 (setq completion-styles '(basic partial-completion flex)
-      completion-category-overrides '((eglot-capf (styles flex)))
+      completion-category-overrides '((eglot-capf (styles flex))
+                                      (project-file (styles flex))
+                                      (buffer (styles flex))
+                                      (command (styles flex))
+                                      (file (styles basic partial-completion)))
       completion-eager-display t
       completion-eager-update t
       completion-show-help nil
       completions-format 'one-column
       completions-detailed t
       completions-max-height 10
-      minibuffer-visible-completions 'up-down)
+      minibuffer-visible-completions nil
+      minibuffer-completion-auto-choose nil)
+
+(keymap-set completion-in-region-mode-map "TAB"
+            #'minibuffer-next-completion)
+(keymap-set completion-in-region-mode-map "S-TAB"
+            #'minibuffer-previous-completion)
+(keymap-set completion-in-region-mode-map "<backtab>"
+            #'minibuffer-previous-completion)
+(keymap-set completion-in-region-mode-map "C-n"
+            #'minibuffer-next-completion)
+(keymap-set completion-in-region-mode-map "C-p"
+            #'minibuffer-previous-completion)
+(keymap-set completion-in-region-mode-map "M-g M-c"
+            #'switch-to-completions)
+
+(keymap-set completion-list-mode-map "C-n" #'next-completion)
+(keymap-set completion-list-mode-map "C-p" #'previous-completion)
+
+(keymap-set minibuffer-local-completion-map "C-n"
+            #'minibuffer-next-completion)
+(keymap-set minibuffer-local-completion-map "C-p"
+            #'minibuffer-previous-completion)
+(keymap-set minibuffer-local-filename-completion-map "C-n"
+            #'minibuffer-next-completion)
+(keymap-set minibuffer-local-filename-completion-map "C-p"
+            #'minibuffer-previous-completion)
 
 (defun my/file-completion-at-point ()
   "Return file completion data for a path-like name at point."
@@ -954,7 +984,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 (global-completion-preview-mode -1)
 (define-key evil-insert-state-map (kbd "C-SPC") #'completion-help-at-point)
-(define-key evil-insert-state-map (kbd "C-M-i") #'completion-help-at-point)
 (define-key evil-insert-state-map (kbd "M-/") #'dabbrev-expand)
 (evil-define-key '(normal visual insert) 'global
   (kbd "C-s") #'isearch-forward)

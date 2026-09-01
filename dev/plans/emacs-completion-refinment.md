@@ -573,9 +573,9 @@ state, not configuration that belongs inline in the main init file.
 
 - Plan ID: `emacs-completion-refinement`
 - Status: in progress
-- Next milestone: Phase 2
+- Next milestone: Phase 3
 - Phase 1: complete
-- Phase 2: pending
+- Phase 2: complete
 - Phase 3: pending
 - Phase 4: pending
 - Phase 5: pending
@@ -659,6 +659,18 @@ state, not configuration that belongs inline in the main init file.
 - Buffer, command, project-file, and Eglot candidates exhibit the intended
   fuzzy ranking without changing hierarchical file discovery.
 - No private-function advice, polling hook, or Consult CAPF adapter is added.
+
+### Execution notes
+
+- Emacs 31.1 already enables `completion-in-region-mode` and its public eager
+  update path after source edits. Eglot reuses only complete candidate sets and
+  requests incomplete sets again, so no refresh hook, advice, polling, or
+  Consult CAPF adapter was added.
+- Batch validation confirmed initial synthetic CAPF activation, category
+  configuration, and source, list, require-match, and filename keymaps. The
+  post-edit idle-timer behavior and server-specific LSP edit forms remain in
+  the interactive validation matrix because batch mode does not drive those
+  timers representatively.
 
 ## Phase 3: Add live line search, grep, buffers, and persistent exports
 
