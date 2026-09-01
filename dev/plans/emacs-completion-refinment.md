@@ -573,14 +573,14 @@ state, not configuration that belongs inline in the main init file.
 
 - Plan ID: `emacs-completion-refinement`
 - Status: in progress
-- Next milestone: Phase 7
+- Next milestone: Phase 8
 - Phase 1: complete
 - Phase 2: complete
 - Phase 3: complete
 - Phase 4: complete
 - Phase 5: complete
 - Phase 6: complete
-- Phase 7: pending
+- Phase 7: complete
 - Phase 8: pending
 - Phase 9: pending
 - Overall success criteria: pending
@@ -846,6 +846,17 @@ state, not configuration that belongs inline in the main init file.
 - Stable multi-selection occurs in Embark Collect rather than relying on marks
   surviving live `*Completions*` regeneration.
 - Generic Embark insertion never replaces Eglot's completion acceptance path.
+
+### Execution notes
+
+- `C-M-/` now exposes Dabbrev candidates through built-in completion while
+  `M-/` retains direct cycling. Emacs 31.1 already installs
+  `ispell-completion-at-point` in Text mode at hook depth 10 and keeps `M-$` on
+  `ispell-word`; no programming-comment spelling source was required.
+- Installed Embark defaults already provide `SPC`, `A`, `S`, and `E` for
+  selection, act-all, Collect, and export, including specialized file, buffer,
+  Consult location, grep, and Xref exporters. Offline assertions confirm that
+  completion acceptance remains owned by the built-in completion function.
 
 ## Phase 8: Add optional one-line gptel ghost text
 

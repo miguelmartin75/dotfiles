@@ -998,6 +998,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (global-completion-preview-mode -1)
 (define-key evil-insert-state-map (kbd "C-SPC") #'completion-help-at-point)
 (define-key evil-insert-state-map (kbd "M-/") #'dabbrev-expand)
+(define-key evil-insert-state-map (kbd "C-M-/") #'dabbrev-completion)
 (evil-define-key '(normal visual insert) 'global
   (kbd "C-s") #'isearch-forward)
 
