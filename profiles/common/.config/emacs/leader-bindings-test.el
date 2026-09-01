@@ -1,0 +1,96 @@
+;;; leader-bindings-test.el --- Leader binding behavior tests -*- lexical-binding: t; -*-
+
+(require 'ert)
+
+(load (expand-file-name "init.el" (file-name-directory (or load-file-name buffer-file-name)))
+      nil nil nil t)
+
+(require 'magit)
+(require 'olivetti)
+(require 'which-key)
+
+(ert-deftest my/leader-bindings-programming-line-numbers-and-toggles ()
+  (should (eq display-line-numbers-type 'relative))
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (should display-line-numbers-mode)
+    (dolist (state '(evil-normal-state evil-visual-state))
+      (funcall state)
+      (let ((direct (key-binding (kbd "SPC l")))
+            (nested (key-binding (kbd "SPC h l"))))
+        (should (eq direct 'display-line-numbers-mode))
+        (should (eq direct nested))
+        (call-interactively direct)
+        (should-not display-line-numbers-mode)
+        (call-interactively nested)
+        (should display-line-numbers-mode))))
+  (dolist (mode '(text-mode org-mode shell-mode special-mode))
+    (with-temp-buffer
+      (funcall mode)
+      (should-not display-line-numbers-mode))))
+
+(ert-deftest my/leader-bindings-writing-commands-and-labels ()
+  (with-temp-buffer
+    (dolist (state '(evil-normal-state evil-visual-state))
+      (funcall state)
+      (should (eq (key-binding (kbd "SPC Z")) 'my/write-mode))
+      (should (eq (key-binding (kbd "SPC z")) 'my/write-mode-no-zoom))
+      (should (eq (key-binding (kbd "SPC v")) 'my/default-mode)))
+    (evil-normal-state)
+    (let ((bindings (which-key--get-keymap-bindings
+                     (key-binding (kbd "SPC")))))
+      (should (equal (assoc "Z" bindings) '("Z" . "zen mode")))
+      (should (equal (assoc "z" bindings) '("z" . "zen mode no zoom")))
+      (should (equal (assoc "v" bindings) '("v" . "code mode"))))
+    (display-line-numbers-mode 1)
+    (call-interactively (key-binding (kbd "SPC Z")))
+    (should (= olivetti-body-width 60))
+    (should (= text-scale-mode-amount 3))
+    (should-not display-line-numbers-mode)
+    (call-interactively (key-binding (kbd "SPC z")))
+    (should (= olivetti-body-width 120))
+    (should (= text-scale-mode-amount 0))
+    (should-not display-line-numbers-mode)
+    (call-interactively (key-binding (kbd "SPC v")))
+    (should-not olivetti-mode)
+    (should (= text-scale-mode-amount 0))
+    (should display-line-numbers-mode)
+    (dolist (state '(evil-insert-state evil-emacs-state))
+      (funcall state)
+      (should (eq (key-binding (kbd "SPC")) 'self-insert-command))
+      (should-not (key-binding (kbd "SPC Z")))
+      (should-not (key-binding (kbd "SPC z")))
+      (should-not (key-binding (kbd "SPC v"))))))
+
+(ert-deftest my/leader-bindings-magit-state-precedence ()
+  (dolist (mode-and-native-space
+           '((magit-status-mode . magit-diff-show-or-scroll-up)
+             (magit-diff-mode . scroll-up)
+             (magit-log-mode . magit-diff-show-or-scroll-up)
+             (magit-process-mode . magit-diff-show-or-scroll-up)))
+    (with-temp-buffer
+      (funcall (car mode-and-native-space))
+      (dolist (state-and-leader
+               `((evil-normal-state . ,my/normal-leader-map)
+                 (evil-visual-state . ,my/visual-leader-map)))
+        (funcall (car state-and-leader))
+        (should (eq (key-binding (kbd "SPC")) (cdr state-and-leader)))
+        (should (eq (key-binding (kbd "SPC l")) 'display-line-numbers-mode))
+        (should (eq (key-binding (kbd "SPC g g")) 'magit-status))
+        (should (eq (key-binding (kbd "S-SPC"))
+                    'magit-diff-show-or-scroll-up)))
+      (dolist (state '(evil-insert-state evil-emacs-state))
+        (funcall state)
+        (should (eq (key-binding (kbd "SPC"))
+                    (cdr mode-and-native-space)))))
+  (with-temp-buffer
+    (magit-status-mode)
+    (evil-normal-state)
+    (unwind-protect
+        (progn
+          (call-interactively #'magit-dispatch)
+          (should (eq (key-binding (kbd "s")) 'magit-stage)))
+      (when (bound-and-true-p transient--prefix)
+        (transient-quit-one))))))
+
+;;; leader-bindings-test.el ends here

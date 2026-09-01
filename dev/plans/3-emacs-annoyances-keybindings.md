@@ -37,7 +37,7 @@ terminal, Gptel, Magit layout, font, theme, or completion behavior.
 ## Status
 
 - Plan: complete
-- Implementation: in progress
+- Implementation: complete
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Planned tests: `profiles/common/.config/emacs/leader-bindings-test.el`
@@ -87,9 +87,10 @@ terminal, Gptel, Magit layout, font, theme, or completion behavior.
 ### Magit leader precedence
 
 - The normal and visual leaders exist only in global Evil state maps.
-- Magit's shared `magit-mode-map`, inherited by status, diff, log, process,
-  and other Magit modes, binds plain `SPC` to
-  `magit-diff-show-or-scroll-up`.
+- Magit's shared `magit-mode-map`, inherited by status, log, process, and
+  other Magit modes, binds plain `SPC` to
+  `magit-diff-show-or-scroll-up`; `magit-diff-mode` overrides it with the
+  native `scroll-up` command.
 - Evil Collection makes Magit's maps overriding maps, so the ordinary global
   state binding loses. A mode-and-state binding on `magit-mode-map` has the
   required precedence.
@@ -147,7 +148,7 @@ state, Ghostel character input, or a Transient keymap.
 | `SPC v` | Restored | `my/default-mode` | Disables Olivetti, restores text scale 0, and enables line numbers. Which Key label: `code mode`. |
 | `SPC g g` | Intentionally retained | `magit-status` | Representative grouped Git command. It must resolve normally inside Magit after the state-local leader fix. |
 | `S-SPC` in Magit | Intentionally retained | `magit-diff-show-or-scroll-up` | Preserves Magit scrolling in normal and visual states after plain `SPC` becomes the leader. |
-| Plain `SPC` in Magit Insert or Emacs state | Intentionally retained | `magit-diff-show-or-scroll-up` from the ordinary Magit map | This plan must not replace or unset the ordinary binding in these states. |
+| Plain `SPC` in Magit Insert or Emacs state | Intentionally retained | Mode-native ordinary binding | Status, log, and process retain `magit-diff-show-or-scroll-up`; diff retains `scroll-up`. This plan must not replace or unset either ordinary binding. |
 
 All other current leader groups and leaves remain unchanged.
 
@@ -246,7 +247,7 @@ Status: complete
 
 ## Phase 3: Verify the independent keybinding change
 
-Status: pending
+Status: complete
 
 ### Automated verification
 
@@ -290,6 +291,22 @@ generated files enter the profile.
 3. Open Magit status, diff, and log buffers. Confirm leader access in normal
    and visual states, native `S-SPC`, native Insert and Emacs plain space, and
    unchanged Transient input.
+
+### Implementation results
+
+- Added three behavior-focused ERT tests covering line-number defaults and
+  toggles, writing bindings and labels, and active Magit state precedence in
+  status, diff, log, and process modes.
+- Recorded the measured Magit nuance that diff mode's native Insert and Emacs
+  `SPC` is `scroll-up`; the other tested Magit modes use
+  `magit-diff-show-or-scroll-up`. Both native behaviors remain unchanged.
+- Batch startup printed `CONFIG_LOADED`, and ERT passed 3 of 3 tests.
+- Temporary byte compilation produced both requested `.elc` files and removed
+  them afterward. Compilation reported only existing optional-package,
+  load-order, free-variable, and deprecated-API warnings.
+- `init.el` `check-parens` and `git diff --check` passed.
+- Interactive manual checks were not run in the batch-only execution
+  environment.
 
 ### Final success criteria
 
