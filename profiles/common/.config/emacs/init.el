@@ -904,6 +904,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
       icomplete-show-matches-on-no-input t
       icomplete-vertical-in-buffer-adjust-list t)
 (icomplete-vertical-mode 1)
+(keymap-set icomplete-minibuffer-map
+            "<remap> <minibuffer-complete-and-exit>"
+            #'icomplete-ret)
 
 (keymap-set completion-in-region-mode-map
             "TAB" #'icomplete-forward-completions)
