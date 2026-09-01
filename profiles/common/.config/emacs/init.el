@@ -1329,6 +1329,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (evil-define-key 'normal 'global (kbd "SPC") my/normal-leader-map)
 (evil-define-key 'visual 'global (kbd "SPC") my/visual-leader-map)
 
+(defvar magit-mode-map)
+(evil-define-key 'normal magit-mode-map (kbd "SPC") my/normal-leader-map)
+(evil-define-key 'visual magit-mode-map (kbd "SPC") my/visual-leader-map)
+
 (evil-define-key '(normal visual) 'global
   (kbd "C-p") #'my/find-file-recursive-root)
 (evil-define-key 'visual 'global
