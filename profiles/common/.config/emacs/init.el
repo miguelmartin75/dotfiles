@@ -14,6 +14,10 @@
 ;; Then install Ghostel's native module with `M-x ghostel-download-module' or,
 ;; with Zig available, `M-x ghostel-module-compile'.  Normal startup and the
 ;; first terminal use remain offline and never install software implicitly.
+(let ((init-file (or load-file-name user-init-file)))
+  (when init-file
+    (add-to-list 'load-path (file-name-directory init-file))))
+
 (require 'package)
 
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
@@ -861,7 +865,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
   (add-to-list 'eglot-server-programs '(nim-mode . ("nimlangserver")))
 
   ;; These aliases exist only in an active Eglot buffer.  The owned leader
-  ;; hierarchy is rebuilt separately in Phase 5.
+  ;; hierarchy is rebuilt separately in Phase 6.
   (keymap-set eglot-mode-map "C-c e f" #'eglot-format)
   (keymap-set eglot-mode-map "C-c e a" #'eglot-code-actions)
   (keymap-set eglot-mode-map "C-c e r" #'eglot-rename)
@@ -909,6 +913,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 
 ;; completion
+(defvar consult-async-split-style)
+
 (use-package consult
   :commands (consult-buffer
              consult-fd
@@ -1163,11 +1169,13 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
   (let ((text (if (use-region-p)
                   (buffer-substring-no-properties
                    (region-beginning) (region-end))
-                (thing-at-point 'symbol t))))
+                (thing-at-point 'symbol t)))
+        (consult-async-split-style nil))
     (unless text
       (user-error "No region or symbol at point"))
     (deactivate-mark)
-    (consult-ripgrep nil (regexp-quote text))))
+    (consult-ripgrep
+     nil (string-replace " " "\\ " (regexp-quote text)))))
 
 (defun my/set-default-directory-to-project-root ()
   "Set the current buffer's default directory to its project root."

@@ -12,17 +12,24 @@
 (ert-deftest my/file-picker-toggle-successfully-selects-once ()
   (let ((root (file-name-as-directory (make-temp-file "picker root " t))))
     (unwind-protect
-        (dolist (case '((hierarchical "nested/file name.txt" "file name\\.txt")
+        (dolist (case '((hierarchical "nested/file name.txt"
+                                     "file name\\.txt")
+                        (hierarchical ".hidden" "\\.hidden")
+                        (hierarchical "+notes" "\\+notes")
                         (recursive "file name\\.txt" "file name.txt")))
           (let ((opened (list nil))
                 captured-root
                 captured-initial
+                captured-split-style
                 (aborts 0)
+                (consult-async-split-style 'perl)
                 (my/file-picker-transaction (list nil)))
             (cl-letf (((symbol-function 'my/file-picker-recursive-session)
                        (lambda (dir initial)
                          (setq captured-root dir
-                               captured-initial initial)
+                               captured-initial initial
+                               captured-split-style
+                               consult-async-split-style)
                          (let ((file (expand-file-name "file name.txt" dir))
                                (buffer (generate-new-buffer
                                         " *my-file-picker-test*")))
@@ -63,8 +70,12 @@
               (if (eq (car case) 'hierarchical)
                   (progn
                     (should (string-equal captured-root
-                                          (expand-file-name "nested/" root)))
-                    (should (string-equal captured-initial (caddr case))))
+                                          (if (string-prefix-p "nested/"
+                                                               (cadr case))
+                                              (expand-file-name "nested/" root)
+                                            root)))
+                    (should (string-equal captured-initial (caddr case)))
+                    (should-not captured-split-style))
                 (should (string-suffix-p (caddr case)
                                          (car (car opened))))))))
       (delete-directory root t))))
@@ -124,22 +135,36 @@
       (delete-directory root t))))
 
 (ert-deftest my/file-picker-query-and-path-transfer ()
-  (let ((old-style (and (boundp 'consult-async-split-style)
-                        consult-async-split-style))
-        (old-styles (and (boundp 'consult-async-split-styles-alist)
-                         consult-async-split-styles-alist)))
-    (setq consult-async-split-style 'perl
-          consult-async-split-styles-alist '((perl :initial 35)))
-    (dolist (case '(("plain name.txt" . "plain name.txt")
-                    ("name\\.txt" . "name.txt")
-                    ("dir/name.txt" . "dir/name.txt")
-                    ("file.*" . nil)
-                    ("#literal" . nil)
-                    ("plain -- --extension el" . nil)
-                    ("--hidden" . nil)))
-      (should (equal (my/file-picker-literal-query (car case)) (cdr case))))
-    (setq consult-async-split-style old-style
-          consult-async-split-styles-alist old-styles))
+  (let ((consult-async-split-styles-alist
+         '((none)
+           (comma :separator 44)
+           (semicolon :separator 59)
+           (perl :initial 35))))
+    (dolist (case '((perl "plain name.txt" "plain name.txt")
+                    (perl "name\\.txt" "name.txt")
+                    (perl "dir/name.txt" "dir/name.txt")
+                    (perl "file.*" nil)
+                    (perl "#literal" nil)
+                    (perl "/async/filter" nil)
+                    (perl "foo#bar" "foo#bar")
+                    (perl "query --" nil)
+                    (perl "query -- --extension el" nil)
+                    (perl "--hidden" nil)
+                    (comma "async,filter" nil)
+                    (comma ",leading" ",leading")
+                    (comma "foo#bar" "foo#bar")
+                    (semicolon "async;filter" nil)
+                    (semicolon ";leading" ";leading")
+                    (nil "/async/filter" "/async/filter")
+                    (nil "query --" nil)
+                    (nil "query -- -g *.el" nil)
+                    (nil "query --hidden" "query --hidden")
+                    (nil "--hidden" "--hidden")
+                    (nil "\\.hidden" ".hidden")
+                    (nil "\\+notes" "+notes")))
+      (let ((consult-async-split-style (car case)))
+        (should (equal (my/file-picker-literal-query (cadr case))
+                       (caddr case))))))
   (dolist (case '(("/sshx:user@host:/repo/src/file.el"
                    "/sshx:user@host:/repo/src/" "file.el")
                   ("/absolute/root/file.el" "/absolute/root/" "file.el")

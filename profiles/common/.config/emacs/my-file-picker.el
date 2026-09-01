@@ -46,24 +46,27 @@
   (use-local-map
    (make-composed-keymap my/file-picker-minibuffer-map (current-local-map))))
 
-(defun my/file-picker-consult-separator ()
-  "Return the active Consult async separator character, if any."
-  (when (boundp 'consult-async-split-styles-alist)
-    (let ((style (alist-get consult-async-split-style
-                            consult-async-split-styles-alist)))
-      (or (plist-get style :separator) (plist-get style :initial)))))
-
 (defun my/file-picker-literal-query (query)
   "Return QUERY as literal filename text, or nil when it has Consult syntax."
-  (let ((separator (my/file-picker-consult-separator))
-        (index 0)
+  (let ((index 0)
         (literal "")
         invalid)
-    (when (or (string-prefix-p "--" query)
-              (string-match-p "[[:space:]]--[[:space:]]" query)
-              (and separator
-                   (string-match-p (regexp-quote (char-to-string separator))
-                                   query)))
+    (when (or (string-match-p " +--\\( +\\|\\'\\)" query)
+              (and (eq consult-async-split-style 'perl)
+                   (string-match-p "^[[:punct:]]" query))
+              (and (memq consult-async-split-style '(comma semicolon))
+                   (let* ((style
+                           (alist-get consult-async-split-style
+                                      consult-async-split-styles-alist))
+                          (separator (plist-get style :separator)))
+                     (and separator
+                          (string-match-p
+                           (format "^[^%s]+%s"
+                                   (regexp-quote
+                                    (char-to-string separator))
+                                   (regexp-quote
+                                    (char-to-string separator)))
+                           query)))))
       (setq invalid t))
     (while (and (not invalid) (< index (length query)))
       (let ((character (aref query index)))
@@ -130,6 +133,7 @@
                                     (expand-file-name directory root)
                                   root))
                    (leaf (file-name-nondirectory outer-input))
+                   (consult-async-split-style nil)
                    (buffer (my/file-picker-recursive-session
                             nested-root (regexp-quote leaf)))
                    (selected (buffer-file-name buffer)))
