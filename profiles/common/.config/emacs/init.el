@@ -424,7 +424,7 @@
   :defer t
   :init (setq term-sessions-preferred-frontend 'ghostel))
 (use-package term-sessions-frontends
-  :commands (term-sessions-open term-sessions-read-existing-session-entry))
+  :commands term-sessions-open)
 (use-package term-sessions-list
   :commands term-sessions-list)
 (use-package term-sessions-zmx
@@ -433,6 +433,12 @@
   :commands term-sessions-store-org-link)
 
 (require 'tab-bar)
+
+(defconst my/send-text-right-split-action
+  '((display-buffer-in-direction)
+    (direction . right)
+    (window-width . 0.5))
+  "Display action for equal-width terminal splits on the right.")
 
 (defun my/send-text-save-last-target (target)
   "Save TARGET as the current tab's last successful text target."
@@ -446,8 +452,17 @@
                  (tab-bar-tabs))))
     (tab-bar-tabs-set tabs)))
 
+(defun my/ghostel-target-live-p (target)
+  "Return non-nil when TARGET retains its live Ghostel buffer and process pair."
+  (let ((buffer (plist-get target :buffer))
+        (process (plist-get target :process)))
+    (and (buffer-live-p buffer)
+         (memq buffer (ghostel-buffer-list))
+         (eq process (get-buffer-process buffer))
+         (process-live-p process))))
+
 (defun my/send-text-deliver (target text replay)
-  "Deliver TEXT to TARGET, clearing stale REPLAY object targets."
+  "Deliver TEXT to TARGET, clearing stale object targets during REPLAY."
   (pcase (plist-get target :type)
     ('zmx
      (let ((default-directory (plist-get target :directory)))
@@ -455,15 +470,34 @@
     ('ghostel
      (require 'ghostel)
      (let ((buffer (plist-get target :buffer)))
-       (unless (and (buffer-live-p buffer)
-                    (memq buffer (ghostel-buffer-list))
-                    (ghostel-buffer-live-p buffer))
+       (unless (my/ghostel-target-live-p target)
          (when replay
            (my/send-text-save-last-target nil))
          (user-error "Ghostel target is no longer available"))
-       (with-current-buffer buffer
-         (ghostel-paste-string text)
-         (ghostel-send-key "return"))))
+       (condition-case error-data
+           (with-current-buffer buffer
+             (ghostel-paste-string text))
+         (error
+          (unless (my/ghostel-target-live-p target)
+            (when replay
+              (my/send-text-save-last-target nil)))
+          (signal (car error-data) (cdr error-data))))
+       (unless (my/ghostel-target-live-p target)
+         (when replay
+           (my/send-text-save-last-target nil))
+         (user-error "Ghostel target is no longer available"))
+       (condition-case error-data
+           (with-current-buffer buffer
+             (ghostel-send-key "return"))
+         (error
+          (unless (my/ghostel-target-live-p target)
+            (when replay
+              (my/send-text-save-last-target nil)))
+          (signal (car error-data) (cdr error-data))))
+       (unless (my/ghostel-target-live-p target)
+         (when replay
+           (my/send-text-save-last-target nil))
+         (user-error "Ghostel target is no longer available"))))
     ('process
      (let ((buffer (plist-get target :buffer))
            (process (plist-get target :process)))
@@ -485,80 +519,130 @@
            (user-error "Writable buffer target is now read-only"))
          (insert text))))
     (_
-     (user-error "Unknown text target"))))
+     (user-error "Unknown text target descriptor"))))
 
 (defun my/send-text-to-target (text)
-  "Prompt for a concrete target and deliver TEXT to it."
-  (let ((target-class
+  "Prompt for a target, then deliver TEXT."
+  (let ((source-directory default-directory)
+        (target-class
          (completing-read
-          "Target class: "
-          '("Durable zmx session"
-            "Ghostel buffer"
-            "Emacs process buffer (raw text)"
-            "Writable Emacs buffer (insert at point)")
+          "Target: "
+          '("zmx" "buffer" "ghostty")
           nil t))
         target)
     (pcase target-class
-      ("Durable zmx session"
-       (let ((entry (term-sessions-read-existing-session-entry "zmx session: ")))
-         (setq target (list :type 'zmx
-                            :name (plist-get entry :name)
-                            :directory (plist-get entry :directory)))))
-      ("Ghostel buffer"
+      ("zmx"
+       (pcase (completing-read
+               "zmx target: "
+               '("existing" "create new")
+               nil t)
+         ("existing"
+          (require 'term-sessions-list)
+          (let ((entry (term-sessions--read-existing-session-entry "zmx session: ")))
+            (setq target (list :type 'zmx
+                               :name (plist-get entry :name)
+                               :directory (plist-get entry :directory)))))
+         ("create new"
+          (let ((name (read-string "zmx session name: ")))
+            (let ((default-directory source-directory)
+                  (display-buffer-overriding-action my/send-text-right-split-action))
+              (term-sessions-open
+               (list :name name :directory source-directory)
+               nil))
+            (setq target (list :type 'zmx
+                               :name name
+                               :directory source-directory))))
+         (_
+          (user-error "Unknown zmx target selection"))))
+      ("buffer"
+       (require 'ghostel)
+       (let ((ghostel-buffers (ghostel-buffer-list))
+             candidates
+             ambiguous-buffers)
+         (dolist (buffer (buffer-list))
+           (let ((process (get-buffer-process buffer)))
+             (cond
+              ((memq buffer ghostel-buffers)
+               (when (process-live-p process)
+                 (push (cons (buffer-name buffer)
+                             (list :type 'ghostel
+                                   :buffer buffer
+                                   :process process))
+                       candidates)))
+              ((process-live-p process)
+               (with-current-buffer buffer
+                 (push (cons (buffer-name buffer)
+                             (list :type 'process
+                                   :buffer buffer
+                                   :process process))
+                       candidates)
+                 (unless buffer-read-only
+                   (push buffer ambiguous-buffers))))
+              (t
+               (with-current-buffer buffer
+                 (unless buffer-read-only
+                   (push (cons (buffer-name buffer)
+                               (list :type 'buffer :buffer buffer))
+                         candidates)))))))
+         (setq candidates (nreverse candidates))
+         (unless candidates
+           (user-error "No buffers can accept input"))
+         (let ((name (completing-read "Buffer: " candidates nil t)))
+           (setq target (alist-get name candidates nil nil #'string=))
+           (when (memq (plist-get target :buffer) ambiguous-buffers)
+             (pcase (completing-read
+                     "Buffer operation: "
+                     '("send raw text" "insert at point")
+                     nil t)
+               ("send raw text")
+               ("insert at point"
+                (setq target (list :type 'buffer
+                                   :buffer (plist-get target :buffer))))
+               (_
+                (user-error "Unknown buffer operation")))))))
+      ("ghostty"
        (require 'ghostel)
        (let (candidates)
          (dolist (buffer (ghostel-buffer-list))
-           (when (ghostel-buffer-live-p buffer)
-             (push (cons (buffer-name buffer) buffer) candidates)))
-         (setq candidates (nreverse candidates))
-         (unless candidates
-           (user-error "No Ghostel buffers can accept input"))
-         (let ((name (completing-read "Ghostel buffer: " candidates nil t)))
-           (setq target (list :type 'ghostel
-                              :buffer (alist-get name candidates nil nil #'string=))))))
-      ("Emacs process buffer (raw text)"
-       (let (candidates)
-         (dolist (buffer (buffer-list))
-           (let ((process (get-buffer-process buffer)))
-             (when (process-live-p process)
-               (push (cons (buffer-name buffer) (cons buffer process)) candidates))))
-         (setq candidates (nreverse candidates))
-         (unless candidates
-           (user-error "No Emacs process buffers are available"))
-         (let* ((name (completing-read "Emacs process buffer: " candidates nil t))
-                (entry (alist-get name candidates nil nil #'string=)))
-           (setq target (list :type 'process
-                              :buffer (car entry)
-                              :process (cdr entry))))))
-      ("Writable Emacs buffer (insert at point)"
-       (let (candidates)
-         (dolist (buffer (buffer-list))
-           (with-current-buffer buffer
-             (unless buffer-read-only
-               (push (cons (buffer-name buffer) buffer) candidates))))
-         (setq candidates (nreverse candidates))
-         (unless candidates
-           (user-error "No writable Emacs buffers are available"))
-         (let ((name (completing-read "Writable Emacs buffer: " candidates nil t)))
-           (setq target (list :type 'buffer
-                              :buffer (alist-get name candidates nil nil #'string=))))))
+           (let ((target (list :type 'ghostel
+                               :buffer buffer
+                               :process (get-buffer-process buffer))))
+             (when (my/ghostel-target-live-p target)
+               (push (cons (format "buffer: %s" (buffer-name buffer)) target)
+                     candidates))))
+         (setq candidates
+               (append (nreverse candidates)
+                       (list (cons "create new" 'create-new))))
+         (let ((selection (completing-read "Ghostty: " candidates nil t)))
+           (if (string= selection "create new")
+               (let ((name (read-string "Ghostty buffer name (optional): "))
+                     buffer)
+                 (let ((default-directory source-directory))
+                   (setq buffer
+                         (ghostel-create name my/send-text-right-split-action)))
+                 (setq target (list :type 'ghostel
+                                    :buffer buffer
+                                    :process (get-buffer-process buffer)))
+                 (unless (my/ghostel-target-live-p target)
+                   (user-error "Created Ghostty buffer cannot accept input")))
+             (setq target (alist-get selection candidates nil nil #'string=))))))
       (_
-       (user-error "Unknown text target class")))
+       (user-error "Unknown text target selection")))
     (my/send-text-deliver target text nil)
     (my/send-text-save-last-target target)))
 
 (defun my/send-text-send-to-last-target (text)
-  "Replay the current tab's last successful target with TEXT."
+  "Replay the current tab's last successful target with TEXT, or choose one."
   (let (target)
     (dolist (tab (tab-bar-tabs))
       (when (eq (car tab) 'current-tab)
         (setq target (alist-get 'my/send-text-last-target (cdr tab)))))
-    (unless target
-      (user-error "No saved text target in this tab; use the target chooser"))
-    (my/send-text-deliver target text t)))
+    (if target
+        (my/send-text-deliver target text t)
+      (my/send-text-to-target text))))
 
 (defun my/send-region-or-buffer ()
-  "Select a target for the active region or accessible buffer contents."
+  "Choose a target for the active region or accessible buffer contents."
   (interactive)
   (my/send-text-to-target
    (if (use-region-p)
@@ -566,7 +650,7 @@
      (buffer-substring-no-properties (point-min) (point-max)))))
 
 (defun my/send-region-or-buffer-to-last-target ()
-  "Replay the current target with the active region or accessible contents."
+  "Replay active text to this tab's last target, or choose one when absent."
   (interactive)
   (my/send-text-send-to-last-target
    (if (use-region-p)
@@ -574,7 +658,7 @@
      (buffer-substring-no-properties (point-min) (point-max)))))
 
 (defun my/create-ghostel-terminal-in-split (&optional name directory)
-  "Create a Ghostel terminal in a right-side split and remember it."
+  "Create a Ghostel terminal in a right-side split and save it for this tab."
   (interactive
    (let ((directory default-directory))
      (list (read-string "Ghostel buffer name (optional): ") directory)))
@@ -584,15 +668,16 @@
   (let* ((default-directory directory)
          (buffer
           (ghostel-create name
-                           '((display-buffer-in-direction)
-                             (direction . right)
-                             (window-width . 0.5)))))
-    (unless (ghostel-buffer-live-p buffer)
+                          my/send-text-right-split-action))
+         (target (list :type 'ghostel
+                       :buffer buffer
+                       :process (get-buffer-process buffer))))
+    (unless (my/ghostel-target-live-p target)
       (user-error "Created Ghostel buffer cannot accept input"))
-    (my/send-text-save-last-target (list :type 'ghostel :buffer buffer))))
+    (my/send-text-save-last-target target)))
 
 (defun my/open-or-create-zmx-session-in-split (&optional name command directory)
-  "Open or create a zmx session in a right-side split and remember it."
+  "Open or create a zmx session in a right-side split and save it for this tab."
   (interactive
    (let ((directory default-directory)
          (name (read-string "zmx session name: "))
@@ -603,10 +688,7 @@
   (unless directory
     (setq directory default-directory))
   (let ((default-directory directory)
-        (display-buffer-overriding-action
-         '((display-buffer-in-direction)
-           (direction . right)
-           (window-width . 0.5))))
+        (display-buffer-overriding-action my/send-text-right-split-action))
     (term-sessions-open (list :name name :directory directory) command)
     (my/send-text-save-last-target
      (list :type 'zmx :name name :directory directory))))
@@ -980,7 +1062,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     (global-set-key (kbd "s-}") 'tab-bar-switch-to-next-tab)
     (global-set-key (kbd "s-{") 'tab-bar-switch-to-prev-tab)
 
-    (setq tab-bar-select-tab-modifiers 'super)
+    (setq tab-bar-select-tab-modifiers '(super))
     (global-set-key (kbd "s-t") 'tab-bar-new-tab)
     (global-set-key (kbd "s-w") 'tab-bar-close-tab)
 
@@ -1134,10 +1216,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "r" "review"
     "s" "search"
     "t" "terminals"
-    "t r" "replay region/buffer target"
-    "t R" "send region/buffer"
-    "t g" "create Ghostel split"
-    "t z" "open zmx split"
+    "t r" "replay region/buffer, or choose target"
+    "t R" "choose target for region/buffer"
+    "t g" "create Ghostel split target"
+    "t z" "open/create zmx split target"
     "w" "windows"
     "w t" "tabs"))
 

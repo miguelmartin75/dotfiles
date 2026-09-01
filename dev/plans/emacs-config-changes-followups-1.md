@@ -8,21 +8,134 @@ favor of one textual mode line assembled from standard Emacs constructs, and
 normal startup will remain offline. The same work will make minibuffer `C-w`
 shell-like, configure the Nerd Font fallback required by Neovim inside Ghostel,
 make the outer Evil versus inner terminal state contract explicit, and let text
-from any live Emacs buffer target a durable zmx session, a Ghostel buffer, an
-Emacs process buffer, or a writable Emacs buffer through the public API that
-owns that target class. Explicit selection is the default, while an intentionally
-invoked per-tab replay can reuse that tab's last successful target.
+from any live Emacs buffer target a zmx session, an ordinary Emacs buffer, or a
+Ghostty terminal through local integration boundaries and the public delivery
+API that owns each transport. Explicit selection is the default, while an
+intentionally invoked per-tab replay can reuse that tab's last successful target
+or open the picker when none exists.
 
 ## Status
 
 - Plan: complete
-- Implementation: in progress
+- Implementation: complete
 - Target: Emacs 31.1+ with dynamic-module support
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Package provisioner: `profiles/common/.config/emacs/install-packages.el`
 - macOS provisioner: `provision/local/macos`
 - Superseded plan contract: the zmx-only generalized sender in
   `dev/plans/emacs-config-changes.md`
+
+## Follow-up F1: Contain terminal package integration locally
+
+- Owner: `emacs-config-changes-followups-1`
+- Status: complete
+- Context: the first Phase 4 implementation depended on unpublished Ghostel and
+  term-sessions commits. Publishing forks or pull requests is outside the
+  configuration's scope, and the original upstream URLs must remain usable.
+- Solution: restore reachable upstream package revisions, represent Ghostel
+  identity as its buffer and public Emacs process object, validate that pair
+  around public Ghostel sends, and call the pinned term-sessions private
+  location-aware selector at one explicit local boundary in `init.el`.
+- Affected: `profiles/common/.config/emacs/init.el`,
+  `profiles/common/.config/emacs/install-packages.el`,
+  `profiles/common/.config/emacs/send-text-targets-test.el`, and this plan.
+
+## Follow-up F2: Pick a target when replay has none
+
+- Owner: `emacs-config-changes-followups-1`
+- Status: complete
+- Context: `SPC t r` is the fast replay command, but a new tab or a tab whose
+  stale object target was cleared has no current target. Requiring a separate
+  `SPC t R` invocation adds an unnecessary failure step.
+- Solution: when the current tab has no saved target, pass the already extracted
+  text to the normal explicit target chooser. Keep existing-target replay
+  prompt-free, and keep stale-target failures as errors so a partially attempted
+  delivery never also opens a picker in the same invocation.
+- Affected: `profiles/common/.config/emacs/init.el`,
+  `profiles/common/.config/emacs/send-text-targets-test.el`, and this plan.
+- Measured outcome: the focused ERT suite passed 4 of 4 tests, including exact
+  text delegation for a targetless tab and completion-free replay for a tab with
+  a saved target. The correctness review found no issues; `check-parens`,
+  temporary byte compilation, and `git diff --check` passed.
+
+## Follow-up F3: Unify buffer target selection
+
+- Owner: `emacs-config-changes-followups-1`
+- Status: complete
+- Context: the four-class picker exposes implementation transports as top-level
+  choices. A live Ghostel buffer can consequently appear as a Ghostel target, a
+  raw process target, and a writable insertion target. Its writable appearance
+  also changes with Ghostel input mode, and native Ghostel's associated process
+  is a lifecycle event pipe rather than the PTY input boundary.
+- Solution: offer exactly `zmx` and `buffer` as the require-match top-level
+  choices. Preserve the existing zmx flow. For `buffer`, require Ghostel and
+  enumerate each buffer once in `buffer-list` order. Classify a member of
+  `ghostel-buffer-list` only as Ghostel when its associated process is live;
+  include it regardless of `buffer-read-only`, and omit it rather than falling
+  through when dead. Classify each remaining non-Ghostel buffer as a raw process
+  target when it has a live associated process or as an insertion target when it
+  is writable. When both apply, list the buffer once and prompt for `send raw
+  text` or `insert at point` after buffer selection. Omit buffers with neither
+  transport. Keep delivery descriptors, stale identity handling, per-tab replay,
+  and non-display behavior unchanged.
+- Affected: `profiles/common/.config/emacs/init.el`,
+  `profiles/common/.config/emacs/send-text-targets-test.el`, and this plan.
+- Success criteria: the top-level UI contains only `zmx` and `buffer`; every
+  eligible buffer appears once; live Ghostel buffers remain selectable in
+  read-only input modes and always use public Ghostel paste and Return; dead
+  Ghostel buffers are absent; generic process and insertion behavior remains
+  explicit and unchanged; targetless replay reaches the same picker.
+- Measured outcome: the focused ERT suite passed 4 of 4 tests with the existing
+  test count, covering exact top-level choices, ordered one-entry buffer
+  classification, read-only Ghostel delivery, dead Ghostel omission, ordinary
+  raw-process and insertion delivery, ambiguous operation selection, and
+  targetless replay. The correctness review found no issues; `check-parens`,
+  temporary byte compilation, and `git diff --check` passed with only existing
+  deferred-package and free-variable warnings.
+
+## Follow-up F4: Create terminal targets from the picker
+
+- Owner: `emacs-config-changes-followups-1`
+- Status: complete
+- Context: the F3 picker can send only to existing destinations. Its buffer
+  family correctly includes live Ghostel terminals, but it cannot create one
+  when none exists, while zmx creation is available only through a separate key
+  binding.
+- Solution: offer exactly `zmx`, `buffer`, and `ghostty` as require-match
+  top-level choices. Preserve F3's `buffer` behavior: list each live Ghostel
+  buffer exactly once with Ghostel delivery precedence, then classify ordinary
+  buffers through raw-process or insertion delivery. Under `ghostty`, also offer
+  every live Ghostel buffer plus a `create new` candidate even when no Ghostel
+  buffer exists. This overlap is intentional: `buffer` remains a complete picker
+  for existing Emacs buffer objects, while `ghostty` owns terminal creation.
+  Creation prompts for an optional name, uses the existing
+  right-side split action and source directory, validates the returned public
+  buffer/process pair, and sends through public Ghostel paste and Return.
+  Under `zmx`, first offer `existing` or `create new` because the pinned package
+  exposes no public location-aware enumeration API that can share one completion
+  table with a synthetic action. Existing selection keeps the pinned private
+  selector boundary. Creation prompts for a name, calls public
+  `term-sessions-open` in the source directory and existing right-side split,
+  then sends through public `term-sessions-send`. Both creation flows save the
+  resulting descriptor only after delivery succeeds, preserve the prior target
+  on cancellation or failure, and leave any successfully created visible state
+  inspectable rather than attempting rollback.
+- Affected: `profiles/common/.config/emacs/init.el`,
+  `profiles/common/.config/emacs/send-text-targets-test.el`, and this plan.
+- Success criteria: the top-level UI contains exactly `zmx`, `buffer`, and
+  `ghostty`; `buffer` retains each live Ghostel target exactly once and never
+  sends it through a generic transport; both terminal families expose
+  `create new` without requiring an existing destination; new targets open in a
+  right-side split, receive the exact selected text with their existing
+  transport semantics, and become the current tab target only after successful
+  delivery; existing selection and replay semantics remain unchanged.
+- Measured outcome: the focused ERT suite passed 4 of 4 tests, covering both
+  creation paths, delivery-before-save behavior, failure preservation, and
+  distinct `buffer: <name>` labels for existing Ghostel buffers whose names
+  collide with the exact `create new` action. The iterative correctness review
+  found and verified the candidate-label fix, then reported no remaining
+  findings. `check-parens`, temporary byte compilation, and `git diff --check`
+  passed with only the existing deferred-package and free-variable warnings.
 
 ## Decisions
 
@@ -42,16 +155,23 @@ invoked per-tab replay can reuse that tab's last successful target.
    generated, in-memory, read-only, special, indirect, narrowed, remote, and
    process buffers all use the same active-region or accessible-buffer
    extraction path without a major-mode allowlist.
-6. Keep durable zmx sessions, Ghostel buffers, Emacs process buffers, and writable
-   Emacs buffers as distinct target classes. Each class has different lifetime,
-   submission, mutation, and failure semantics. The chooser always names a class
-   and concrete target explicitly. It never infers a destination from the source
-   or a last-used target; only the separately invoked replay command uses the
-   current tab's remembered successful target.
-7. Use only public term-sessions, Ghostel, process, buffer, and tab-bar APIs for
-   generalized text delivery. Do not inspect terminal output, insert into rendered
-   Ghostel buffers, call private send or tab APIs, bypass buffer read-only
-   contracts, or key target state by a tab name, index, window, or configuration.
+6. Keep `zmx`, `buffer`, and `ghostty` as the only top-level target choices.
+   `buffer` selects every eligible existing buffer, gives live Ghostel targets
+   exclusive transport precedence, and asks for the operation only when an
+   ordinary buffer supports both raw process input and insertion. `ghostty` also
+   selects an existing live Ghostel terminal or explicitly creates one. This
+   family-level overlap is intentional. `zmx` selects an existing durable
+   session or explicitly creates one. The chooser never infers a destination
+   from the source or a last-used target; only the separately invoked replay
+   command uses the current tab's remembered successful target.
+7. Use public Ghostel send and enumeration APIs, standard Emacs process, buffer,
+   and tab-bar APIs, and public term-sessions delivery APIs. The pinned
+   term-sessions revision has no public location-aware existing-session selector,
+   so F1 deliberately calls its private selector at one local selection boundary
+   after loading `term-sessions-list`. Do not inspect terminal output, insert into
+   rendered Ghostel buffers, call private send or tab APIs, bypass buffer
+   read-only contracts, or key target state by a tab name, index, window, or
+   configuration.
 
 ## Current codebase context
 
@@ -373,7 +493,8 @@ Status: complete
 
 ## Phase 4: Generalize text delivery with explicit selection and per-tab replay
 
-Status: complete locally; upstream pin reachability pending Phase 5 acceptance
+Status: complete; local integration revised by F1, replay fallback by F2,
+picker unification by F3, and terminal creation completed by F4
 
 ### Source contract
 
@@ -390,16 +511,17 @@ properties are intentionally removed before delivery.
 
 ### Target contract
 
-| Target class | Saved descriptor | Selection and delivery boundary | Submission or mutation semantics |
+| Transport | Saved descriptor | Selection and delivery boundary | Submission or mutation semantics |
 | --- | --- | --- | --- |
-| Durable zmx session | `(:type zmx :name NAME :directory DIRECTORY)` | A new public existing-session selector returns `NAME` and `DIRECTORY`; bind `default-directory` to `DIRECTORY` and call `term-sessions-send`. | Send exact text plus one carriage return. It is a logical name-and-location address, independent of an Emacs frontend buffer. |
-| Ghostel buffer | `(:type ghostel :buffer BUFFER)` | `ghostel-buffer-list`, the required public `ghostel-buffer-live-p`, `ghostel-paste-string`, and `ghostel-send-key` on the returned original buffer. | Bracket-paste exact text, then send one terminal-aware Return. Dead or exit-racing terminals signal instead of succeeding as no-ops. |
+| Durable zmx session | `(:type zmx :name NAME :directory DIRECTORY)` | The pinned private existing-session selector returns `NAME` and `DIRECTORY`; bind `default-directory` to `DIRECTORY` and call public `term-sessions-send`. | Send exact text plus one carriage return. It is a logical name-and-location address, independent of an Emacs frontend buffer. |
+| Ghostel buffer | `(:type ghostel :buffer BUFFER :process PROCESS)` | `ghostel-buffer-list`, `get-buffer-process`, `process-live-p`, `ghostel-paste-string`, and `ghostel-send-key` on the returned original buffer/process pair. | Bracket-paste exact text, then send one terminal-aware Return. Validate the original process association before and after each public send so dead or replaced terminals signal locally. |
 | Emacs process buffer (raw text) | `(:type process :buffer BUFFER :process PROCESS)` | `buffer-list`, `get-buffer-process`, `process-live-p`, and `process-send-string` on the original pair. | Send exact raw text with no appended carriage return or newline. The process protocol owns framing and submission. |
 | Writable Emacs buffer (insert at point) | `(:type buffer :buffer BUFFER)` | `buffer-list`, `buffer-live-p`, `buffer-read-only`, and `insert` on the original buffer. | Insert exact plain text at its current point without saving, displaying, switching to, or submitting the buffer. |
 
-The exact completion labels in the first column are the user-visible target
-classes. Do not prefix them with `Live`. Lowercase `live` remains appropriate
-only when stating an actual buffer or process liveness condition.
+The user-visible top-level choices are exactly `zmx`, `buffer`, and `ghostty`.
+`buffer` includes live Ghostel targets with exclusive Ghostel delivery
+precedence alongside the two ordinary buffer transports. `ghostty` intentionally
+offers the same live Ghostel targets plus creation.
 
 ### Per-tab target state
 
@@ -412,56 +534,47 @@ from a tab name, tab index, selected window, or window configuration.
 
 - A newly created tab has no target. Switching, renaming, and moving tabs retain
   the descriptor because it travels with that tab's entry. Closing a tab discards
-  it, unless Emacs tab undo restores that logical tab.
+  it, unless Emacs tab undo restores that logical tab. Invoking replay with no
+  descriptor opens the normal explicit target chooser with the same extracted
+  text; a successful selection stores the chosen target on that tab.
 - Store a descriptor only after the chosen delivery or creation command returns
   successfully. A canceled chooser, a selection failure, or a delivery failure
   leaves the prior descriptor intact.
 - A killed or replaced Ghostel, process, or writable-buffer object invalidates
   and clears that descriptor on the attempted replay. Never resolve a same-named
-  replacement. A process must still be live and still be the selected buffer's
-  associated process. A writable buffer that becomes read-only rejects that
-  attempt but retains its descriptor. A Ghostel buffer must also pass the public
-  `ghostel-buffer-live-p` predicate, and the public send calls must signal if the
-  PTY exits before either write completes.
+  replacement. A Ghostel or generic process must still be live and still be the
+  selected buffer's associated original process. Validate a Ghostel pair before
+  delivery and after each public send; a failed validation signals locally. A
+  writable buffer that becomes read-only rejects that attempt but retains its
+  descriptor.
 - A zmx descriptor remains saved when zmx reports a missing or unreachable
   session. Its `NAME` and `DIRECTORY` are the intended logical address, and
   connectivity or the named session can recover later.
 
-### Terminal package API prerequisites
+### Local terminal package integration
 
-The current Ghostel pin at
-`profiles/common/.config/emacs/install-packages.el:11-14` cannot support the
-plan's dead-target and successful-delivery contracts through public APIs. Add
-and review the upstream public function `ghostel-buffer-live-p BUFFER`, which
-returns non-nil only when `BUFFER` is a Ghostel buffer whose PTY can accept
-input. At the same public boundary, make `ghostel-paste-string` and
-`ghostel-send-key` signal `user-error` if the PTY is already dead or exits before
-their write completes instead of returning as a no-op. Cover live, exited, and
-exit-racing buffers in Ghostel's tests, then update the Ghostel pin to the
-resulting reviewed commit. The configuration must not inspect Ghostel's private
-process or terminal fields.
+F1 keeps both original repository URLs and restores the reachable Ghostel
+revision `94eace59046c275d6c8f3c065489f6bbdb4f037b` and term-sessions revision
+`0815dbea006128df1d61e9d29e5a8ada53b349c1`. No fork, unpublished commit, or
+package patch is required.
 
-The current pinned `term-sessions-action-send-text-to-session` at
-`refs/emacs-term-sessions/term-sessions-actions.el:389-398` hides the chosen
-entry inside its action callback. It cannot satisfy location-aware replay using
-only public APIs. Add and review the upstream public function
-`term-sessions-read-existing-session-entry (&optional prompt)` in
-`term-sessions-frontends.el`. It must use the package's existing-session
-completion and validation and return an entry plist containing at least `:name`
-and `:directory`, including the selected local or TRAMP location. Cover local,
-remote, require-match, and cancellation behavior in term-sessions tests, then
-update the pin at `profiles/common/.config/emacs/install-packages.el:20-23` to
-the resulting reviewed commit. The configuration uses only that public function
-to construct the descriptor.
+Ghostel already exposes public buffer enumeration, paste, and terminal-aware key
+sends. Its native and Emacs PTY paths also associate their lifecycle process with
+the Ghostel buffer, so `init.el` stores that public `get-buffer-process` result
+with the buffer. A target is live only while the original buffer remains in
+`ghostel-buffer-list`, the original process remains live, and it remains the
+buffer's associated process. Check that identity before delivery and after paste
+and Return. Do not read `ghostel--process`, `ghostel--term`, or other private
+Ghostel state.
 
-With that prerequisite, the config binds the returned or saved directory and
-calls public `term-sessions-send` from
-`refs/emacs-term-sessions/term-sessions-zmx.el:402-416` with exact text plus one
-`"\r"`. Use public `term-sessions-open` from
-`refs/emacs-term-sessions/term-sessions-frontends.el:414-463` for the creation
-flow. Do not call a private selector, advise or intercept completion, reduce zmx
-to a free-form current-directory-only name, shell out to zmx, or open a terminal
-solely to discover identity.
+The pinned term-sessions revision already contains the required location-aware
+selection behavior as `term-sessions--read-existing-session-entry`, but it is
+private and only includes known local and TRAMP rows after `term-sessions-list`
+is loaded. The zmx chooser explicitly requires `term-sessions-list` and calls
+that selector inline at its single use. All zmx delivery and creation remain on
+public `term-sessions-send` and `term-sessions-open`. Do not copy the selector,
+advise completion, shell out to zmx, or open a frontend solely to discover
+identity. The revision pin makes this narrow private dependency auditable.
 
 ### Changes
 
@@ -470,9 +583,10 @@ solely to discover identity.
    - `my/send-text-to-target TEXT` always prompts first for a target class and
      then for its concrete target. It delivers before recording the resulting
      descriptor on the current tab.
-   - `my/send-text-send-to-last-target TEXT` never prompts. It reads only the
-     current tab's `my/send-text-last-target` descriptor and replays it. With no
-     descriptor, signal `user-error` directing the user to the chooser command.
+   - `my/send-text-send-to-last-target TEXT` reads only the current tab's
+     `my/send-text-last-target` descriptor. With one, it replays without a
+     prompt. With none, it delegates the same TEXT to `my/send-text-to-target`
+     so the normal explicit picker performs and records the first delivery.
 
    Remove the old term-sessions-specific owned names and add no compatibility
    aliases.
@@ -484,44 +598,60 @@ solely to discover identity.
    replay entry point. Neither source command adds a supported-mode list,
    process-buffer exception, file requirement, writable-source requirement, or
    source-specific transport branch.
-3. The chooser uses require-match native completion in this order: target class,
-   then the concrete target. Its target-class choices are exactly `Durable zmx
-   session`, `Ghostel buffer`, `Emacs process buffer (raw text)`, and `Writable
-   Emacs buffer (insert at point)`. It never supplies a last-used default or
-   infers a destination. A successful explicit delivery replaces only the
-   current tab's descriptor.
-4. In the zmx chooser branch, call the newly public existing-session selector and
-   save its `:name` and `:directory`. Bind `default-directory` to that selected
-   directory for delivery, then call `term-sessions-send` with `(concat text
-   "\r")`. In replay, use only the stored name and directory in the same way;
-   do not re-run a selector. Keep zmx errors as errors and retain the descriptor.
-5. In the Ghostel chooser branch, defer `(require 'ghostel)` until that class is
-   selected, then build unambiguous require-match candidates from the buffers
-   returned by `ghostel-buffer-list` that also pass `ghostel-buffer-live-p`.
-   Signal `user-error` when none exist. Store the selected returned object, not a
-   name. Before delivery or replay, require the original buffer to be live,
-   remain a member of `ghostel-buffer-list`, and still pass
-   `ghostel-buffer-live-p`; clear a replay descriptor when any check fails. In
-   the buffer, call `ghostel-paste-string` with the text and then
-   `ghostel-send-key` with `"return"`. Both public calls must signal if their PTY
-   write cannot complete. If paste succeeds and Return fails, preserve the
-   annotation queue and descriptor because the terminal may already have pasted
-   input; this deliberately non-atomic send is neither rollback-safe nor
-   retry-idempotent. Do not inspect Ghostel private identity or PTY state, call
-   `ghostel--send-string`, use the generic process branch, or insert into the
-   rendered terminal buffer.
-6. In the process chooser branch, build unambiguous require-match candidates from
-   every buffer with a live associated process and store both original objects.
+3. The chooser uses require-match native completion. Its top-level choices are
+   exactly `zmx`, `buffer`, and `ghostty`. `buffer` presents one concrete
+   candidate per eligible buffer, giving a live Ghostel target exclusive
+   Ghostel delivery precedence. An ordinary buffer supporting both raw process
+   input and insertion receives a final require-match operation prompt with
+   exactly `send raw text` and `insert at point`. The chooser never supplies a
+   last-used default or infers a destination. A successful explicit delivery
+   replaces only the current tab's descriptor.
+4. In the zmx chooser branch, offer exactly `existing` and `create new`.
+   `existing` requires `term-sessions-list`, calls the pinned private
+   `term-sessions--read-existing-session-entry` selector inline, and saves its
+   `:name` and `:directory`. `create new` captures the source directory, prompts
+   for a name, and calls public `term-sessions-open` with the existing right-side
+   split action before delivery. Bind `default-directory` to the selected or
+   created directory, then call public `term-sessions-send` with `(concat text
+   "\r")`. In replay, use only the stored name and directory and do not re-run a
+   selector. Keep zmx errors as errors and retain an existing replay descriptor.
+   A create-and-send failure preserves the prior descriptor and does not roll
+   back an opened buffer or possibly created session.
+5. In the ghostty chooser branch, defer `(require 'ghostel)` until `ghostty` is
+   selected. Build unambiguous require-match candidates from live targets in
+   `ghostel-buffer-list` and append `create new`, which remains available when
+   there are no existing buffers. Existing selection stores the returned buffer
+   and process objects, not a name. Creation captures the source directory,
+   prompts for an optional buffer name, calls public `ghostel-create` with the
+   existing right-side split action, and validates the returned public pair.
+   Before delivery and after each public send,
+   require the original buffer to be live, remain a member of
+   `ghostel-buffer-list`, retain the original associated process, and keep that
+   process live. Clear a replay descriptor when validation fails. In the buffer,
+   call `ghostel-paste-string` with the text and then `ghostel-send-key` with
+   `"return"`. If paste succeeds and Return or a post-send validation fails,
+   preserve the annotation queue and chooser's prior descriptor because the
+   terminal may already have pasted input; this deliberately non-atomic send is
+   neither rollback-safe nor retry-idempotent. Do not inspect Ghostel private
+   identity or PTY state, call `ghostel--send-string`, use the generic process
+   branch, or insert into the rendered terminal buffer.
+6. In the buffer chooser, recognize members of `ghostel-buffer-list` first.
+   Include each live Ghostel target once regardless of read-only state, use its
+   Ghostel descriptor, and omit a dead Ghostel target instead of allowing it to
+   fall through to a generic transport. For each remaining buffer with a live
+   associated process, make raw process delivery available and store both
+   original objects.
    Before delivery or replay, require a live original buffer, a live original
    process, and `(eq PROCESS (get-buffer-process BUFFER))`. Send the exact text
    once with `process-send-string`, with no added terminator and no Comint,
    compilation, terminal, or mode-specific submission command. On failed object
    identity or association validation, clear this tab's descriptor and signal
    `user-error` rather than targeting a replacement.
-7. In the writable-buffer chooser branch, build unambiguous require-match
-   candidates from all live writable `buffer-list` buffers, including file-backed,
-   scratch, generated, and other in-memory buffers. Store the original buffer
-   object. On delivery or replay, a killed object clears this tab's descriptor;
+7. For each non-Ghostel writable buffer, make insertion available, including for
+   file-backed, scratch, generated, and other in-memory buffers. If the same
+   buffer also has a live process, list it once and ask which operation to use
+   after selection. Store the original buffer object for insertion. On delivery
+   or replay, a killed object clears this tab's descriptor;
    a still-live buffer that has become read-only signals `user-error` but retains
    it. Otherwise insert exact plain text at its current point, leaving point after
    the text and the buffer modified without saving, displaying, switching to, or
@@ -537,10 +667,10 @@ solely to discover identity.
    `default-directory`, and call public `ghostel-create NAME DISPLAY-ACTION`.
    `DISPLAY-ACTION` uses public `display-buffer-in-direction` with direction
    `right` and `window-width` `0.5` for an equal-width side-by-side split, with
-   the new window on the right. After its successful return and a
-   `ghostel-buffer-live-p` check, store `(:type ghostel :buffer BUFFER)` on the
-   current tab. This creates a Ghostel terminal and buffer; zmx owns durable
-   sessions.
+   the new window on the right. After its successful return, capture and validate
+   the associated public process, then store `(:type ghostel :buffer BUFFER
+   :process PROCESS)` on the current tab. This creates a Ghostel terminal and
+   buffer; zmx owns durable sessions.
 10. Add `my/open-or-create-zmx-session-in-split`, bound to `SPC t z`. Prompt for
     the name before layout changes and, with a prefix argument, for the creation
     command. Capture the caller's `default-directory` as `directory` before any
@@ -578,8 +708,8 @@ solely to discover identity.
   - Two tabs can select different targets and replay only their own target.
     Switching, renaming, moving, creating a new tab, closing a tab, and undoing a
     close retain, omit, discard, or restore state according to the per-tab
-    contract. A new tab's replay signals `user-error` without invoking either
-    completion prompt.
+    contract. A new tab's replay delegates the same text to the chooser, while a
+    tab with an existing target replays without invoking completion.
   - A chooser selection or delivery failure preserves the old descriptor. Only a
     successful chooser delivery changes the current tab's descriptor; it does
     not change another tab's target.
@@ -588,20 +718,27 @@ solely to discover identity.
     text plus exactly one character 13 carriage return. Missing or unreachable
     zmx errors keep the descriptor.
   - The Ghostel branch requires Ghostel only after its class is selected, maps
-    completion to buffers from `ghostel-buffer-list` that pass
-    `ghostel-buffer-live-p`, validates both conditions again before delivery,
-    pastes before Return, and rejects a killed, exited, or same-named replacement
-    by clearing the saved replay target. Dead and exit-racing writes signal, and
-    paste and Return failures preserve the annotation queue.
+    completion to buffers from `ghostel-buffer-list` with live associated
+    processes, stores the original buffer/process pair, validates that identity
+    before and after each public send, pastes before Return, and rejects a killed,
+    exited, restarted, or same-named replacement by clearing the saved replay
+    target. Paste, Return, and post-send validation failures preserve the
+    annotation queue.
   - The process branch stores and rechecks the original buffer/process pair,
     sends exact raw text with no added terminator, and clears a dead, killed, or
     replaced pair rather than resolving by name.
   - The writable-buffer branch inserts once at the original object's current
     point without saving or switching. A killed or replaced object clears the
     descriptor; becoming read-only rejects the send and retains it.
-  - Exact completion labels, binding descriptions, and documentation contain no
-    `Live ` target prefix. Annotation delivery uses the chooser and clears the
-    queue only after success.
+  - The top-level completion contains exactly `zmx`, `buffer`, and `ghostty`.
+    Buffer completion contains each eligible object exactly once, includes live
+    Ghostel targets with Ghostel delivery precedence, omits dead Ghostel targets,
+    and asks explicitly between `send raw text` and `insert at point` for a
+    writable process-backed ordinary target. Ghostty completion contains each
+    live Ghostel target plus `create new`, and still offers creation with no
+    existing target. Zmx completion offers `existing` and `create new`; the
+    creation path works with no existing session.
+    Annotation delivery uses the chooser and clears the queue only after success.
   - Both split creation commands prompt before changing layout, preserve the
     caller directory, use an equal-width side-by-side display action with the new
     window on the right, store state only after success, and preserve a prior
@@ -632,20 +769,21 @@ solely to discover identity.
 
 - Any live Emacs buffer can provide an active region or accessible buffer
   contents without a mode, file, mutability, process, or location allowlist.
-- `SPC t R` and visual `C-c C-c` always select one exact target class and a
-  concrete target. `SPC t r` and visual `C-c C-r` replay only the current tab's
-  last successful target and never prompt.
+- `SPC t R` and visual `C-c C-c` always select `zmx`, `buffer`, or `ghostty` and
+  a concrete existing or explicitly created target. `SPC t r` and visual
+  `C-c C-r` replay only the current tab's
+  last successful target without prompting, or open the same explicit picker
+  when that tab has no saved target.
 - Target state is a public-tab-bar property with the documented tab lifetime and
   never leaks between tabs or falls back to a name-, index-, window-, or
   configuration-keyed global.
-- Each class uses supported public APIs and preserves its target-specific
-  submission, mutation, lifetime, and stale-identity semantics. zmx is stored as
-  a recoverable name-and-directory logical address; buffer and process targets
-  are object identities.
-- The pinned Ghostel revision provides `ghostel-buffer-live-p` and
-  failure-signaling public sends, and the pinned term-sessions revision provides
-  `term-sessions-read-existing-session-entry`. No private package API is
-  introduced.
+- Each class preserves its target-specific submission, mutation, lifetime, and
+  stale-identity semantics. zmx is stored as a recoverable name-and-directory
+  logical address; buffer and process targets are object identities.
+- The pinned upstream Ghostel revision uses public enumeration and send APIs plus
+  the original public Emacs process association. The pinned upstream
+  term-sessions revision is isolated behind one documented private selector call;
+  zmx delivery and creation remain public.
 - Ghostel creation is a terminal/buffer flow; durable sessions are owned by zmx.
 - Narrowed-source extraction and annotation line numbers follow their documented
   accessible-text and absolute-location contracts. Annotation Markdown remains
@@ -654,31 +792,34 @@ solely to discover identity.
 
 ### Measured outcome
 
-- Ghostel commit `53c73e9b78a21b0a9d7b66e4db38e80ef1fc93e3` adds the public
-  liveness and failure-signaling send boundary. Its 64 focused pure-Elisp tests,
-  byte compilation, Checkdoc checks, `check-parens`, and `git diff --check`
-  passed. Native-module tests remain part of final acceptance.
-- term-sessions commit `acc872676ad2476187984056e7896aa0ea2b2dfc` adds the
-  public location-aware existing-session reader. Its 123-test suite passed under
-  UTC, and focused loading, byte compilation, `check-parens`, and
-  `git diff --check` passed. The local-time suite retains one pre-existing
-  epoch-zero assertion that formats as 1969 in `America/Los_Angeles`.
+- Package-local API experiments established the liveness and location-aware
+  selection behavior, but F1 supersedes those unpublished commits with local
+  integration against reachable upstream pins.
 - The configuration's four focused ERT tests passed, including source and
   annotation behavior, all four transports, stale-target handling, per-tab
   lifetime, the flipped `SPC t r` replay and `SPC t R` chooser mappings, and both
   split creation flows. A real public `tab-bar-tabs` persistence probe reported
   `TAB_STATE_OK`; `check-parens`, temporary byte compilation, guarded startup,
   and `git diff --check` also passed.
-- The original Ghostel and term-sessions repository URLs are retained. The two
-  new pinned commits currently exist only in the local reference repositories
-  and are not yet reachable from those upstream URLs. Phase 5 acceptance must
-  resolve that publication boundary before fresh provisioning can pass.
-- Real Ghostel PTY, zmx, TRAMP, graphical, and interactive TTY checks remain in
-  the Phase 5 acceptance suite.
+- F2 updated the replay contract so a targetless tab opens the normal explicit
+  picker with the same extracted text. Existing-target replay remains
+  completion-free, and a stale target still clears and signals without opening
+  the picker during that failed attempt. The focused suite and correctness
+  review passed after the change.
+- F3 reduced the top-level picker to `zmx` and `buffer`. The buffer path lists
+  each eligible object once, gives Ghostel exclusive precedence regardless of
+  read-only input mode, omits dead Ghostel buffers, and asks for an operation
+  only when a non-Ghostel buffer supports both raw process input and insertion.
+  The focused suite and correctness review passed after the change.
+- Fresh provisioning from the original Ghostel and term-sessions repository URLs
+  installed the restored reachable revisions exactly, and guarded isolated
+  startup loaded the local integration without package or network activity.
+- Real Ghostel PTY, zmx, and interactive TTY checks passed in Phase 5. TRAMP,
+  graphical, and visual Neovim glyph checks remain environment-dependent.
 
 ## Phase 5: Final acceptance and documentation reconciliation
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -718,18 +859,20 @@ Status: pending
   narrowed indirect, TRAMP, Comint, and other process buffers.
 - Real durable zmx, Ghostel, raw process-buffer, and writable-buffer delivery,
   including multiline and remote cases where environments are available. Verify
-  explicit chooser delivery, no-target replay without prompting, and distinct
-  per-tab replay after switching, renaming, moving, closing, and undoing tabs.
+  explicit chooser delivery, no-target replay through the picker, and distinct
+  prompt-free per-tab replay after switching, renaming, moving, closing, and
+  undoing tabs.
 - Narrowed-source, absolute annotation line-number, arbitrary-backtick Markdown
   fence, killed/replaced target, read-only destination, and annotation-queue
   failure checks from Phase 4.
-- The reviewed term-sessions pin exposes the required public existing-session
-  selector `term-sessions-read-existing-session-entry` with both name and
-  directory. Confirm chooser and replay bind the selected directory and send
-  exactly one appended carriage return through public `term-sessions-send`.
-- The reviewed Ghostel pin exposes `ghostel-buffer-live-p`, and its public paste
-  and key sends signal on dead or exit-racing PTYs. Confirm dead Ghostel buffers
-  cannot be selected or remembered as successful deliveries.
+- The pinned term-sessions private existing-session selector returns both name
+  and directory after `term-sessions-list` is loaded. Confirm chooser and replay
+  bind the selected directory and send exactly one appended carriage return
+  through public `term-sessions-send`.
+- The pinned Ghostel revision exposes public buffer enumeration, paste, and key
+  sends. Confirm the locally stored buffer/process pair rejects dead, restarted,
+  exit-racing, or replaced Ghostel targets before they can be remembered as
+  successful deliveries.
 - Both `SPC t g` and `SPC t z` use an equal-width side-by-side split with the new
   window on the right, preserve target state on cancellation or failure, and
   leave any partial zmx creation inspectable without destructive rollback.
@@ -741,6 +884,53 @@ Status: pending
 - Record the same one-warmup, five-run startup benchmark used by
   `dev/plans/emacs-config-changes.md`, comparing the final mean, median, range,
   and sample standard deviation with the current baseline.
+
+### Measured outcome
+
+- The reserved `gpt-5.6-sol` completion review found no substantive
+  implementation defect across the four phase commits or the Phase 5 cleanup.
+  Its one low-severity docstring finding was corrected and the focused suite
+  remained green. The F1 local-integration correctness review also completed
+  with no findings.
+- `check-parens` and temporary byte compilation passed for `init.el`, both
+  provisioners, the focused ERT file, and the theme. A genuinely new guarded
+  batch process reported `GUARDED_CLEAN_STARTUP_OK` with package, VC, URL,
+  grammar, and module provisioning disabled. The focused configuration suite
+  passed 4 of 4 tests, Ghostel's pure-Elisp suite passed 64 of 64 tests,
+  term-sessions passed 123 of 123 tests under UTC, the complete Ghostel native
+  target passed with 8 environment-dependent skips, `bash -n` passed, and
+  `git diff --check` passed in all three repositories.
+- A Ghostel 0.52 module built from the restored original-upstream checkout
+  completed a real PTY paste-and-Return delivery through the locally stored
+  buffer/process pair. A real location-aware selector from the restored
+  term-sessions checkout selected, delivered to, and cleaned up an isolated
+  temporary zmx session. Real raw-process and writable-buffer delivery also
+  passed. Public tab-bar state survived real tab creation, switching, renaming,
+  moving, closing, and undo after correcting the pre-existing
+  `tab-bar-select-tab-modifiers` value from `super` to `(super)`.
+- F1 provisioned a genuinely empty package directory from the tracked original
+  URLs. Ghostel and Evil Ghostel installed at
+  `94eace59046c275d6c8f3c065489f6bbdb4f037b`, and term-sessions installed at
+  `0815dbea006128df1d61e9d29e5a8ada53b349c1`. The installer returned success;
+  its optional difftastic test files emitted pre-existing compile failures for
+  the absent test-only `el-mock` dependency without preventing installation.
+  Descriptor checks confirmed the exact revisions and confirmed that Doom
+  Modeline, Nerd Icons, and Shrink Path were absent. A guarded isolated startup
+  then loaded the configuration with package installation entry points replaced
+  by errors and reported the expected local APIs, flipped bindings, tab option,
+  and absent removed features.
+- The final one-warmup, five-run sample was 3.208374, 3.110362, 3.223818,
+  3.146612, and 3.349866 seconds. Mean was 3.207806 seconds, median was 3.208374
+  seconds, sample standard deviation was 0.091758 seconds, and range was
+  3.110362-3.349866 seconds. Compared with the documented 1.977039-second
+  baseline, the observed mean increased by 1.230767 seconds, or 62.3 percent.
+- An Expect-backed pseudo-terminal opened `emacs -nw` successfully and exposed
+  the textual `NORMAL` state, modified marker, buffer identity, project,
+  modes, and position in the terminal mode line. Screenshot validation was
+  omitted by explicit user instruction. Graphical interaction, visual Neovim
+  key routing and glyph rendering, live TRAMP delivery, interactive split
+  placement, and a full macOS provisioner rerun remain environment-dependent
+  acceptance gaps.
 
 ### Overall success criteria
 
@@ -758,13 +948,18 @@ Status: pending
 - Every live Emacs buffer can provide an active region or accessible contents
   without a source-mode allowlist, including file-backed, scratch, generated,
   read-only, special, indirect, narrowed, remote, and process buffers.
-- Source text can explicitly select Durable zmx session, Ghostel buffer, Emacs
-  process buffer (raw text), or Writable Emacs buffer (insert at point), while
-  only deliberate replay uses the last successful target of the current tab.
-  Annotation queues always use explicit selection and clear only after success.
+- Source text can explicitly select `zmx`, `buffer`, or `ghostty`. The terminal
+  families can select an existing destination or explicitly create one, while
+  buffer selection chooses each eligible object once and preserves its Ghostel,
+  raw-process, or insertion transport. Deliberate replay uses the
+  last successful target of the current tab and falls back to explicit selection
+  when that tab has none. Annotation queues always use explicit selection and
+  clear only after success.
 - Which Function covers every supporting major mode without broadening the
   explicit Tree-sitter parser, folding, and Evil motion matrix.
-- No private Ghostel, term-sessions, or tab-bar implementation API is introduced.
+- No private Ghostel or tab-bar implementation API is introduced. The only
+  private term-sessions dependency is its pinned location-aware selector at the
+  documented local chooser boundary.
 
 ## References
 

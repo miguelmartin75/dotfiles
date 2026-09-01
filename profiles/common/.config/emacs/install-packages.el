@@ -9,18 +9,18 @@
 
 (let* ((vc-packages
         '((ghostel
-           ;; Native PTY terminal renderer and explicit compilation UI.
+           ;; Native PTY renderer, compilation UI, and terminal-aware public sends.
            (:url "https://github.com/dakra/ghostel.git")
-           "53c73e9b78a21b0a9d7b66e4db38e80ef1fc93e3")
+           "94eace59046c275d6c8f3c065489f6bbdb4f037b")
           (evil-ghostel
            ;; Evil state integration for Ghostel terminal buffers.
            (:url "https://github.com/dakra/ghostel.git"
             :lisp-dir "extensions/evil-ghostel")
-           "53c73e9b78a21b0a9d7b66e4db38e80ef1fc93e3")
+           "94eace59046c275d6c8f3c065489f6bbdb4f037b")
           (term-sessions
-           ;; Named, durable zmx sessions and their Emacs/Org interfaces.
+           ;; Durable zmx sessions and Emacs/Org interfaces.
            (:url "https://github.com/ArthurHeymans/emacs-term-sessions.git")
-           "acc872676ad2476187984056e7896aa0ea2b2dfc")
+           "0815dbea006128df1d61e9d29e5a8ada53b349c1")
           (odin-mode
            ;; Odin editing mode for the retained language surface.
            (:url "https://github.com/mattt-b/odin-mode.git")
