@@ -1,6 +1,6 @@
 ;; SECTION: fundamental  -*- lexical-binding: t; -*-
 ;; Fresh machines require Emacs 31.1+ with modules and native Tree-sitter, Git,
-;; a C/C++ compiler and linker, ripgrep (`rg'), zmx, aspell, multimarkdown,
+;; a C/C++ compiler and linker, ripgrep (`rg'), fd, zmx, aspell, multimarkdown,
 ;; LaTeX, dvisvgm, and the selected language servers: clangd, rust-analyzer,
 ;; lua-language-server, ty, typescript-language-server, zls, nimlangserver, and
 ;; ols.  Difftastic (`difft') is optional and enables structural Magit diffs.
@@ -911,6 +911,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 ;; completion
 (use-package consult
   :commands (consult-buffer
+             consult-fd
              consult-imenu
              consult-isearch-history
              consult-line
@@ -930,6 +931,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 (use-package embark-consult
   :after (consult embark))
+
+(defvar consult-fd-args)
 
 (setq completion-styles '(basic partial-completion flex)
       completion-category-overrides '((eglot-capf (styles flex))
@@ -1164,6 +1167,57 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     (deactivate-mark)
     (consult-ripgrep nil (regexp-quote text))))
 
+(defun my/consult-fd-all-files ()
+  "Search all files below the project or current default directory."
+  (interactive)
+  (let* ((project (project-current))
+         (root (if project (project-root project) default-directory)))
+    (when (file-remote-p root)
+      (user-error "Remote recursive file search is not configured yet"))
+    (let ((consult-fd-args '("fd"
+                             "--full-path"
+                             "--color=never"
+                             "--hidden"
+                             "--no-ignore"
+                             "--follow"
+                             "--type" "f"
+                             "--exclude" ".git")))
+      (consult-fd root))))
+
+(defun my/consult-fd-current-file-directory ()
+  "Search all files below the current file's directory."
+  (interactive)
+  (unless buffer-file-name
+    (user-error "Current buffer is not visiting a file"))
+  (when (file-remote-p buffer-file-name)
+    (user-error "Remote recursive file search is not configured yet"))
+  (let ((consult-fd-args '("fd"
+                           "--full-path"
+                           "--color=never"
+                           "--hidden"
+                           "--no-ignore"
+                           "--follow"
+                           "--type" "f"
+                           "--exclude" ".git")))
+    (consult-fd (file-name-directory buffer-file-name))))
+
+(defun my/set-default-directory-to-project-root ()
+  "Set the current buffer's default directory to its project root."
+  (interactive)
+  (setq default-directory (project-root (project-current t))))
+
+(defun my/set-default-directory-to-current-file ()
+  "Set the current buffer's default directory to its file directory."
+  (interactive)
+  (unless buffer-file-name
+    (user-error "Current buffer is not visiting a file"))
+  (setq default-directory (file-name-directory buffer-file-name)))
+
+(defun my/find-file-sshx ()
+  "Open a remote file with an SSH host prompt."
+  (interactive)
+  (find-file (read-file-name "Find file: " nil nil nil "/sshx:")))
+
 (defvar my/leader-map (make-sparse-keymap)
   "Leader map shared by Evil normal and visual states.")
 
@@ -1178,6 +1232,12 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("m" . evil-show-marks)
        ("j" . evil-show-jumps)
        ("f f" . project-find-file)
+       ("f F" . my/consult-fd-all-files)
+       ("f D" . my/consult-fd-current-file-directory)
+       ("f h" . find-file)
+       ("f r" . my/set-default-directory-to-project-root)
+       ("f d" . my/set-default-directory-to-current-file)
+       ("f R" . my/find-file-sshx)
        ("f o" . consult-recent-file)
        ("b b" . consult-buffer)
        ("w h" . evil-window-left)
@@ -1280,7 +1340,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (evil-define-key 'visual 'global (kbd "SPC") my/visual-leader-map)
 
 (evil-define-key '(normal visual) 'global
-  (kbd "C-p") #'project-find-file)
+  (kbd "C-p") #'my/consult-fd-all-files)
 (evil-define-key 'visual 'global
   (kbd "C-c C-c") #'my/send-region-or-buffer)
 (evil-define-key 'visual 'global
@@ -1315,9 +1375,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 (require 'tramp)
 
-(tramp-set-completion-function "ssh"
-  '((tramp-parse-sconfig "/etc/ssh_config")
-    (tramp-parse-sconfig "~/.ssh/config")))
+(dolist (method '("ssh" "sshx"))
+  (tramp-set-completion-function method
+    '((tramp-parse-sconfig "/etc/ssh_config")
+      (tramp-parse-sconfig "~/.ssh/config"))))
 
 (setq tramp-message-show-message nil)
 (add-to-list 'tramp-remote-path 'tramp-own-remote-path)

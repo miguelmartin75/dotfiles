@@ -573,11 +573,11 @@ state, not configuration that belongs inline in the main init file.
 
 - Plan ID: `emacs-completion-refinement`
 - Status: in progress
-- Next milestone: Phase 4
+- Next milestone: Phase 5
 - Phase 1: complete
 - Phase 2: complete
 - Phase 3: complete
-- Phase 4: pending
+- Phase 4: complete
 - Phase 5: pending
 - Phase 6: pending
 - Phase 7: pending
@@ -741,6 +741,17 @@ state, not configuration that belongs inline in the main init file.
 - `/sshx:` lists configured SSH aliases in `*Completions*` without probing every
   host.
 - A selected remote host completes one remote directory level at a time.
+
+### Execution notes
+
+- The include-all `fd` arguments are dynamically scoped to the two local
+  recursive wrappers, leaving project-aware and other Consult commands on their
+  own discovery contracts. Both wrappers reject TRAMP paths until Phase 5
+  supplies the remote implementation.
+- Offline assertions cover project, default, and current-file roots, exact
+  include-all arguments, remote guards, directory setters, leader bindings,
+  SSH and SSHX completion registration, and the prefilled `/sshx:` hierarchical
+  prompt. Candidate UI and live remote connections remain interactive checks.
 
 ## Phase 5: Implement the bidirectional file-picker toggle
 

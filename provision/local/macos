@@ -3,6 +3,7 @@
 set -e
 
 brew install tree-sitter-cli
+brew install fd
 brew install --cask font-symbols-only-nerd-font
 
 defaults write NSGlobalDomain KeyRepeat -int 0
