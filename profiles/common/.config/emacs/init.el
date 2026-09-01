@@ -1174,8 +1174,18 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     (unless text
       (user-error "No region or symbol at point"))
     (deactivate-mark)
-    (consult-ripgrep
-     nil (string-replace " " "\\ " (regexp-quote text)))))
+    (let ((query
+           (string-replace
+            " " "\\ "
+            (replace-regexp-in-string
+             (rx (any "\n\\.^$|?*+(){}[]-"))
+             (lambda (match) (format "\\x%02x" (aref match 0)))
+             text t t))))
+      (consult-ripgrep
+       nil
+       (if (string-match-p "\n" text)
+           (concat query " -- --multiline")
+         query)))))
 
 (defun my/set-default-directory-to-project-root ()
   "Set the current buffer's default directory to its project root."

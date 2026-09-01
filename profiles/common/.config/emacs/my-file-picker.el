@@ -3,6 +3,7 @@
 (require 'files)
 (require 'project)
 (require 'subr-x)
+(require 'tramp)
 
 (declare-function consult-fd "consult" (&optional dir initial))
 (declare-function consult-find "consult" (&optional dir initial))
@@ -48,17 +49,28 @@
 
 (defun my/file-picker-literal-query (query)
   "Return QUERY as literal filename text, or nil when it has Consult syntax."
-  (let ((index 0)
-        (literal "")
-        invalid)
+  (let* ((active-style (and (boundp 'consult-async-split-style)
+                            consult-async-split-style))
+         (style (and (boundp 'consult-async-split-styles-alist)
+                     (alist-get active-style
+                                consult-async-split-styles-alist)))
+         (initial (plist-get style :initial))
+         (removed-initial (and initial
+                               (< 0 (length query))
+                               (= initial (aref query 0))))
+         (query (if removed-initial (substring query 1) query))
+         (index 0)
+         (literal "")
+         invalid)
     (when (or (string-match-p " +--\\( +\\|\\'\\)" query)
-              (and (eq consult-async-split-style 'perl)
+              (and removed-initial
+                   (string-match-p
+                    (regexp-quote (char-to-string initial)) query))
+              (and (eq active-style 'perl)
+                   (not removed-initial)
                    (string-match-p "^[[:punct:]]" query))
-              (and (memq consult-async-split-style '(comma semicolon))
-                   (let* ((style
-                           (alist-get consult-async-split-style
-                                      consult-async-split-styles-alist))
-                          (separator (plist-get style :separator)))
+              (and (memq active-style '(comma semicolon))
+                   (let ((separator (plist-get style :separator)))
                      (and separator
                           (string-match-p
                            (format "^[^%s]+%s"
@@ -87,9 +99,15 @@
 
 (defun my/file-picker-hierarchical-session (root initial)
   "Read a file hierarchically below ROOT with literal INITIAL text."
-  (minibuffer-with-setup-hook
-      (lambda () (my/file-picker-setup 'hierarchical root))
-    (read-file-name "Find file: " root nil nil initial)))
+  (let ((read-root (if (and initial (file-name-absolute-p initial))
+                       (file-name-directory initial)
+                     root))
+        (read-initial (if (and initial (file-name-absolute-p initial))
+                          (file-name-nondirectory initial)
+                        initial)))
+    (minibuffer-with-setup-hook
+        (lambda () (my/file-picker-setup 'hierarchical root))
+      (read-file-name "Find file: " read-root nil nil read-initial))))
 
 (defun my/file-picker-recursive-session (root initial)
   "Recursively select and open a file below ROOT with INITIAL query."
@@ -128,17 +146,30 @@
         (enable-recursive-minibuffers t))
     (condition-case nil
         (if (eq kind 'hierarchical)
-            (let* ((directory (file-name-directory outer-input))
-                   (nested-root (if directory
-                                    (expand-file-name directory root)
-                                  root))
-                   (leaf (file-name-nondirectory outer-input))
-                   (consult-async-split-style nil)
-                   (buffer (my/file-picker-recursive-session
-                            nested-root (regexp-quote leaf)))
-                   (selected (buffer-file-name buffer)))
-              (setcar my/file-picker-transaction selected)
-              (abort-recursive-edit))
+            (progn
+              (when (and (string-match
+                          "\\`/\\([^/:]+\\):" outer-input)
+                         (assoc-string (match-string 1 outer-input)
+                                       tramp-methods)
+                         (or (not (file-remote-p outer-input))
+                             (string-empty-p
+                              (or (tramp-file-name-host
+                                   (tramp-dissect-file-name outer-input t))
+                                  ""))))
+                (user-error "Complete the remote host before recursive search"))
+              (let* ((directory (file-name-directory outer-input))
+                     (nested-root (if directory
+                                      (if (file-name-absolute-p directory)
+                                          directory
+                                        (expand-file-name directory root))
+                                    root))
+                     (leaf (file-name-nondirectory outer-input))
+                     (consult-async-split-style nil)
+                     (buffer (my/file-picker-recursive-session
+                              nested-root (regexp-quote leaf)))
+                     (selected (buffer-file-name buffer)))
+                (setcar my/file-picker-transaction selected)
+                (abort-recursive-edit)))
           (let* ((initial (if (eq kind 'project)
                               outer-input
                             (my/file-picker-literal-query outer-input)))
@@ -186,6 +217,7 @@
   (interactive)
   (let* ((project (project-current t))
          (root (project-root project))
+         (project-read-file-name-function #'project--read-file-absolute)
          (my/file-picker-transaction (list nil)))
     (condition-case error-data
         (minibuffer-with-setup-hook

@@ -80,10 +80,11 @@
                                          (car (car opened))))))))
       (delete-directory root t))))
 
-(ert-deftest my/file-picker-hierarchical-read-file-name-arguments ()
+(ert-deftest my/file-picker-hierarchical-read-file-name-initialization ()
   (let ((root "/tmp/picker-root/")
         (nested-root "/tmp/picker-root/nested/")
         calls
+        composed-initial
         opened)
     (cl-letf (((symbol-function 'read-file-name)
                (lambda (prompt &optional directory default-filename mustmatch
@@ -101,13 +102,23 @@
     (should
      (equal (nreverse calls)
             `(("Find file: " ,nested-root nil nil "file name.txt" nil)
-              ("Find file: " ,root nil nil "/sshx:" nil))))
+              ("Find file: " "/" nil nil "sshx:" nil))))
+    (cl-letf (((symbol-function 'read-from-minibuffer)
+               (lambda (_prompt &optional initial-contents &rest _ignored)
+                 (setq composed-initial
+                       (if (consp initial-contents)
+                           (car initial-contents)
+                         initial-contents))
+                 composed-initial)))
+      (my/file-picker-hierarchical-session root "/sshx:"))
+    (should (string-equal composed-initial "/sshx:"))
     (should (string-equal opened "/tmp/selected"))))
 
 (ert-deftest my/file-picker-project-toggle-transfers-input-literally ()
   (let ((root "/tmp/project-root/")
         captured-kind
         captured-root
+        captured-reader
         captured-initial
         (parser-calls 0)
         (split-style-bound (boundp 'consult-async-split-style))
@@ -124,7 +135,9 @@
                      (lambda (&optional _include-all)
                        (run-hooks 'minibuffer-setup-hook)
                        (setq captured-kind my/file-picker-kind
-                             captured-root my/file-picker-root)))
+                             captured-root my/file-picker-root
+                             captured-reader
+                             project-read-file-name-function)))
                     ((symbol-function 'my/file-picker-literal-query)
                      (lambda (_query)
                        (setq parser-calls (1+ parser-calls))
@@ -133,6 +146,7 @@
               (my/find-file-project))
             (should (eq captured-kind 'project))
             (should (string-equal captured-root root))
+            (should (eq captured-reader #'project--read-file-absolute))
             (dolist (query '(".hidden" "#notes" "file.*" "/async/filter"))
               (let ((my/file-picker-transaction (list nil)))
                 (cl-letf (((symbol-function 'my/file-picker-hierarchical-session)
@@ -161,6 +175,36 @@
       (if split-style-bound
           (set 'consult-async-split-style split-style-value)
         (makunbound 'consult-async-split-style)))))
+
+(ert-deftest my/file-picker-project-prompt-keeps-project-relative-paths ()
+  (let ((root (file-name-as-directory (make-temp-file "picker-project-" t)))
+        prompt
+        collection
+        opened)
+    (unwind-protect
+        (cl-letf (((symbol-function 'project-current)
+                   (lambda (&optional _maybe-prompt _directory) 'project))
+                  ((symbol-function 'project-root)
+                   (lambda (_project) root))
+                  ((symbol-function 'project-files)
+                   (lambda (_project &optional _dirs)
+                     '("src/a.el" "src/b.el")))
+                  ((symbol-function 'thing-at-point)
+                   (lambda (&rest _ignored) nil))
+                  ((symbol-function 'completing-read)
+                   (lambda (read-prompt read-collection &rest _ignored)
+                     (setq prompt read-prompt
+                           collection read-collection)
+                     "src/a.el"))
+                  ((symbol-function 'find-file)
+                   (lambda (file &rest _ignored)
+                     (setq opened file))))
+          (my/find-file-project)
+          (should (string-equal prompt (format "Find file in %s: " root)))
+          (should (equal (all-completions "" collection)
+                         '("src/a.el" "src/b.el")))
+          (should (string-equal opened (expand-file-name "src/a.el" root))))
+      (delete-directory root t))))
 
 (ert-deftest my/file-picker-nested-cancel-restores-outer-state ()
   (let ((root (file-name-as-directory (make-temp-file "picker-cancel-" t))))
@@ -198,16 +242,18 @@
            (comma :separator 44)
            (semicolon :separator 59)
            (perl :initial 35))))
-    (dolist (case '((perl "plain name.txt" "plain name.txt")
-                    (perl "name\\.txt" "name.txt")
-                    (perl "dir/name.txt" "dir/name.txt")
-                    (perl "file.*" nil)
-                    (perl "#literal" nil)
-                    (perl "/async/filter" nil)
-                    (perl "foo#bar" "foo#bar")
-                    (perl "query --" nil)
-                    (perl "query -- --extension el" nil)
-                    (perl "--hidden" nil)
+    (dolist (case '((perl "#plain name.txt" "plain name.txt")
+                    (perl "#name\\.txt" "name.txt")
+                    (perl "#dir/name.txt" "dir/name.txt")
+                    (perl "#\\.hidden" ".hidden")
+                    (perl "#\\+notes" "+notes")
+                    (perl "#file.*" nil)
+                    (perl "##literal" nil)
+                    (perl "#/async/filter" "/async/filter")
+                    (perl "#foo#bar" nil)
+                    (perl "#query --" nil)
+                    (perl "#query -- --extension el" nil)
+                    (perl "#--hidden" "--hidden")
                     (comma "async,filter" nil)
                     (comma ",leading" ",leading")
                     (comma "foo#bar" "foo#bar")
@@ -230,6 +276,52 @@
                   ("folder with spaces/file.el" "folder with spaces/" "file.el")))
     (should (string-equal (file-name-directory (car case)) (cadr case)))
     (should (string-equal (file-name-nondirectory (car case)) (caddr case)))))
+
+(ert-deftest my/file-picker-toggle-requires-complete-remote-host ()
+  (let ((root "/tmp/picker-root/")
+        recursive-calls
+        (my/file-picker-transaction (list nil)))
+    (cl-letf (((symbol-function 'my/file-picker-recursive-session)
+               (lambda (dir initial)
+                 (push (list dir initial) recursive-calls)
+                 (let ((buffer (generate-new-buffer
+                                " *my-file-picker-remote-test*")))
+                   (with-current-buffer buffer
+                     (setq buffer-file-name (concat dir "selected")))
+                   buffer)))
+              ((symbol-function 'abort-recursive-edit)
+               (lambda () (signal 'quit nil))))
+      (dolist (input '("/sshx:"
+                       "/sshx:/"
+                       "/sshx::"
+                       "/sshx:host/path/file.el"
+                       "/sshx:user@host/path/file.el"))
+        (with-current-buffer (window-buffer (minibuffer-window))
+          (let ((inhibit-read-only t))
+            (erase-buffer)
+            (insert input)
+            (setq-local my/file-picker-kind 'hierarchical
+                        my/file-picker-root root)
+            (should-error (my/file-picker-toggle)
+                          :type 'user-error))))
+      (should-not recursive-calls)
+      (dolist (case '(("/sshx:host:"
+                       "/sshx:host:" "")
+                      ("/sshx:user@host:/repo/file.el"
+                       "/sshx:user@host:/repo/" "file\\.el")))
+        (let ((my/file-picker-transaction (list nil)))
+          (with-current-buffer (window-buffer (minibuffer-window))
+            (let ((inhibit-read-only t))
+              (erase-buffer)
+              (insert (car case))
+              (setq-local my/file-picker-kind 'hierarchical
+                          my/file-picker-root root)
+              (should
+               (eq (condition-case nil
+                       (my/file-picker-toggle)
+                     (quit 'quit))
+                   'quit))))
+          (should (equal (pop recursive-calls) (cdr case))))))))
 
 (ert-deftest my/file-picker-selects-recursive-backend-and-find-contract ()
   (dolist (case '(("/tmp/root/" nil consult-fd)

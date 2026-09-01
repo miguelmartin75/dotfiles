@@ -90,7 +90,6 @@ into a directory.
 `TAB` has a strict contextual contract:
 
 ```text
-Visible AI line suggestion -> accept the AI suggestion
 Active completion list     -> select the next candidate
 Active Yasnippet field     -> move to the next snippet field
 Otherwise                  -> ordinary major-mode indentation
@@ -173,16 +172,6 @@ Examples:
 | `[d`, `]d`, `SPC d p`, `SPC d n` | Flymake navigation | Move between diagnostics |
 | `SPC d f`, `SPC d l` | Flymake diagnostic lists | Open persistent buffer/project diagnostic buffers |
 
-### Optional explicit AI suggestions
-
-| State | Insert-state key | Normal-state key | End-state behavior |
-| --- | --- | --- | --- |
-| Request one-line suggestion | `C-c a i` | `SPC a i` | Send bounded source context through public `gptel-request` |
-| Request code-block suggestion | `C-c a b` | `SPC a b` | Show a multiline proposal in a read-only side preview |
-| Accept suggestion | `C-c a a` | `SPC a a` | Insert the validated suggestion as one undoable edit |
-| Fast accept visible line suggestion | `TAB` | None | Accept only while valid line ghost text is visible |
-| Dismiss or abort request | `C-c a x` | `SPC a x` | Remove UI and abort only this inline request |
-
 ## End-state behavior by domain
 
 | Domain | Candidate producer | Display or result surface | Actions and persistence |
@@ -209,8 +198,6 @@ Examples:
 | Diagnostics | Flymake | Native diagnostic list or optional `consult-flymake` | Persistent Flymake list |
 | Build and test errors | Compilation/Ghostel compilation | Compilation buffer | `next-error` / `previous-error` navigation |
 | Generic candidate snapshot | Embark Collect | Persistent read-only Collect buffer | Mark and apply actions |
-| AI line suggestion | Gptel transport plus local overlay frontend | Gray one-line ghost text | Explicit accept or dismiss |
-| AI code-block suggestion | Gptel transport plus side preview | Read-only side window | Explicit atomic insert or dismiss |
 
 LSP completion items are insertion recipes, not source locations. They must not
 be treated as a quickfix list or inserted through a generic Embark action.
@@ -267,12 +254,8 @@ placed in Eglot's completion-at-point path.
 8. Preserve explicit LSP completion startup. The Neovim configuration also sets
    `autotrigger = false`. One `C-SPC` opens the list; subsequent insertion and
    deletion must refine it without another keypress.
-9. Keep built-in Completion Preview disabled in the base plan. It is an
-   alternative one-candidate ghost UI, not a fix for a broken eager list, and it
-   would overlap with the optional AI ghost-text surface.
-10. Use gptel only as the documented asynchronous request transport. The AI
-    overlay, preview, state, validation, and keymap are repository-owned code in
-    a separate module.
+9. Keep built-in Completion Preview disabled. It is an alternative
+   one-candidate ghost UI, not a fix for a broken eager list.
 
 ## Current codebase context
 
@@ -281,10 +264,6 @@ placed in Eglot's completion-at-point path.
   recursive all-files discovery is implemented.
 - `profiles/common/.config/emacs/init.el:47-49` already selects TRAMP `sshx` and
   disables shared connections through saved customization.
-- `profiles/common/.config/emacs/init.el:248-262` configures Gptel and its
-  Anthropic backend.
-- `profiles/common/.config/emacs/init.el:756-769` owns the existing explicit
-  Gptel region-to-conversation workflow.
 - `profiles/common/.config/emacs/init.el:827-838` owns Yasnippet's key policy and
   deliberately leaves idle `TAB` available to the major mode.
 - `profiles/common/.config/emacs/init.el:840-875` owns Eglot and Xref behavior.
@@ -301,7 +280,7 @@ placed in Eglot's completion-at-point path.
   uses `C-c .` and `C-SPC` is the only documented universal CAPF key.
 - `profiles/common/.config/emacs/init.el:1099-1163` defines the current static
   Occur, project grep, Imenu, Xref, Flymake, and Gptel leader commands.
-- `profiles/common/.config/emacs/init.el:1192-1223` owns AI submaps and the
+- `profiles/common/.config/emacs/init.el:1192-1223` owns leader submaps and the
   current normal/visual `C-p` project-file binding.
 - `profiles/common/.config/emacs/init.el:1252-1300` configures TRAMP completion,
   remote paths, copy behavior, and performance.
@@ -509,82 +488,22 @@ Implement the stateful toggle in
 justified by nested-minibuffer lifecycle and cancellation state; simple entry
 bindings remain in `init.el`.
 
-## Optional gptel inline suggestion design
-
-The feature is an inline suggestion or ghost-text completion, not an LSP inlay
-hint. Inlay hints annotate existing text with inferred information. A suggestion
-is proposed insertable text.
-
-Use public `gptel-request` with `:stream nil` initially. Gptel owns transport;
-the repository owns presentation and lifecycle. Keep one buffer-local state
-object containing generation, state, hidden request buffer, origin marker,
-character modification tick, request kind, response text, and overlay or side
-preview.
-
-State flow:
-
-```text
-idle
-  -> explicit request
-pending
-  -> stale/error/cancel: idle
-  -> valid line: line-visible
-  -> valid block: block-visible
-line-visible
-  -> TAB or explicit accept: atomic insert, idle
-  -> edit/move/dismiss: idle
-block-visible
-  -> explicit accept: atomic insert and indent, idle
-  -> edit/move/close/dismiss: idle
-```
-
-A callback is current only when the source buffer, generation, state, marker,
-point, modification tick, and request kind still match. Cancellation calls the
-public `gptel-abort` command in the dedicated request buffer, increments the
-generation, and clears the UI. Abort is not sufficient by itself because a
-callback can race with cancellation, so the generation and modification-tick
-checks remain authoritative.
-
-One-line suggestions use a zero-width overlay with a shadow-colored
-`after-string`. Multi-line blocks use a read-only side preview because a
-multi-line overlay would visually displace source lines. Existing
-`gptel-rewrite` remains the replacement workflow.
-
-Default privacy boundary:
-
-- Explicit requests only; no idle/autotrigger requests.
-- At most 60 lines before point, 30 after, and 16 KiB total.
-- No sibling/project files, Git state, Eglot state, tools, or accumulated chat
-  context.
-- Base filename and major mode only; no absolute path, user, or host in prompt.
-- Deny TRAMP buffers by default. Require explicit per-request or buffer-local
-  consent before sending remote source text to the configured backend.
-- Do not log prompts or responses by default.
-
-Keep the implementation in
-`profiles/common/.config/emacs/my-gptel-inline.el`, with mocked callback tests in
-`profiles/common/.config/emacs/my-gptel-inline-test.el`. Expected final size is
-about 220 to 300 runtime LOC and 160 to 240 test LOC. This is lifecycle-heavy
-state, not configuration that belongs inline in the main init file.
-
 ## Implementation phases
 
 ## Execution status
 
 - Plan ID: `emacs-completion-refinement`
-- Status: complete
-- Next milestone: N/A
-- Phase 1: complete
-- Phase 2: complete
-- Phase 3: complete
-- Phase 4: complete
-- Phase 5: complete
-- Phase 6: complete
-- Phase 7: complete
-- Phase 8: out of scope, not implemented
-- Phase 9: out of scope, not implemented
-- Overall success criteria: complete for Phases 1-7, subject to the recorded
-  interactive validation
+- Status: implementation complete, interactive validation pending
+- Next milestone: complete the recorded interactive validation matrix
+- Phase 1: implementation complete
+- Phase 2: implementation complete, interactive validation pending
+- Phase 3: implementation complete, interactive validation pending
+- Phase 4: implementation complete, interactive validation pending
+- Phase 5: implementation complete, interactive validation pending
+- Phase 6: implementation complete, interactive validation pending
+- Phase 7: implementation complete, interactive validation pending
+- Overall success criteria: batch-validated where recorded; live Eglot,
+  Consult, nested minibuffer, and TRAMP behavior remains pending
 
 ## Phase 1: Install Embark and Consult without changing CAPF ownership
 
@@ -792,7 +711,7 @@ state, not configuration that belongs inline in the main init file.
   transaction cell propagates a nested success through suspended prompts,
   while a nested quit leaves the outer minibuffer intact and refreshes its
   public completion display.
-- Five focused ERT tests cover both toggle directions, one-open success,
+- Eight focused ERT tests cover both toggle directions, one-open success,
   cancellation restoration, literal and Consult query transfer, public
   `read-file-name` initial arguments, local and remote backend choice, explicit
   remote users, missing remote `fd`, `.git` pruning, hidden files, and remote
@@ -859,52 +778,12 @@ state, not configuration that belongs inline in the main init file.
   Consult location, grep, and Xref exporters. Offline assertions confirm that
   completion acceptance remains owned by the built-in completion function.
 
-## Phase 8: Add optional one-line gptel ghost text
-
-### Changes
-
-1. Add `profiles/common/.config/emacs/my-gptel-inline.el` and mocked tests in
-   `my-gptel-inline-test.el`.
-2. Implement buffer-local lifecycle state, bounded prompts, a hidden per-source
-   request buffer, non-streaming `gptel-request`, generation/tick checks,
-   public `gptel-abort` cancellation, cleanup, and single-line validation.
-3. Present valid text with a shadow-colored zero-width overlay.
-4. Bind TAB only in the ephemeral visible-suggestion minor mode. Refuse or
-   dismiss AI while CAPF, Yasnippet, or Completion Preview is active.
-5. Deny remote-buffer requests by default and provide explicit opt-in.
-
-### Success criteria
-
-- Nothing is requested automatically.
-- TAB still indents while idle or pending.
-- A response appears only at its unchanged request origin.
-- One accept produces one undoable edit.
-- Movement, edits, repeat requests, cancel, error, mode change, and buffer death
-  leave no stale overlay or live request.
-- No remote source is sent without explicit consent.
-
-## Phase 9: Add optional gptel code-block side preview
-
-### Changes
-
-1. Add the explicit block request and a read-only side preview without selecting
-   it automatically.
-2. Track the unchanged source insertion marker and reject stale blocks.
-3. Insert with `atomic-change-group`; call public `indent-region` for program
-   modes and preserve provider whitespace in prose.
-4. Keep block acceptance explicit. Do not bind TAB for a block preview.
-5. Continue using existing `gptel-rewrite` for replacement and diff workflows.
-
-### Success criteria
-
-- Multiline suggestions never add display rows inside the source buffer.
-- Closing, canceling, moving, or editing leaves source unchanged.
-- Acceptance inserts the complete block once at the original point and one undo
-  removes it.
-- The line and block UI share cancellation and stale-response invariants without
-  interfering with chat, rewrite, Eglot, Consult, or Embark.
-
 ## Overall success criteria
+
+The implementation is complete, but these criteria are not complete until the
+live checks in the validation matrix pass, especially Eglot refinement,
+Consult preview and cancellation, nested minibuffer restoration, and real
+TRAMP sessions.
 
 - Built-in `*Completions*` is the only candidate list across CAPF, minibuffer,
   Consult search, files, buffers, and navigation commands.
@@ -912,15 +791,13 @@ state, not configuration that belongs inline in the main init file.
 - Hierarchical file traversal, recursive fuzzy discovery, separate entry keys,
   and a bidirectional in-session toggle all work locally and through TRAMP.
 - The key contract matches Neovim where context permits, while preserving file
-  descent, indentation, snippets, minibuffer history, and future AI acceptance.
+  descent, indentation, snippets, and minibuffer history.
 - Eglot completion refines after one explicit request and retains full LSP edit
   semantics.
 - Embark provides contextual single-target actions, stable collected
   multi-selection, and specialized persistent exports.
 - LSP locations use Xref/Flymake/hierarchy buffers rather than pretending that
   completion items are quickfix entries.
-- Optional AI suggestions are explicit, private by default, stale-safe, and
-  independent from deterministic completion and search.
 - Normal startup remains offline, and all package/external prerequisites are
   reproducibly documented or provisioned.
 
@@ -930,7 +807,7 @@ state, not configuration that belongs inline in the main init file.
 
 - Run `check-parens` on every changed Emacs Lisp file.
 - Byte-compile new local modules to a temporary output directory.
-- Run focused ERT for picker toggle and gptel async lifecycle.
+- Run focused ERT for the picker toggle.
 - Load `init.el` in Emacs 31.1 batch mode after isolated package provisioning.
 - Run `git diff --check`.
 - Assert every planned command and keymap binding resolves after lazy packages
@@ -969,16 +846,6 @@ state, not configuration that belongs inline in the main init file.
 - Remote all-files inclusion of hidden and ignored files, `.git` exclusion, and
   non-traversal of symlinked directories.
 
-### AI checks
-
-- Mock callbacks arriving after edit, movement, repeat request, cancel, mode
-  change, and buffer death.
-- Idle, pending, visible, and dismissed TAB resolution.
-- CAPF, Yasnippet, and Completion Preview mutual exclusion.
-- Malformed, fenced, nil, canceled, and error responses.
-- Single-undo acceptance and indentation failure rollback.
-- Remote denial and explicit consent.
-
 ## Risks and constraints
 
 - `consult-ripgrep` depends on `rg`; local `consult-fd` depends on `fd`; remote
@@ -997,10 +864,6 @@ state, not configuration that belongs inline in the main init file.
 - Direct Embark marks in `*Completions*` are not durable across eager rebuilds.
 - Flyspell minor maps override global punctuation keys; use the conflict-free
   `C-c .` binding.
-- An AI callback can arrive after cancellation. Generation and modification
-  checks are mandatory.
-- Sending source context to an external model has cost and privacy impact.
-  Explicit invocation, bounded local context, and remote denial are defaults.
 
 ## References
 
@@ -1026,6 +889,3 @@ state, not configuration that belongs inline in the main init file.
 - TRAMP completion: https://www.gnu.org/software/emacs/manual/html_node/tramp/File-name-completion.html
 - TRAMP package integration: https://www.gnu.org/software/emacs/manual/html_node/tramp/External-packages.html
 - fd hidden and ignored files: https://github.com/sharkdp/fd#hidden-and-ignored-files
-- Gptel public request API: https://github.com/karthink/gptel/blob/master/gptel-request.el
-- Emacs overlay display: https://www.gnu.org/software/emacs/manual/html_node/elisp/Overlay-Properties.html
-- Emacs atomic changes: https://www.gnu.org/software/emacs/manual/html_node/elisp/Atomic-Changes.html
