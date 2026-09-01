@@ -910,12 +910,13 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 ;; completion
 (setq completion-styles '(basic partial-completion flex)
-      completion-category-defaults nil
-      completion-category-overrides nil
+      completion-category-overrides '((eglot-capf (styles flex)))
       completion-eager-display t
       completion-eager-update t
+      completion-show-help nil
       completions-format 'one-column
       completions-detailed t
+      completions-max-height 10
       minibuffer-visible-completions 'up-down)
 
 (defun my/file-completion-at-point ()
