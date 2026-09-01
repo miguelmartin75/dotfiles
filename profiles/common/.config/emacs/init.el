@@ -909,29 +909,38 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 
 ;; completion
-(require 'icomplete)
 (setq completion-styles '(basic partial-completion flex)
       completion-category-defaults nil
       completion-category-overrides nil
-      icomplete-in-buffer t
-      icomplete-show-matches-on-no-input t
-      icomplete-vertical-in-buffer-adjust-list t)
-(icomplete-vertical-mode 1)
-(keymap-set icomplete-minibuffer-map
-            "<remap> <minibuffer-complete-and-exit>"
-            #'icomplete-ret)
+      completion-eager-display t
+      completion-eager-update t
+      completions-format 'one-column
+      completions-detailed t
+      minibuffer-visible-completions 'up-down)
 
-(keymap-set completion-in-region-mode-map
-            "TAB" #'icomplete-forward-completions)
-(keymap-set completion-in-region-mode-map
-            "S-TAB" #'icomplete-backward-completions)
-(keymap-set completion-in-region-mode-map
-            "<backtab>" #'icomplete-backward-completions)
-(advice-add 'completion-at-point :after #'minibuffer-hide-completions)
+(defun my/file-completion-at-point ()
+  "Return file completion data for a path-like name at point."
+  (when-let* ((bounds (bounds-of-thing-at-point 'filename))
+              (file-name (buffer-substring-no-properties
+                          (car bounds) (cdr bounds)))
+              ((or (string-prefix-p "/" file-name)
+                   (string-prefix-p "./" file-name)
+                   (string-prefix-p "../" file-name)
+                   (string-prefix-p "~/" file-name))))
+    (list (car bounds) (cdr bounds) #'completion-file-name-table
+          :exclusive 'no)))
+
+(add-hook 'completion-at-point-functions #'my/file-completion-at-point t)
+;; Buffer-local CAPFs run before global ones, so put file completion ahead of
+;; Eglot in managed buffers.  It returns nil for ordinary code identifiers.
+(add-hook 'eglot-managed-mode-hook
+          (lambda ()
+            (add-hook 'completion-at-point-functions
+                      #'my/file-completion-at-point -90 t)))
 
 (global-completion-preview-mode -1)
-(define-key evil-insert-state-map (kbd "C-SPC") #'completion-at-point)
-(define-key evil-insert-state-map (kbd "C-M-i") #'completion-at-point)
+(define-key evil-insert-state-map (kbd "C-SPC") #'completion-help-at-point)
+(define-key evil-insert-state-map (kbd "C-M-i") #'completion-help-at-point)
 (define-key evil-insert-state-map (kbd "M-/") #'dabbrev-expand)
 (evil-define-key '(normal visual insert) 'global
   (kbd "C-s") #'isearch-forward)
