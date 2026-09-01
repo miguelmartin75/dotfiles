@@ -409,12 +409,25 @@
           evil-ghostel-escape 'terminal)
   ;; Outer Evil state and Ghostel input mode are independent axes.  In outer
   ;; insert state, plain Escape always reaches the inner terminal; normal-state
-  ;; Escape keeps its usual meaning.  Outside char mode, C-c ESC enters outer
-  ;; normal state once, and i returns only the outer axis to insert.  C-c C-j
-  ;; returns the Ghostel axis to semi-char; C-c M-d enters char mode, where
-  ;; C-c ESC goes inward until M-RET exits char mode.  In semi-char plus outer
-  ;; insert, C-w reaches the PTY; outer normal retains its C-w window prefix.
-  :hook (ghostel-mode . evil-ghostel-mode))
+  ;; Escape keeps its usual meaning.  Outside char mode, Command+Escape enters
+  ;; outer normal state once; C-c <escape> is the package fallback where that
+  ;; function-key event is distinguishable.  The i, a, I, and A keys keep
+  ;; evil-ghostel's terminal-aware entry behavior; o and Return alias i.  C-c C-j
+  ;; returns the Ghostel axis to semi-char; C-c M-d enters char mode, where every
+  ;; key goes inward until M-RET exits.  In semi-char plus outer insert, C-w reaches
+  ;; the PTY; outer normal retains its C-w window prefix.
+  :hook (ghostel-mode . evil-ghostel-mode)
+  :config
+  (keymap-set ghostel-char-mode-map "s-<escape>"
+              (lambda ()
+                (interactive)
+                (ghostel-send-key "escape" "super")))
+  (evil-define-key 'insert evil-ghostel-mode-map
+    (kbd "s-<escape>") #'evil-force-normal-state)
+  (evil-define-key 'normal evil-ghostel-mode-map
+    (kbd "o") #'evil-ghostel-insert
+    (kbd "RET") #'evil-ghostel-insert
+    (kbd "<return>") #'evil-ghostel-insert))
 
 (defvar ghostel-compile-buffer-name)
 (use-package ghostel-compile
