@@ -676,8 +676,80 @@
   (setq markdown-command "multimarkdown"
         markdown-indent-on-enter 'indent-and-new-item))
 
+(defun my/markdown-return ()
+  "Delete an empty Markdown item or preserve native return behavior."
+  (interactive)
+  (let ((bounds (markdown-cur-list-item-bounds)))
+    (if (and bounds
+             (not (markdown-code-block-at-point-p))
+             (= (- (nth 1 bounds) (nth 0 bounds))
+                (+ (nth 3 bounds) (length (nth 5 bounds)))))
+        (delete-region (line-beginning-position) (line-beginning-position 2))
+      (call-interactively #'markdown-enter-key))))
+
+(with-eval-after-load 'markdown-mode
+  (keymap-set markdown-mode-map "RET" #'my/markdown-return))
+
+(defun my/markdown-ts-return ()
+  "Terminate an empty Markdown item or insert a matching sibling."
+  (interactive)
+  (if (save-excursion
+        (beginning-of-line)
+        (looking-at-p "[ \t]*$"))
+      (markdown-ts-newline)
+    (let* ((node
+            (save-excursion
+              (back-to-indentation)
+              (treesit-node-at (point) 'markdown)))
+           (item (and node (treesit-parent-until node "\\`list_item\\'" t)))
+           (empty-item
+            (save-excursion
+              (beginning-of-line)
+              (looking-at-p
+               "[ \t]*\\(?:[-+*]\\|[0-9]+[.)]\\)[ \t]*\\(?:\\[[ xX]\\][ \t]*\\)?$")))
+           (list-context
+            (or item
+                (let ((error (and node
+                                  (treesit-parent-until node "\\`ERROR\\'" t))))
+                  (and (= (line-end-position) (point-max))
+                       error
+                       (member (treesit-node-type node)
+                               '("list_marker_minus" "list_marker_plus"
+                                 "list_marker_star" "list_marker_dot"
+                                 "list_marker_parenthesis"))
+                       (equal (treesit-node-type (treesit-node-parent error))
+                              "document")))))
+           (task-item
+            (and item
+                 (seq-some
+                  (lambda (child)
+                    (member (treesit-node-type child)
+                            '("task_list_marker_checked"
+                              "task_list_marker_unchecked")))
+                  (treesit-node-children item))))
+           (has-child
+            (save-excursion
+              (beginning-of-line)
+              (let ((indentation (current-indentation)))
+                (forward-line 1)
+                (while (and (not (eobp))
+                            (looking-at-p "[ \t]*$"))
+                  (forward-line 1))
+                (> (current-indentation) indentation)))))
+      (if (and empty-item list-context (not has-child))
+          (delete-region (line-beginning-position) (line-beginning-position 2))
+        (markdown-ts-insert-list-item)
+        (when (and task-item
+                   (save-excursion
+                     (let ((end (point)))
+                       (beginning-of-line)
+                       (and (looking-at
+                             "[ \t>]*\\(?:[-+*]\\|[0-9]+[.)]\\)[ \t]+")
+                            (= (match-end 0) end)))))
+          (insert "[ ] "))))))
+
 (with-eval-after-load 'markdown-ts-mode
-  (keymap-set markdown-ts-mode-map "RET" #'markdown-ts-insert-list-item))
+  (keymap-set markdown-ts-mode-map "RET" #'my/markdown-ts-return))
 
 (defun my/markdown-structural-command (table-command ts-command fallback-command)
   "Run the Markdown structural command appropriate for the current mode."
@@ -1213,14 +1285,26 @@ When UP is non-nil, swap with the preceding paragraph."
 ;; Org and research
 
 (defun my/org-return ()
-  "Create an Org list item or preserve native return behavior."
+  "Delete an empty Org item, create a sibling, or preserve native return."
   (interactive)
-  (let ((item-start (org-in-item-p)))
+  (let ((item-start
+         (and (not (save-excursion
+                     (beginning-of-line)
+                     (looking-at-p "[ \t]*$")))
+              (org-in-item-p))))
     (if item-start
-        (let ((checkbox (save-excursion
-                          (goto-char item-start)
-                          (org-at-item-checkbox-p))))
-          (org-insert-item checkbox))
+        (let ((item (org-element-lineage (org-element-context) '(item) t)))
+          (if (and item
+                   (not (org-element-property :contents-begin item))
+                   (not (org-element-property :tag item)))
+              (progn
+                (goto-char item-start)
+                (delete-region (line-beginning-position)
+                               (line-beginning-position 2)))
+            (let ((checkbox (save-excursion
+                              (goto-char item-start)
+                              (org-at-item-checkbox-p))))
+              (org-insert-item checkbox))))
       (call-interactively #'org-return))))
 
 (use-package org

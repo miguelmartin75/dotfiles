@@ -13,9 +13,11 @@
         (second-position (string-match (regexp-quote second) text)))
     (and first-position second-position (< first-position second-position))))
 
-(defun my/markdown-test-return-result (mode text point-text)
+(defun my/markdown-test-return-result (mode text point-text &optional include-points)
   "Return the effective RET command and resulting text in MODE.
-Point is placed immediately after POINT-TEXT before invoking the command."
+Point is placed immediately after POINT-TEXT before invoking the command.
+When INCLUDE-POINTS is non-nil, also return its positions before and after RET
+and whether it ends at the beginning of a line."
   (with-temp-buffer
     (insert text)
     (funcall mode)
@@ -23,10 +25,17 @@ Point is placed immediately after POINT-TEXT before invoking the command."
     (goto-char (point-min))
     (search-forward point-text)
     (evil-insert-state)
-    (let ((command (key-binding (kbd "RET"))))
+    (let ((before (point))
+          (command (key-binding (kbd "RET"))))
       (call-interactively command)
-      (cons command
-            (buffer-substring-no-properties (point-min) (point-max))))))
+      (if include-points
+          (list command
+                (buffer-substring-no-properties (point-min) (point-max))
+                before
+                (point)
+                (bolp))
+        (cons command
+              (buffer-substring-no-properties (point-min) (point-max)))))))
 
 (defun my/markdown-test-assert-boundary-unchanged
     (mode text point-text mark-text command &optional metadata)
@@ -69,8 +78,8 @@ Point is placed immediately after POINT-TEXT before invoking the command."
     (let ((expected-command
            (cond
             ((eq mode 'org-mode) #'my/org-return)
-            ((eq mode 'markdown-ts-mode) #'markdown-ts-insert-list-item)
-            (t #'markdown-enter-key))))
+            ((eq mode 'markdown-ts-mode) #'my/markdown-ts-return)
+            (t #'my/markdown-return))))
       (should (eq (car (my/markdown-test-return-result mode "- item\n" "item"))
                   expected-command)))
     (should (equal (cdr (my/markdown-test-return-result mode "- item\n" "item"))
@@ -90,19 +99,21 @@ Point is placed immediately after POINT-TEXT before invoking the command."
         "- first\n  before\n- after\n")))
     (should (equal (cdr (my/markdown-test-return-result mode "1. item\n" "item"))
                    "1. item\n2. \n"))
-    (should
-     (equal
-      (cdr (my/markdown-test-return-result
-            mode
-            (if (eq mode 'org-mode) "* Head\n- [X] item\n" "# Head\n- [X] item\n")
-            "item"))
-      (if (eq mode 'markdown-ts-mode)
-          "# Head\n- [X] item\n- \n"
-        (if (eq mode 'org-mode)
-            "* Head\n- [X] item\n- [ ] \n"
-          "# Head\n- [X] item\n- [ ] \n"))))
+    (dolist (checkbox '("[ ]" "[X]"))
+      (let ((heading (if (eq mode 'org-mode) "* Head\n" "# Head\n")))
+        (should
+         (equal
+          (cdr (my/markdown-test-return-result
+                mode (concat heading "- " checkbox " item\n") "item"))
+          (concat heading "- " checkbox " item\n- [ ] \n")))))
     (should (equal (cdr (my/markdown-test-return-result mode "prose\n" "prose"))
                    "prose\n\n"))
+    (dolist (fixture '(("- b\n" . "- b\n\n")
+                       ("- b\n\n" . "- b\n\n\n")))
+      (let ((result (my/markdown-test-return-result mode (car fixture) "\n" t)))
+        (should (equal (nth 1 result) (cdr fixture)))
+        (should (= (nth 3 result) (1+ (nth 2 result))))
+        (should (nth 4 result))))
     (when (not (eq mode 'markdown-ts-mode))
       (let* ((table (if (eq mode 'org-mode)
                         "| a | b |\n|---+---|\n| c | d |\n"
@@ -112,7 +123,36 @@ Point is placed immediately after POINT-TEXT before invoking the command."
                   "| a | b |\n|---+---|\n| c | d |\n|   |   |\n"
                 "| a | b |\n|---|---|\n| c | d |\n|   |   |\n")))
         (should (equal (cdr (my/markdown-test-return-result mode table "d"))
-                       expected)))))
+                       expected))))
+    (dolist (marker '("- " "1. " "- [ ] "))
+      (let* ((text (if (and (eq mode 'org-mode)
+                            (equal marker "- [ ] "))
+                       (concat "* Head\n" marker "\n")
+                     (concat marker "\n")))
+             (expected (if (and (eq mode 'org-mode)
+                                (equal marker "- [ ] "))
+                           "* Head\n"
+                         "")))
+        (should (equal (cdr (my/markdown-test-return-result mode text marker))
+                       expected))))
+    (dolist (marker '("- " "1. " "- [ ] "))
+      (should (equal (cdr (my/markdown-test-return-result mode marker marker))
+                     "")))
+    (should (equal (cdr (my/markdown-test-return-result
+                         mode "- item\n- \n" "item\n- "))
+                   "- item\n"))
+    (should (equal (cdr (my/markdown-test-return-result mode "  - \n" "- "))
+                   ""))
+    (let ((result (cdr (my/markdown-test-return-result
+                        mode "- \n  - child\n" "- "))))
+      (should (equal result
+                     (if (eq mode 'markdown-ts-mode)
+                         "-\n- \n  - child\n"
+                       "- \n- \n  - child\n")))))
+  (should
+   (equal (cdr (my/markdown-test-return-result
+                'org-mode "- term :: \n" "term :: "))
+          "- term ::\n-  :: \n"))
   (with-temp-buffer
     (insert "| a | b |\n|---|---|\n| c | d |\n| e | f |\n")
     (markdown-ts-mode)
@@ -121,7 +161,7 @@ Point is placed immediately after POINT-TEXT before invoking the command."
     (search-forward "c")
     (evil-insert-state)
     (markdown-ts-in-table-mode 1)
-    (should (eq (key-binding (kbd "RET")) #'markdown-ts-insert-list-item))
+    (should (eq (key-binding (kbd "RET")) #'my/markdown-ts-return))
     (should (eq (key-binding (kbd "<return>")) #'markdown-ts-table-next-row))
     (call-interactively (key-binding (kbd "<return>")))
     (should (equal (thing-at-point 'line t) "| e | f |\n")))
@@ -137,7 +177,32 @@ Point is placed immediately after POINT-TEXT before invoking the command."
     (should (eq (key-binding (kbd "RET")) #'markdown-ts--code-block-newline))
     (call-interactively (key-binding (kbd "RET")))
     (should (equal (buffer-substring-no-properties (point-min) (point-max))
-                   "```sh\necho body\n\n```\n"))))
+                   "```sh\necho body\n\n```\n")))
+  (with-temp-buffer
+    (insert "    - \n")
+    (markdown-ts-mode)
+    (font-lock-ensure)
+    (goto-char (point-min))
+    (end-of-line)
+    (evil-insert-state)
+    (should (eq (key-binding (kbd "RET")) #'my/markdown-ts-return))
+    (call-interactively (key-binding (kbd "RET")))
+    (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                   "    - \n\n")))
+  (dolist (fixture '(("---\n- \n---\n" . "---\n- \n\n---\n")
+                     ("<div>\n- \n</div>\n" . "<div>\n- \n\n</div>\n")))
+    (with-temp-buffer
+      (insert (car fixture))
+      (markdown-ts-mode)
+      (font-lock-ensure)
+      (goto-char (point-min))
+      (forward-line 1)
+      (end-of-line)
+      (evil-insert-state)
+      (should (eq (key-binding (kbd "RET")) #'my/markdown-ts-return))
+      (call-interactively (key-binding (kbd "RET")))
+      (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                     (cdr fixture))))))
 
 (ert-deftest my/markdown-parity-structural-behavior ()
   (dolist (mode '(markdown-ts-mode markdown-mode))
