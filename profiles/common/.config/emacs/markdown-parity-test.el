@@ -13,37 +13,165 @@
         (second-position (string-match (regexp-quote second) text)))
     (and first-position second-position (< first-position second-position))))
 
+(defun my/markdown-test-return-result (mode text point-text)
+  "Return the effective RET command and resulting text in MODE.
+Point is placed immediately after POINT-TEXT before invoking the command."
+  (with-temp-buffer
+    (insert text)
+    (funcall mode)
+    (font-lock-ensure)
+    (goto-char (point-min))
+    (search-forward point-text)
+    (evil-insert-state)
+    (let ((command (key-binding (kbd "RET"))))
+      (call-interactively command)
+      (cons command
+            (buffer-substring-no-properties (point-min) (point-max))))))
+
+(defun my/markdown-test-assert-boundary-unchanged
+    (mode text point-text mark-text command &optional metadata)
+  "Assert COMMAND rejects a Markdown boundary without changing buffer state."
+  (with-temp-buffer
+    (let ((before-text (if metadata "" "outside top\n")))
+      (insert before-text text "outside bottom\n")
+      (funcall mode)
+      (font-lock-ensure)
+      (when metadata
+        (if (eq mode 'markdown-ts-mode)
+            (should (equal (treesit-node-type
+                            (treesit-node-child (treesit-buffer-root-node) 0 t))
+                           "minus_metadata"))
+          (should (get-text-property (point-min) 'markdown-yaml-metadata-begin))))
+      (goto-char (+ (point-min) (length before-text)))
+      (narrow-to-region (point) (- (point-max) (length "outside bottom\n")))
+      (goto-char (point-min))
+      (search-forward mark-text)
+      (set-mark (point))
+      (goto-char (point-min))
+      (search-forward point-text)
+      (setq-local transient-mark-mode t)
+      (setq mark-active t)
+      (let ((before
+             (list (save-restriction
+                     (widen)
+                     (buffer-substring-no-properties (point-min) (point-max)))
+                   (point) (mark) mark-active (point-min) (point-max))))
+        (should-error (funcall command) :type 'user-error)
+        (should
+         (equal before
+                (list (save-restriction
+                        (widen)
+                        (buffer-substring-no-properties (point-min) (point-max)))
+                      (point) (mark) mark-active (point-min) (point-max))))))))
+
+(ert-deftest my/markdown-parity-list-return-behavior ()
+  (dolist (mode '(org-mode markdown-ts-mode markdown-mode))
+    (let ((expected-command
+           (cond
+            ((eq mode 'org-mode) #'my/org-return)
+            ((eq mode 'markdown-ts-mode) #'markdown-ts-insert-list-item)
+            (t #'markdown-enter-key))))
+      (should (eq (car (my/markdown-test-return-result mode "- item\n" "item"))
+                  expected-command)))
+    (should (equal (cdr (my/markdown-test-return-result mode "- item\n" "item"))
+                   "- item\n- \n"))
+    (should
+     (equal
+      (cdr (my/markdown-test-return-result mode "- before after\n" "before"))
+      (if (eq mode 'markdown-mode)
+          "- before\n-  after\n"
+        "- before\n- after\n")))
+    (should
+     (equal
+      (cdr (my/markdown-test-return-result
+            mode "- first\n  before after\n" "before"))
+      (if (eq mode 'markdown-mode)
+          "- first\n  before\n-  after\n"
+        "- first\n  before\n- after\n")))
+    (should (equal (cdr (my/markdown-test-return-result mode "1. item\n" "item"))
+                   "1. item\n2. \n"))
+    (should
+     (equal
+      (cdr (my/markdown-test-return-result
+            mode
+            (if (eq mode 'org-mode) "* Head\n- [X] item\n" "# Head\n- [X] item\n")
+            "item"))
+      (if (eq mode 'markdown-ts-mode)
+          "# Head\n- [X] item\n- \n"
+        (if (eq mode 'org-mode)
+            "* Head\n- [X] item\n- [ ] \n"
+          "# Head\n- [X] item\n- [ ] \n"))))
+    (should (equal (cdr (my/markdown-test-return-result mode "prose\n" "prose"))
+                   "prose\n\n"))
+    (when (not (eq mode 'markdown-ts-mode))
+      (let* ((table (if (eq mode 'org-mode)
+                        "| a | b |\n|---+---|\n| c | d |\n"
+                      "| a | b |\n|---|---|\n| c | d |\n"))
+           (expected
+              (if (eq mode 'org-mode)
+                  "| a | b |\n|---+---|\n| c | d |\n|   |   |\n"
+                "| a | b |\n|---|---|\n| c | d |\n|   |   |\n")))
+        (should (equal (cdr (my/markdown-test-return-result mode table "d"))
+                       expected)))))
+  (with-temp-buffer
+    (insert "| a | b |\n|---|---|\n| c | d |\n| e | f |\n")
+    (markdown-ts-mode)
+    (font-lock-ensure)
+    (goto-char (point-min))
+    (search-forward "c")
+    (evil-insert-state)
+    (markdown-ts-in-table-mode 1)
+    (should (eq (key-binding (kbd "RET")) #'markdown-ts-insert-list-item))
+    (should (eq (key-binding (kbd "<return>")) #'markdown-ts-table-next-row))
+    (call-interactively (key-binding (kbd "<return>")))
+    (should (equal (thing-at-point 'line t) "| e | f |\n")))
+  (with-temp-buffer
+    (insert "```sh\necho body\n```\n")
+    (markdown-ts-mode)
+    (font-lock-ensure)
+    (goto-char (point-min))
+    (search-forward "body")
+    (evil-insert-state)
+    (run-hooks 'post-command-hook)
+    (should markdown-ts-code-block-in-context-mode)
+    (should (eq (key-binding (kbd "RET")) #'markdown-ts--code-block-newline))
+    (call-interactively (key-binding (kbd "RET")))
+    (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                   "```sh\necho body\n\n```\n"))))
+
 (ert-deftest my/markdown-parity-structural-behavior ()
   (dolist (mode '(markdown-ts-mode markdown-mode))
     (with-temp-buffer
-      (insert "# first\n\n# second\n")
+      (insert "# first\nfirst body\n## first child\nchild body\n\n# second\nsecond body\n")
       (funcall mode)
       (goto-char (point-min))
       (search-forward "# second")
       (beginning-of-line)
       (my/markdown-move-up)
       (should (my/markdown-test-before-p (buffer-string) "# second" "# first"))
+      (should (my/markdown-test-before-p (buffer-string) "second body" "# first"))
+      (should (my/markdown-test-before-p (buffer-string) "# first" "## first child"))
+      (should (my/markdown-test-before-p (buffer-string) "## first child" "child body"))
       (my/markdown-move-down)
       (should (my/markdown-test-before-p (buffer-string) "# first" "# second"))
       (goto-char (point-min))
       (my/markdown-demote)
-      (should (string-match-p "## first" (buffer-string)))
+      (should (string-match-p "^## first\n" (buffer-string)))
       (my/markdown-promote)
-      (should-not (string-match-p "## first" (buffer-string))))
+      (should (string-match-p "^# first\n" (buffer-string))))
     (with-temp-buffer
-      (insert "- parent\n- child\n")
+      (insert "- first\n  first continuation\n  - first child\n- second\n  second continuation\n")
       (funcall mode)
       (goto-char (point-min))
+      (search-forward "first")
       (my/markdown-move-down)
-      (should (my/markdown-test-before-p (buffer-string) "- child" "- parent")))
-    (with-temp-buffer
-      (insert "- parent\n- child\n")
-      (funcall mode)
+      (should (my/markdown-test-before-p (buffer-string) "- second" "- first"))
+      (should (my/markdown-test-before-p (buffer-string) "second continuation" "- first"))
+      (should (my/markdown-test-before-p (buffer-string) "- first" "first child"))
       (goto-char (point-min))
-      (search-forward "child")
-      (beginning-of-line)
+      (search-forward "first continuation")
       (my/markdown-move-up)
-      (should (my/markdown-test-before-p (buffer-string) "- child" "- parent")))
+      (should (my/markdown-test-before-p (buffer-string) "- first" "- second")))
     (with-temp-buffer
       (insert "- parent\n- child\n")
       (funcall mode)
@@ -76,7 +204,73 @@
       (search-forward "one")
       (search-backward "one")
       (my/markdown-promote)
-      (should (my/markdown-test-before-p (buffer-string) "First" "Second")))))
+      (should (my/markdown-test-before-p (buffer-string) "First" "Second")))
+    (with-temp-buffer
+      (let ((original
+             "# section\nfirst line\nfirst column\n\n   \n\t \nsecond line\nsecond column\n"))
+        (insert original)
+        (funcall mode)
+        (goto-char (point-min))
+        (search-forward "second line")
+        (set-mark (point))
+        (search-forward "second column")
+        (backward-char 3)
+        (let ((column (current-column)))
+          (setq-local transient-mark-mode t)
+          (setq mark-active t)
+          (my/markdown-move-up)
+          (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                         "# section\nsecond line\nsecond column\n\n   \n\t \nfirst line\nfirst column\n"))
+          (should (= (current-column) column))
+          (should (equal (thing-at-point 'line t) "second column\n"))
+          (should (region-active-p))
+          (should (equal (save-excursion
+                           (goto-char (mark))
+                           (thing-at-point 'line t))
+                         "second line\n"))
+          (deactivate-mark)
+          (my/markdown-move-down)
+          (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                         original)))))))
+
+(ert-deftest my/markdown-parity-structural-boundaries ()
+  (dolist (mode '(markdown-ts-mode markdown-mode))
+    (dolist (fixture
+             '(("section start" "# section\ncurrent prose\n"
+                "current prose" "current prose" my/markdown-move-up)
+               ("section end" "# section\ncurrent prose\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("heading" "# first\ncurrent prose\n\n# second\nother prose\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("list" "current prose\n\n- item\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("table" "current prose\n\n| a | b |\n|---|---|\n| c | d |\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("raw HTML block" "current prose\n\n<div>block</div>\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("raw HTML block current context" "<div>block</div>\n\ncurrent prose\n"
+                "<div>block</div>" "<div>block</div>" my/markdown-move-down)
+               ("reference definition" "current prose\n\n[ref]: https://example.com\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("reference definition current context"
+                "[ref]: https://example.com\n\ncurrent prose\n"
+                "[ref]: https://example.com" "[ref]: https://example.com"
+                my/markdown-move-down)
+               ("block quote" "current prose\n\n> quote\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("metadata" "---\ntitle: metadata\n---\n\ncurrent prose\n"
+                "current prose" "current prose" my/markdown-move-up t)
+               ("thematic break" "current prose\n\n***\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("fenced code" "current prose\n\n```sh\ncode\n```\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("indented code" "current prose\n\n    code\n"
+                "current prose" "current prose" my/markdown-move-down)
+               ("spanning selection" "first prose\n\ncurrent prose\n"
+                "current prose" "first prose" my/markdown-move-up)))
+      (my/markdown-test-assert-boundary-unchanged
+       mode (nth 1 fixture) (nth 2 fixture) (nth 3 fixture) (nth 4 fixture)
+       (nth 5 fixture)))))
 
 (ert-deftest my/markdown-parity-access-and-binding-scope ()
   (let (normal-tab normal-control-i)

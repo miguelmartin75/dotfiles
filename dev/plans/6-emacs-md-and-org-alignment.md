@@ -33,7 +33,9 @@ available.
   `.md` files when the grammars are ready.
 - `profiles/common/.config/emacs/init.el:828` configures Org Babel languages.
 - `profiles/common/.config/emacs/init.el:901` enables `evil-org-mode`.
-- `profiles/common/.config/emacs/init.el:947` enables `org-autolist`.
+- `dev/plans/6-emacs-md-and-org-alignment-followups.md` records the current
+  list-aware Org `RET` and Markdown movement contract that superseded the
+  original parity layer.
 - `profiles/common/.config/emacs/init.el:963` configures Ghostel and loads
   the generic text sender.
 - `profiles/common/.config/emacs/init.el:1259` defines the current Org and
@@ -123,6 +125,10 @@ The viable alternative is to use Markdown's native `M-<arrow>` bindings only
 and document the differences. That would leave the requested `M-j` and
 `M-k` workflow inconsistent because `outline-minor-mode` wins over a direct
 major-mode Evil binding. A mode-local parity layer is the durable solution.
+
+The completed implementation record below describes the original parity
+layer. The current list-aware `RET` and point-driven Markdown movement contract
+is maintained in `dev/plans/6-emacs-md-and-org-alignment-followups.md`.
 
 ## Target Keybinding Contract
 

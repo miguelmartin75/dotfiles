@@ -2,15 +2,15 @@
 
 ## Status
 
-- Overall: in progress, 2/3 phases complete
-- Current phase: Phase 3
+- Overall: complete, 3/3 phases complete
+- Current phase: N/A
 - Parent plan: `dev/plans/6-emacs-md-and-org-alignment.md`
 
 Phase status:
 
 - Phase 1: complete
 - Phase 2: complete
-- Phase 3: pending
+- Phase 3: complete
 
 ## Goal
 
@@ -29,7 +29,11 @@ The result must work in Org, `markdown-ts-mode`, and fallback `markdown-mode`.
 It must use the selected upstream mode commands where they already implement
 the required behavior and add only the missing paragraph-region operation.
 
-## Relevant Code
+## Historical Relevant Code (Pre-implementation Baseline)
+
+The following pointers record the configuration before this follow-up was
+implemented. They are retained as historical evidence and do not describe the
+current runtime.
 
 - `profiles/common/.config/emacs/init.el:85-93` reloads repository-owned Emacs
   files and still includes `org-autolist.el`.
@@ -56,7 +60,10 @@ the required behavior and add only the missing paragraph-region operation.
 - `dev/plans/6-emacs-md-and-org-alignment.md` documents the completed base
   implementation and the original parity contract.
 
-## Verified Current Behavior
+## Verified Pre-implementation Behavior (Historical)
+
+The following observations record the baseline behavior before the completed
+implementation described below.
 
 ### Return behavior
 
@@ -372,7 +379,7 @@ Completed: 2026-09-02.
 
 ## Phase 3: Lock the Follow-up Contract with Tests and Documentation
 
-Status: pending.
+Status: complete.
 
 1. Extend `profiles/common/.config/emacs/markdown-parity-test.el` instead of
    creating a broad new test harness.
@@ -432,6 +439,39 @@ Success criteria:
 - Existing Org Babel, Markdown fenced-code, leader, target, and visual send
   behavior remains green.
 - All changed Emacs Lisp loads and byte-compiles without new errors.
+
+### Implementation record
+
+Completed: 2026-09-02.
+
+- Extended the existing Markdown parity suite to exercise effective list-aware
+  `RET` behavior in Org and both Markdown implementations, including native
+  Tree-sitter table and code-block context maps.
+- Expanded structural behavior coverage for heading subtrees, item trees and
+  continuation lines, table rows and columns, multiline paragraph swaps,
+  exact whitespace separators, point offsets, and contained active
+  selections.
+- Added parameterized no-mutation boundary fixtures for section limits,
+  headings, lists, tables, block quotes, parsed metadata, thematic breaks,
+  fenced and indented code, raw HTML, reference definitions, and
+  cross-paragraph selections. Each failure checks the full buffer plus point,
+  mark, activation, and narrowing.
+- Corrected fallback blank-line matching to recognize tab-containing
+  separators after the new fixture exposed the escaped-tab defect.
+- The whole-plan review exposed fallback raw HTML and reference definitions as
+  additional non-prose boundaries. Added public upstream checks for both as
+  current and adjacent contexts, with focused no-mutation regression fixtures.
+- Relabeled the original relevant-code and verified-behavior sections as the
+  historical pre-implementation baseline so the completed plan does not
+  present removed `org-autolist` state as current.
+- Updated the completed parent plan only at stale current-contract references,
+  linking this follow-up while preserving its historical implementation
+  record.
+- Final validation passed: Markdown parity ERT 5/5, leader ERT 6/6,
+  send-target ERT 5/5, batch initialization, `check-parens`, temporary byte
+  compilation of `init.el` and `markdown-parity-test.el`, and
+  `git diff --check`. Byte compilation produced both artifacts with existing
+  deferred-package and free-variable warnings but no errors.
 
 ## Final Success Criteria
 
