@@ -982,7 +982,9 @@
   ;; evil-ghostel's terminal-aware entry behavior; o and Return alias i.  C-c C-j
   ;; returns the Ghostel axis to semi-char; C-c M-d enters char mode, where every
   ;; key goes inward until M-RET exits.  In semi-char plus outer insert, C-w reaches
-  ;; the PTY; outer normal retains its C-w window prefix.
+  ;; the PTY, C-b opens a window prefix with C-b C-b sending literal Ctrl-B, and
+  ;; M-SPC opens the shared leader.  Char mode keeps C-b and M-SPC inward; outer
+  ;; normal retains its C-w window prefix.
   :hook (ghostel-mode . evil-ghostel-mode)
   :config
   (keymap-set ghostel-char-mode-map "s-<escape>"
@@ -1282,6 +1284,22 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("h l" . display-line-numbers-mode)))
   (keymap-set my/leader-map (car binding) (cdr binding)))
 
+(defvar my/terminal-window-map nil
+  "Window prefix map for terminal input in Evil Insert state.")
+
+(setq my/terminal-window-map (make-sparse-keymap))
+(set-keymap-parent my/terminal-window-map
+                   (keymap-lookup my/leader-map "w"))
+(keymap-set my/terminal-window-map "C-b"
+            (lambda ()
+              (interactive)
+              (ghostel-send-key "b" "ctrl")))
+
+(with-eval-after-load 'evil-ghostel
+  (evil-define-key* 'insert evil-ghostel-mode-map
+    (kbd "C-b") my/terminal-window-map
+    (kbd "M-SPC") my/leader-map))
+
 
 (defvar my/normal-leader-map nil
   "Leader map for Evil normal state.")
@@ -1333,6 +1351,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     my/visual-leader-map "a" (cons "ai" my/visual-ai-map))
   (which-key-add-keymap-based-replacements
     my/visual-leader-map "r" (cons "review" my/visual-review-map))
+  (which-key-add-keymap-based-replacements
+    my/terminal-window-map
+    "C-b" "send Ctrl-B")
   (which-key-add-keymap-based-replacements
     my/leader-map
     "a" "ai"

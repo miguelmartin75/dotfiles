@@ -40,7 +40,7 @@ terminal creation, session lifetime, layout, or window-command semantics.
 ## Status
 
 - Plan: complete
-- Implementation: not started
+- Implementation: in progress
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Planned tests: `profiles/common/.config/emacs/leader-bindings-test.el`
@@ -212,7 +212,10 @@ must not become a second implementation table.
 
 ## Phase 1: Add the terminal-local escape-hatch maps
 
-Status: not started
+Status: complete
+
+Success criteria status: satisfied by batch loading, structural checks, active
+Ghostel key-resolution probes, and a reload-freshness probe.
 
 ### Changes
 
