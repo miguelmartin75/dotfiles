@@ -40,7 +40,7 @@ terminal creation, session lifetime, layout, or window-command semantics.
 ## Status
 
 - Plan: complete
-- Implementation: in progress
+- Implementation: complete
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Planned tests: `profiles/common/.config/emacs/leader-bindings-test.el`
@@ -295,7 +295,16 @@ assertions in one test to minimize unit-test count.
 
 ## Phase 3: Verify reload behavior and live terminal UX
 
-Status: not started
+Status: complete
+
+Automated success criteria status: batch startup, the complete leader-binding
+ERT suite, `check-parens`, byte compilation in a temporary directory, reload
+freshness, char-mode exit restoration, and `git diff --check` passed. The live
+Ghostel, zmx, readline, tmux, Which Key, and ordinary-buffer interaction checks
+remain manual.
+
+Final review status: passed with no findings. All repository Emacs ERT suites
+passed, with 21 tests and 0 unexpected results.
 
 ### Automated verification
 
