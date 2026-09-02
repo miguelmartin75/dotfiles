@@ -1284,6 +1284,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("g p" . diff-hl-show-hunk)
        ("g s" . diff-hl-stage-current-hunk)
        ("g r" . diff-hl-revert-hunk)
+       ("g a" . my/annotate-current-hunk)
        ("a s" . gptel-send)
        ("t p" . ghostel-project)
        ("t t" . term-sessions-open)
@@ -1296,6 +1297,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("t g" . my/create-ghostel-terminal-in-split)
        ("t z" . my/open-or-create-zmx-session-in-split)
        ("r s" . my/annotate-send-all)
+       ("r v" . my/annotations-show)
        ("o a" . org-agenda)
        ("o c" . org-capture)
        ("o n" . org-roam-node-find)
@@ -1394,9 +1396,11 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "g p" "preview hunk"
     "g s" "stage hunk"
     "g r" "revert hunk (confirm)"
+    "g a" "annotate hunk"
     "h" "help"
     "o" "org"
     "r" "review"
+    "r v" "view annotations"
     "s" "search"
     "t" "terminals"
     "t r" "replay region/buffer, or choose target"

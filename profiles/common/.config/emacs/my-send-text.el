@@ -6,6 +6,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'subr-x)
 (require 'tab-bar)
 
@@ -279,6 +280,9 @@
 (defvar my/annotations nil
   "Queued source annotations awaiting explicit target selection.")
 
+(defvar my/annotation-next-id 0
+  "Next session-local identifier for queued source annotations.")
+
 (defun my/annotate-region (begin end annotation)
   "Queue the region from BEGIN to END with ANNOTATION."
   (interactive
@@ -287,6 +291,7 @@
              (read-string "Annotation: "))
      (user-error "Select a region to annotate")))
   (push (list :source (or buffer-file-name (buffer-name))
+              :id (cl-incf my/annotation-next-id)
               :start-line (line-number-at-pos begin t)
               :end-line (line-number-at-pos (max begin (1- end)) t)
               :mode major-mode
@@ -294,6 +299,37 @@
               :text (buffer-substring-no-properties begin end))
         my/annotations)
   (message "Queued annotation %d" (length my/annotations)))
+
+(defun my/annotate-current-hunk (annotation)
+  "Queue the current diff-hl hunk with ANNOTATION."
+  (interactive (list (read-string "Annotation: ")))
+  (let (begin end patch text)
+    (save-mark-and-excursion
+      (diff-hl-mark-hunk)
+      (setq begin (point)
+            end (mark)
+            text (buffer-substring-no-properties begin end))
+      (let ((hunk (diff-hl-show-hunk-buffer)))
+        (with-current-buffer (car hunk)
+          (let ((hunk-begin (point-min))
+                (hunk-end (point-max)))
+            (save-restriction
+              (widen)
+              (save-excursion
+                (goto-char hunk-begin)
+                (re-search-backward "^@@" nil t)
+                (setq patch
+                      (buffer-substring-no-properties (point) hunk-end))))))))
+    (push (list :source (or buffer-file-name (buffer-name))
+                :id (cl-incf my/annotation-next-id)
+                :start-line (line-number-at-pos begin t)
+                :end-line (line-number-at-pos (max begin (1- end)) t)
+                :mode major-mode
+                :annotation annotation
+                :patch patch
+                :text text)
+          my/annotations)
+    (message "Queued annotation %d" (length my/annotations))))
 
 (defun my/annotate-send-all (request)
   "Send queued annotations with optional overall REQUEST."
@@ -304,24 +340,161 @@
     (unless (string-empty-p request)
       (setq prompt (concat prompt "\n## Overall request\n\n" request "\n")))
     (dolist (item (reverse my/annotations))
-      (let ((text (plist-get item :text))
-            (fence "```")
-            (start 0))
-        (while (string-match "`+" text start)
-          (setq fence
-                (make-string (max (length fence)
-                                  (1+ (length (match-string 0 text)))) ?`)
-                start (match-end 0)))
+      (let ((patch (plist-get item :patch))
+            (text (plist-get item :text)))
         (setq prompt
               (concat prompt
                       "\n## " (plist-get item :source)
                       ":" (number-to-string (plist-get item :start-line))
                       "-" (number-to-string (plist-get item :end-line))
                       " (" (symbol-name (plist-get item :mode)) ")\n\n"
-                      (plist-get item :annotation) "\n\n" fence "\n"
-                      text "\n" fence "\n"))))
+                      (plist-get item :annotation) "\n\n"))
+        (dolist (section (append (and patch (list (list patch "diff")))
+                                 (list (list text ""))))
+          (let ((content (car section))
+                (language (cadr section))
+                (fence "```")
+                (start 0))
+            (while (string-match "`+" content start)
+              (setq fence
+                    (make-string (max (length fence)
+                                      (1+ (length (match-string 0 content)))) ?`)
+                    start (match-end 0)))
+            (setq prompt (concat prompt fence language "\n" content "\n" fence "\n"))
+            (when (string= language "diff")
+              (setq prompt (concat prompt "\n")))))))
     (my/send-text-to-target prompt)
     (setq my/annotations nil)))
+
+(define-derived-mode my/annotations-mode special-mode "Review Annotations"
+  "Major mode for reviewing queued source annotations.")
+
+(defconst my/annotations-buffer-name "*Review Annotations*"
+  "Buffer name for the annotation review queue.")
+
+(defun my/annotations-render ()
+  "Render `my/annotations' in the current review buffer."
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (if my/annotations
+        (dolist (item (reverse my/annotations))
+          (let ((begin (point))
+                (patch (plist-get item :patch)))
+            (insert (format "[%s] %s:%d-%d queued\n"
+                            (plist-get item :id)
+                            (plist-get item :source)
+                            (plist-get item :start-line)
+                            (plist-get item :end-line)))
+            (insert "Note: " (plist-get item :annotation) "\n")
+            (when patch
+              (insert "\nPatch:\n" patch "\n"))
+            (insert "\nSource:\n" (plist-get item :text) "\n\n")
+            (add-text-properties begin (point)
+                                 (list 'my/annotation-id
+                                       (plist-get item :id)))))
+      (insert "No annotations are queued.\n"))
+    (goto-char (point-min))))
+
+(defun my/annotations-current-item ()
+  "Return the queued annotation rendered at point."
+  (let ((id (get-text-property (point) 'my/annotation-id)))
+    (or (cl-find id my/annotations :key (lambda (item) (plist-get item :id)))
+        (user-error "No annotation at point"))))
+
+(defun my/annotations-next ()
+  "Move to the next annotation in the review queue."
+  (interactive)
+  (let ((id (get-text-property (point) 'my/annotation-id))
+        (position (point)))
+    (while (and (< position (point-max))
+                (or (not (get-text-property position 'my/annotation-id))
+                    (equal (get-text-property position 'my/annotation-id) id)))
+      (setq position
+            (next-single-property-change position 'my/annotation-id
+                                         nil (point-max))))
+    (if (< position (point-max))
+        (goto-char position)
+      (user-error "No next annotation"))))
+
+(defun my/annotations-previous ()
+  "Move to the previous annotation in the review queue."
+  (interactive)
+  (let ((id (get-text-property (point) 'my/annotation-id))
+        (position (point))
+        result)
+    (while (and (> position (point-min)) (not result))
+      (setq position
+            (previous-single-property-change position 'my/annotation-id
+                                             nil (point-min)))
+      (when (and (get-text-property position 'my/annotation-id)
+                 (not (equal (get-text-property position 'my/annotation-id) id)))
+        (setq result position)))
+    (if result
+        (goto-char result)
+      (user-error "No previous annotation"))))
+
+(defun my/annotations-visit ()
+  "Visit the source location for the annotation at point."
+  (interactive)
+  (let* ((item (my/annotations-current-item))
+         (source (plist-get item :source))
+         (buffer (get-buffer source)))
+    (if buffer
+        (pop-to-buffer buffer)
+      (find-file source))
+    (goto-char (point-min))
+    (forward-line (1- (plist-get item :start-line)))))
+
+(defun my/annotations-edit ()
+  "Edit the note for the annotation at point."
+  (interactive)
+  (let ((item (my/annotations-current-item)))
+    (setf (plist-get item :annotation)
+          (read-string "Annotation: " (plist-get item :annotation)))
+    (my/annotations-refresh)))
+
+(defun my/annotations-delete ()
+  "Delete the annotation at point from the queue."
+  (interactive)
+  (let ((item (my/annotations-current-item)))
+    (setq my/annotations (delq item my/annotations))
+    (my/annotations-render)
+    (message "Deleted annotation")))
+
+(defun my/annotations-refresh ()
+  "Refresh the review queue while preserving the current annotation."
+  (interactive)
+  (let ((id (plist-get (my/annotations-current-item) :id)))
+    (my/annotations-render)
+    (while (and (< (point) (point-max))
+                (not (equal (get-text-property (point) 'my/annotation-id) id)))
+      (goto-char (next-single-property-change
+                  (point) 'my/annotation-id nil (point-max))))))
+
+(defun my/annotations-send ()
+  "Prompt for an overall request and explicitly send the review queue."
+  (interactive)
+  (call-interactively #'my/annotate-send-all)
+  (my/annotations-render))
+
+(defun my/annotations-show ()
+  "Display the queued source annotations for review."
+  (interactive)
+  (let ((buffer (get-buffer-create my/annotations-buffer-name)))
+    (with-current-buffer buffer
+      (unless (derived-mode-p 'my/annotations-mode)
+        (my/annotations-mode))
+      (my/annotations-render))
+    (pop-to-buffer buffer)))
+
+(keymap-set my/annotations-mode-map "n" #'my/annotations-next)
+(keymap-set my/annotations-mode-map "p" #'my/annotations-previous)
+(keymap-set my/annotations-mode-map "RET" #'my/annotations-visit)
+(keymap-set my/annotations-mode-map "e" #'my/annotations-edit)
+(keymap-set my/annotations-mode-map "d" #'my/annotations-delete)
+(keymap-set my/annotations-mode-map "g" #'my/annotations-refresh)
+(keymap-set my/annotations-mode-map "s" #'my/annotations-send)
+(keymap-set my/annotations-mode-map "q" #'quit-window)
 
 (provide 'my-send-text)
 

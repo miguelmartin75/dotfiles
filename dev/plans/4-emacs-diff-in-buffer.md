@@ -2,8 +2,8 @@
 
 ## Status
 
-- Overall: in progress, 2/4 phases complete
-- Current phase: Phase 3
+- Overall: in progress, 3/4 phases complete
+- Current phase: Phase 4
 - Scope: local and TRAMP file buffers, Git working-tree review, and queued
   annotations sent through the existing target transport
 
@@ -418,7 +418,7 @@ Completed: 2026-09-02
 
 ## Phase 3: Add hunk annotations and a visible review queue
 
-Status: not started
+Status: complete
 
 ### Changes
 
@@ -460,6 +460,30 @@ Status: not started
 - Deleted lines reach the coding agent through canonical unified patch context.
 - Existing target selection, failure retention, and explicit-send behavior are
   preserved.
+
+### Implementation record
+
+Completed: 2026-09-02
+
+- Extended the shared queue with session-local IDs, hunk patches captured from
+  `diff-hl-mark-hunk` and `diff-hl-show-hunk-buffer`, optional `diff` fences
+  before source text, and the read-only `*Review Annotations*` special-mode
+  buffer. Its `n`, `p`, `RET`, `e`, `d`, `g`, `s`, and `q` actions cover queue
+  navigation, source visit, edit, delete, refresh, explicit send, and quit.
+- Added normal `SPC g a` and shared `SPC r v` bindings without changing visual
+  `SPC r a` or shared `SPC r s`.
+- `emacs --batch -Q -L profiles/common/.config/emacs -l
+  profiles/common/.config/emacs/send-text-targets-test.el -f
+  ert-run-tests-batch-and-exit` passed all 4 existing send-text tests.
+- `emacs --batch -Q --eval '<check-parens for my-send-text.el and init.el>'`
+  printed `CHECK_PARENS_OK` after the annotation changes.
+- A focused public-boundary harness verified hunk and region IDs, canonical
+  patch capture, patch-before-source rendering, source ordering, failure
+  retention, and the read-only review mode. It printed
+  `PHASE3_ANNOTATION_QUEUE_OK`.
+- `git diff --check` completed without output. Real hunk types, review-buffer
+  interaction, and all delivery targets remain part of the Phase 4 integrated
+  tests and interactive acceptance pass.
 
 ## Phase 4: Harden and accept the complete workflow
 
