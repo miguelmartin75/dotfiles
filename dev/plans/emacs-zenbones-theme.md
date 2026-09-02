@@ -83,7 +83,7 @@ Neovim configuration.
 
 - Plan: complete
 - Implementation: in progress
-- Current phase: Phase 3
+- Current phase: Phase 4
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Current theme: `profiles/common/.config/emacs/themes/mig-one-light-theme.el`
@@ -1325,7 +1325,7 @@ Status: complete
 
 ## Phase 3: Complete Markdown and Org ecosystem coverage
 
-Status: pending
+Status: complete
 
 ### Changes
 
