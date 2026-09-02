@@ -793,7 +793,13 @@
     (evil-local-set-key state (kbd "g S-TAB") #'my/markdown-cycle-buffer)
     (evil-local-set-key state (kbd "g <backtab>") #'my/markdown-cycle-buffer)
     (evil-local-set-key state (kbd "C-x n s") #'my/markdown-narrow-to-subtree)
-    (evil-local-set-key state (kbd "SPC o m") #'my/markdown-align-table)))
+    (evil-local-set-key state (kbd "SPC o m") #'my/markdown-align-table)
+    (evil-local-set-key state (kbd "SPC o RET")
+                        #'my/send-markdown-fenced-code-to-last-target)
+    (evil-local-set-key state (kbd "SPC t b")
+                        #'my/send-markdown-fenced-code-to-last-target)
+    (evil-local-set-key state (kbd "SPC t B")
+                        #'my/send-markdown-fenced-code-to-target)))
 
 
 

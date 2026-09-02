@@ -241,6 +241,76 @@
        (buffer-substring-no-properties (region-beginning) (region-end))
      (buffer-substring-no-properties (point-min) (point-max)))))
 
+(defun my/markdown-fenced-code-body ()
+  "Return the complete fenced Markdown code body at point.
+Signal a user error when point is not in a complete fenced code block."
+  (cond
+   ((eq major-mode 'markdown-ts-mode)
+    (let* ((node (treesit-node-at (point) 'markdown))
+           (block
+            (and node
+                 (treesit-parent-until
+                  node
+                  (lambda (candidate)
+                    (string= (treesit-node-type candidate)
+                             "fenced_code_block"))
+                  t))))
+      (unless block
+        (user-error "Point is not in a fenced Markdown code block"))
+      (let (delimiters content)
+        (dolist (child (treesit-node-children block))
+          (cond
+           ((string= (treesit-node-type child)
+                     "fenced_code_block_delimiter")
+            (push child delimiters))
+           ((string= (treesit-node-type child) "code_fence_content")
+            (setq content child))))
+        (unless (= (length delimiters) 2)
+          (user-error "Markdown fenced code block is incomplete"))
+        (if content
+            (buffer-substring-no-properties (treesit-node-start content)
+                                            (treesit-node-end content))
+          ""))))
+   ((derived-mode-p 'markdown-mode)
+    (let ((bounds (markdown-get-enclosing-fenced-block-construct)))
+      (unless bounds
+        (user-error "Point is not in a complete fenced Markdown code block"))
+      (save-excursion
+        (goto-char (car bounds))
+        (unless (looking-at "^[ \\t]*\\(`\\{3,\\}\\|~\\{3,\\}\\).*$")
+          (user-error "Point is not in a backtick or tilde fenced code block"))
+        (let* ((fence (match-string-no-properties 1))
+               (fence-character (aref fence 0))
+               (fence-length (length fence))
+               (content-start (progn (forward-line 1) (point)))
+               (closing-regexp
+                (format "^[ \\t]*%c\\{%d,\\}[ \\t]*$"
+                        fence-character fence-length))
+               closing)
+          (while (and (< (point) (cadr bounds)) (not closing))
+            (if (looking-at closing-regexp)
+                (setq closing (line-beginning-position))
+              (forward-line 1)))
+          (unless closing
+            (user-error "Markdown fenced code block is incomplete"))
+          (buffer-substring-no-properties content-start closing)))))
+   (t
+    (user-error "Not in a Markdown buffer"))))
+
+(defun my/send-markdown-fenced-code-to-last-target ()
+  "Send fenced Markdown code to the last terminal target.
+Execution occurs in the target terminal's current shell or REPL and needs a
+suitable interpreter.  No results are written back to the Markdown file."
+  (interactive)
+  (my/send-text-send-to-last-target (my/markdown-fenced-code-body)))
+
+(defun my/send-markdown-fenced-code-to-target ()
+  "Choose a terminal target and send fenced Markdown code to it.
+Execution occurs in the target terminal's current shell or REPL and needs a
+suitable interpreter.  No results are written back to the Markdown file."
+  (interactive)
+  (my/send-text-to-target (my/markdown-fenced-code-body)))
+
 (defun my/create-ghostel-terminal-in-split (&optional name directory)
   "Create a Ghostel terminal in a right-side split and save it for this tab."
   (interactive

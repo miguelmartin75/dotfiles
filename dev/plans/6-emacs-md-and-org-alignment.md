@@ -8,8 +8,8 @@ Implementation status:
 
 - Phase 1: complete
 - Phase 2: complete
-- Phase 3: in progress
-- Phase 4: pending
+- Phase 3: complete
+- Phase 4: in progress
 
 ## Goal
 
@@ -253,7 +253,7 @@ Completed: 2026-09-02.
 
 ## Phase 3: Send Fenced Markdown Code to Ghostel
 
-Status: in progress.
+Status: complete.
 
 1. Extend `profiles/common/.config/emacs/my-send-text.el` with a public
    interactive command that obtains the fenced code block at point.
@@ -292,9 +292,28 @@ Success criteria:
 - A non-code location produces a useful error and sends nothing.
 - Org `SPC o RET` continues to invoke `org-babel-execute-src-block`.
 
+### Implementation record
+
+Completed: 2026-09-02.
+
+- Added public fenced-code extraction for Tree-sitter Markdown using only the
+  enclosing `fenced_code_block` node's public children and
+  `code_fence_content` bounds. Classic Markdown uses its public enclosing
+  fenced-construct boundary followed by a bounded backtick-or-tilde fence scan,
+  rejecting YAML, incomplete fences, and non-code locations.
+- Added replay and choose-target commands that pass only the extracted body to
+  the existing target APIs. Their docstrings document current shell or REPL
+  execution, the required interpreter, and the absence of result insertion.
+- Added normal/visual Markdown-local `SPC o RET`, `SPC t b`, and `SPC t B`
+  bindings without changing Org Babel or visual selection delivery.
+- Focused two-mode checks passed for backtick and tilde bodies, absent/YAML/
+  incomplete errors, stubbed replay and target-choice dispatch, and effective
+  Markdown, Org, and global bindings. `check-parens` and `git diff --check`
+  completed successfully.
+
 ## Phase 4: Lock the Contract with Tests and Documentation
 
-Status: pending.
+Status: in progress.
 
 1. Extend `profiles/common/.config/emacs/leader-bindings-test.el`, or add a
    focused neighboring ERT file, to load the configuration and assert the
