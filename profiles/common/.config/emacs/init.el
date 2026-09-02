@@ -87,8 +87,7 @@
   (interactive)
   (dolist (file '("my-file-picker.el"
                   "my-org-datetree.el"
-                  "my-send-text.el"
-                  "org-autolist.el"))
+                  "my-send-text.el"))
     (load (expand-file-name file my/config-directory) nil nil t))
   (load config-path nil nil t))
 
@@ -673,7 +672,12 @@
 
 (use-package markdown-mode
   :mode ("README\\.md\\'" . gfm-mode)
-  :init (setq markdown-command "multimarkdown"))
+  :init
+  (setq markdown-command "multimarkdown"
+        markdown-indent-on-enter 'indent-and-new-item))
+
+(with-eval-after-load 'markdown-ts-mode
+  (keymap-set markdown-ts-mode-map "RET" #'markdown-ts-insert-list-item))
 
 (defun my/markdown-structural-command (table-command ts-command fallback-command)
   "Run the Markdown structural command appropriate for the current mode."
@@ -922,8 +926,20 @@
 
 ;; Org and research
 
+(defun my/org-return ()
+  "Create an Org list item or preserve native return behavior."
+  (interactive)
+  (let ((item-start (org-in-item-p)))
+    (if item-start
+        (let ((checkbox (save-excursion
+                          (goto-char item-start)
+                          (org-at-item-checkbox-p))))
+          (org-insert-item checkbox))
+      (call-interactively #'org-return))))
+
 (use-package org
     :config
+  (keymap-set org-mode-map "RET" #'my/org-return)
   (setq org-todo-keywords
 	'((sequence "PROJ(P!)" "TODO(t!)" "REVIEW(r!)" "POST(p!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)"))
   )
@@ -1101,11 +1117,6 @@
 
 (require 'my-org-datetree
          (expand-file-name "my-org-datetree.el" my/config-directory))
-(require 'org-autolist
-         (expand-file-name "org-autolist.el" my/config-directory))
-(add-hook 'org-mode-hook
-          (lambda ()
-            (org-autolist-mode 1)))
 
 (defun my/refile-to-journal ()
   "Refile the current Org subtree into the journal datetree."
