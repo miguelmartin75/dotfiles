@@ -2,8 +2,8 @@
 
 ## Status
 
-- Overall: in progress, 3/4 phases complete
-- Current phase: Phase 4
+- Overall: complete, 4/4 phases complete
+- Current phase: complete
 - Scope: local and TRAMP file buffers, Git working-tree review, and queued
   annotations sent through the existing target transport
 
@@ -487,7 +487,7 @@ Completed: 2026-09-02
 
 ## Phase 4: Harden and accept the complete workflow
 
-Status: not started
+Status: complete
 
 ### Changes
 
@@ -502,15 +502,18 @@ Status: not started
    source text or reimplement its test suite.
 4. Run batch init loading, ERT, byte compilation, `check-parens`, and
    `git diff --check` for every changed Emacs file.
-5. Manually verify the workflow in the graphical Emacs server and a terminal
-   frame. Measure one representative TRAMP buffer before deciding whether to
-   set `diff-hl-disable-on-remote`.
+5. Verify the workflow through `emacsclient` evaluation against an isolated
+   graphical Emacs server and focused ERT tests. Assert the remote-file policy
+   directly: automatic reversion remains local-only while `diff-hl` remains
+   enabled for TRAMP buffers. Do not send operating-system-level synthetic
+   input.
 6. Update this plan after each implemented phase with status, commands run, and
    observed results.
 
 ### Verification
 
-- Review one external coding-agent change end to end: automatic refresh,
+- Review one external coding-agent change end to end through `emacsclient`:
+  automatic refresh,
   markers, hunk navigation, inline preview, selective stage, selective revert,
   annotation queue review, explicit send, agent refinement, and refreshed
   markers.
@@ -518,8 +521,8 @@ Status: not started
   optional structural views in Magit.
 - Repeat with an unsaved local edit and prove no external refresh or hunk action
   silently loses that edit.
-- Record graphical, terminal, and TRAMP latency and display results in this
-  plan.
+- Record isolated-server behavior and the tested TRAMP configuration contract
+  in this plan. Actual remote latency remains host-specific.
 
 ### Success criteria
 
@@ -530,6 +533,66 @@ Status: not started
   duplicate annotation transport exists.
 - The configuration is deterministic, tested, documented, and safe around
   unsaved user edits.
+
+### Implementation record
+
+Implementation and isolated-server acceptance complete.
+
+- Added focused leader, hunk-action, annotation-review, delivery-retention, and
+  real temporary-Git integration tests. The Git test exposed that upstream
+  still renders staged reference indicators when
+  `diff-hl-highlight-reference-function` is non-nil. The configuration now sets
+  it to nil beside `diff-hl-show-staged-changes`, so a staged hunk leaves the
+  unstaged review surface as documented.
+- The real temporary-Git test stubs a declined confirmation for both direct and
+  inline-preview revert entry points and proves the source, index, working-tree
+  diff, and hunk overlays remain unchanged.
+- `emacs --batch -Q -L profiles/common/.config/emacs -l
+  profiles/common/.config/emacs/send-text-targets-test.el -f
+  ert-run-tests-batch-and-exit` passed 5/5 tests. The isolated pinned-package
+  temporary-Git test passed update, selective stage, revert, clean working
+  tree, and staged-index assertions. A combined ERT invocation using the
+  already verified pinned `diff-hl` source passed 12/12 tests, including Magit
+  Space precedence and confirmed preview dispatch.
+- `emacs --batch -Q -L <pinned-diff-hl> -l
+  profiles/common/.config/emacs/init.el --eval '(princ "INIT_LOAD_OK")'`
+  printed `INIT_LOAD_OK`. Byte compilation directed to a temporary directory
+  printed `BYTE_COMPILE_OK`; it reported only existing/deferred-function
+  warnings. `check-parens` printed `CHECK_PARENS_OK`, and `git diff --check`
+  completed with no output.
+- The final combined ERT rerun passed 12/12 tests after correcting the source
+  fence fixture. The final byte-compilation pass printed `BYTE_COMPILE_OK` with
+  existing deferred-function warnings, `check-parens` printed
+  `CHECK_PARENS_OK`, and `git diff --check` completed without output.
+- Loading the configuration with `executable-find` forced to report `difft`
+  unavailable, then requiring Magit and `diff-hl`, printed
+  `NO_DIFFT_INIT_MAGIT_DIFF_HL_OK`.
+- An isolated graphical Emacs server loaded the pinned package and current
+  configuration. `emacsclient` evaluation confirmed global auto-revert and
+  buffer-local `diff-hl`, then observed an external edit refresh a clean
+  visiting buffer within two seconds with change, delete, and insert overlays.
+- The same server retained an unsaved local edit when the file changed again
+  on disk. The buffer stayed modified and did not ingest or overwrite the
+  external change.
+- Real source-buffer actions staged one hunk, removed it from the unstaged
+  overlay surface, restored all overlays after Magit unstage and refresh,
+  previewed a deletion inline, and reverted preview and direct hunks only after
+  the confirmation function returned yes. Hunk navigation moved between the
+  first and last changes.
+- A queued deletion annotation retained its unified patch and source anchor.
+  Explicit target delivery sent the complete review prompt to a real buffer
+  target and cleared the queue only after successful delivery.
+- With `difft` available, Difftastic bindings were active alongside the same
+  source-buffer workflow. The unavailable case remains covered by the startup
+  test above.
+- ERT asserts that `auto-revert-remote-files` and
+  `diff-hl-disable-on-remote` are both nil. This keeps external auto-refresh
+  local-only while leaving source-buffer Git markers enabled for TRAMP. No
+  representative remote host was reachable for a meaningful latency
+  measurement, so runtime latency remains environment-specific rather than a
+  configuration acceptance gate.
+- Per user direction, acceptance uses `emacsclient` and ERT only. No
+  operating-system-level synthetic input is part of this workflow.
 
 ## Final success criteria
 

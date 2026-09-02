@@ -577,6 +577,7 @@
   :defer 1
   :init
   (setq diff-hl-show-staged-changes nil
+        diff-hl-highlight-reference-function nil
         diff-hl-ask-before-revert-hunk t)
   :config
   (require 'diff-hl-flydiff)
