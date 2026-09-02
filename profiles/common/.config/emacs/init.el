@@ -1096,6 +1096,7 @@ When UP is non-nil, swap with the preceding paragraph."
 ;; `emacs --batch -Q -l ~/.config/emacs/install-tree-sitter-grammars.el'.
 (require 'treesit)
 (setopt treesit-auto-install-grammar 'never
+        treesit-font-lock-level 4
         treesit-enabled-modes
         '(c-ts-mode
           c++-ts-mode

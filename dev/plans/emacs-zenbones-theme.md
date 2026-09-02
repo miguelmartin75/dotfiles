@@ -83,7 +83,7 @@ Neovim configuration.
 
 - Plan: complete
 - Implementation: in progress
-- Current phase: Phase 2
+- Current phase: Phase 3
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Current theme: `profiles/common/.config/emacs/themes/mig-one-light-theme.el`
@@ -1279,7 +1279,7 @@ Status: complete
 
 ## Phase 2: Make Tree-sitter the primary syntax color path
 
-Status: pending
+Status: complete
 
 ### Changes
 
