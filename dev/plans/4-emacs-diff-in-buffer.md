@@ -2,8 +2,8 @@
 
 ## Status
 
-- Overall: in progress, 1/4 phases complete
-- Current phase: Phase 2
+- Overall: in progress, 2/4 phases complete
+- Current phase: Phase 3
 - Scope: local and TRAMP file buffers, Git working-tree review, and queued
   annotations sent through the existing target transport
 
@@ -359,7 +359,7 @@ latency.
 
 ## Phase 2: Add Neovim-compatible hunk navigation and actions
 
-Status: not started
+Status: complete
 
 ### Changes
 
@@ -400,6 +400,21 @@ Status: not started
 - Destructive revert cannot occur through either advertised UI without a
   confirmation.
 - Magit remains the only complete repository and unstage interface.
+
+### Implementation record
+
+Completed: 2026-09-02
+
+- Loaded the configuration against the pinned `diff-hl` source and asserted
+  the three leader commands, the buffer-local Evil normal-state `[h` and `]h`
+  mappings, and the preview `r` override. The focused batch check printed
+  `PHASE2_BINDINGS_AND_DISPATCH_OK`.
+- Stubbed the two public revert boundaries and confirmed the preview command
+  closes the inline hunk before invoking `diff-hl-revert-hunk`, preserving the
+  package's configured confirmation path.
+- `check-parens` and `git diff --check` completed successfully. Full hunk
+  stage, revert, cancellation, and Magit unstage behavior remains part of the
+  Phase 4 temporary-repository integration and interactive acceptance pass.
 
 ## Phase 3: Add hunk annotations and a visible review queue
 

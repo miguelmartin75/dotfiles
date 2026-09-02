@@ -567,6 +567,12 @@
 (use-package magit
   :commands magit-status)
 
+(defun my/diff-hl-preview-revert-hunk ()
+  "Close the hunk preview and revert its hunk after confirmation."
+  (interactive)
+  (diff-hl-show-hunk-hide)
+  (diff-hl-revert-hunk))
+
 (use-package diff-hl
   :defer 1
   :init
@@ -578,7 +584,11 @@
   (setq diff-hl-show-hunk-function #'diff-hl-show-hunk-inline)
   (global-diff-hl-mode 1)
   (diff-hl-flydiff-mode 1)
-  (add-hook 'magit-post-refresh-hook #'diff-hl-magit-post-refresh))
+  (add-hook 'magit-post-refresh-hook #'diff-hl-magit-post-refresh)
+  (evil-define-key 'normal diff-hl-mode-map
+    (kbd "[h") #'diff-hl-previous-hunk
+    (kbd "]h") #'diff-hl-next-hunk)
+  (keymap-set diff-hl-show-hunk-map "r" #'my/diff-hl-preview-revert-hunk))
 
 (when (and (executable-find "difft")
            (package-installed-p 'difftastic))
@@ -1271,6 +1281,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("d l" . flymake-show-project-diagnostics)
        ("d D" . dape)
        ("g g" . magit-status)
+       ("g p" . diff-hl-show-hunk)
+       ("g s" . diff-hl-stage-current-hunk)
+       ("g r" . diff-hl-revert-hunk)
        ("a s" . gptel-send)
        ("t p" . ghostel-project)
        ("t t" . term-sessions-open)
@@ -1378,6 +1391,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "d" "diagnostics"
     "f" "files"
     "g" "git"
+    "g p" "preview hunk"
+    "g s" "stage hunk"
+    "g r" "revert hunk (confirm)"
     "h" "help"
     "o" "org"
     "r" "review"
