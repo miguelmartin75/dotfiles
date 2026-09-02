@@ -8,7 +8,7 @@
 
 (ert-deftest my/appearance-eglot-inlay-hints-inherit-normal-height ()
   (require 'eglot)
-  (load-theme 'mig-one-light t)
+  (load-theme 'mig-zenbones-light t)
   (should (eq (face-attribute 'eglot-inlay-hint-face :inherit nil) 'shadow))
   (should (= (face-attribute 'eglot-inlay-hint-face :height nil t) 1.0))
   (dolist (face '(eglot-type-hint-face eglot-parameter-hint-face))

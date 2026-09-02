@@ -259,7 +259,7 @@
 (add-to-list
  'custom-theme-load-path
  (expand-file-name "themes" (file-name-directory (or load-file-name user-init-file))))
-(load-theme 'mig-one-light t)
+(load-theme 'mig-zenbones-light t)
 
 (use-package olivetti
   :commands olivetti-mode

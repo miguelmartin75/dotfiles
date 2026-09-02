@@ -1,10 +1,10 @@
-;;; mig-one-light-theme.el --- Compact One Light theme -*- lexical-binding: t; -*-
+;;; mig-zenbones-light-theme.el --- Zenbones light theme -*- lexical-binding: t; -*-
 
-;; This theme is derived from Doom One Light at:
-;; https://github.com/doomemacs/themes/tree/556598955c67540eac8811835b327f299ffb58c7
-;; Source revision: 556598955c67540eac8811835b327f299ffb58c7
-;; Doom One Light was ported by ztlevi from Atom One Light.
-;; Copyright (c) 2016-2024 Henrik Lissner.
+;; This theme ports the default light Zenbones palette from:
+;; https://github.com/mcchrish/zenbones.nvim
+;; Zenbones source revision: 8304d8df9b823ff11e103afa62f38c39f534abe6
+;; Lush source revision: 9c60ec2279d62487d942ce095e49006af28eed6e
+;; Copyright (c) 2022 Michael Chris Lopez
 ;;
 ;; The MIT License (MIT)
 ;;
@@ -29,72 +29,149 @@
 
 ;;; Commentary:
 
-;; A standalone subset of Doom One Light for the workflows retained by this
-;; Emacs configuration.  Package faces inherit from stable core faces wherever
-;; that keeps the theme small.  Pale Git backgrounds and direct heading colors
-;; intentionally replace Doom's runtime color blending and Org helper macros.
-;; Direct RGB colors are kept compact and exact on graphical and true-color
-;; terminals; lower-color terminals intentionally use Emacs's nearest-color
-;; approximation instead of tripling every face with 256- and 16-color specs.
+;; A standalone port of the default Zenbones light palette for the workflows
+;; retained by this Emacs configuration. Package faces inherit from stable core
+;; faces wherever that keeps the theme small. Direct RGB colors are exact on
+;; graphical and true-color terminals; lower-color terminals intentionally use
+;; Emacs's nearest-color approximation instead of separate 256- and 16-color
+;; specs.
 
 ;;; Code:
 
-(deftheme mig-one-light
-  "A compact light theme derived from Doom One Light.")
+(deftheme mig-zenbones-light
+  "A compact light theme derived from Zenbones.")
 
-(custom-theme-set-faces
- 'mig-one-light
+(let ((bg "#F0EDEC")
+      (fg "#2C363C")
+      (fg-match "#3E4B53")
+      (fg-identifier "#44525B")
+      (fg-special "#4F5E68")
+      (fg-constant "#556570")
+      (fg-secondary "#5E6F7B")
+      (rose "#A8334C")
+      (leaf "#4F6C31")
+      (wood "#944927")
+      (water "#286486")
+      (blossom "#88507D")
+      (sky "#3B8992")
+      (bg1 "#CFC1BA")
+      (rose1 "#94253E")
+      (leaf1 "#3F5A22")
+      (wood1 "#803D1C")
+      (water1 "#1D5573")
+      (blossom1 "#7B3B70")
+      (sky1 "#2B747C")
+      (comment "#948985")
+      (line-number "#A4968F")
+      (non-text "#BBABA3")
+      (delimiter "#8E817B")
+      (type "#6A5549")
+      (cursor-line "#E9E4E2")
+      (color-column "#E6C5BD")
+      (float-bg "#DDD6D3")
+      (float-border "#786D68")
+      (popup-bg "#DAD3CF")
+      (popup-selection "#C4B6AF")
+      (popup-scrollbar "#B2A39B")
+      (popup-thumb "#F7F6F5")
+      (selection "#CBD9E3")
+      (search "#DEB9D6")
+      (active-search "#C074B2")
+      (mode-line "#D6CDC9")
+      (mode-line-inactive-bg "#E1DCD9")
+      (mode-line-inactive-fg "#596A76")
+      (inlay-fg "#A38C80")
+      (inlay-bg "#EBE7E6")
+      (spell-fg "#974352")
+      (diff-add-bg "#CBE5B8")
+      (diff-change-bg "#D4DEE7")
+      (diff-delete-bg "#EBD8DA")
+      (diff-text-bg "#A9BED1"))
+  (custom-theme-set-faces
+   'mig-zenbones-light
 
  ;; Core and syntax.
- '(default ((t (:background "#fafafa" :foreground "#383a42"))))
+ `(default ((t (:background ,bg :foreground ,fg))))
  '(fixed-pitch ((t (:inherit default))))
  '(bold ((t (:weight bold))))
  '(bold-italic ((t (:inherit (bold italic)))))
  '(italic ((t (:slant italic))))
- '(cursor ((t (:background "#4078f2"))))
- '(fringe ((t (:inherit default :foreground "#9ca0a4"))))
- '(region ((t (:background "#d8d8d8" :distant-foreground "#2c2e34" :extend t))))
- '(highlight ((t (:background "#4078f2" :foreground "#f0f0f0"))))
- '(secondary-selection ((t (:background "#9ca0a4" :extend t))))
- '(shadow ((t (:foreground "#9ca0a4"))))
+ `(cursor ((t (:background ,fg :foreground ,bg))))
+ `(fringe ((t (:inherit default :foreground ,line-number))))
+ `(region ((t (:background ,selection :foreground ,fg :extend t))))
+ `(highlight ((t (:background ,cursor-line :extend t))))
+ `(secondary-selection ((t (:background ,diff-change-bg :extend t))))
+ `(shadow ((t (:foreground ,comment))))
  '(eglot-inlay-hint-face ((t (:inherit shadow :height 1.0))))
- '(minibuffer-prompt ((t (:foreground "#4078f2" :weight bold))))
- '(tooltip ((t (:background "#e7e7e7" :foreground "#383a42"))))
- '(link ((t (:foreground "#4078f2" :underline t :weight bold))))
- '(link-visited ((t (:inherit link :foreground "#a626a4"))))
- '(error ((t (:foreground "#e45649"))))
- '(warning ((t (:foreground "#986801"))))
- '(success ((t (:foreground "#50a14f"))))
- '(escape-glyph ((t (:foreground "#0184bc"))))
- '(trailing-whitespace ((t (:background "#e45649"))))
- '(vertical-border ((t (:background "#c6c7c7" :foreground "#c6c7c7"))))
- '(match ((t (:background "#f0f0f0" :foreground "#50a14f" :weight bold))))
- '(lazy-highlight ((t (:background "#c2d3f7" :foreground "#f0f0f0" :distant-foreground "#1b2229"))))
- '(isearch ((t (:inherit lazy-highlight :weight bold))))
- '(isearch-fail ((t (:background "#e45649" :foreground "#f0f0f0" :weight bold))))
- '(show-paren-match ((t (:background "#f0f0f0" :foreground "#e45649" :weight ultra-bold))))
- '(show-paren-mismatch ((t (:background "#e45649" :foreground "#f0f0f0" :weight ultra-bold))))
- '(font-lock-builtin-face ((t (:foreground "#a626a4"))))
- '(font-lock-comment-face ((t (:foreground "#9ca0a4"))))
- '(font-lock-comment-delimiter-face ((t (:inherit font-lock-comment-face))))
- '(font-lock-doc-face ((t (:inherit font-lock-comment-face :foreground "#84888b" :slant italic))))
- '(font-lock-constant-face ((t (:foreground "#b751b6"))))
- '(font-lock-function-name-face ((t (:foreground "#a626a4"))))
- '(font-lock-keyword-face ((t (:foreground "#e45649"))))
- '(font-lock-number-face ((t (:foreground "#da8548"))))
- '(font-lock-preprocessor-face ((t (:foreground "#4078f2" :weight bold))))
- '(font-lock-string-face ((t (:foreground "#50a14f"))))
- '(font-lock-type-face ((t (:foreground "#986801"))))
- '(font-lock-variable-name-face ((t (:foreground "#6a1868"))))
+ `(minibuffer-prompt ((t (:foreground ,fg :weight bold))))
+ `(tooltip ((t (:background ,float-bg :foreground ,fg))))
+ `(child-frame-border ((t (:background ,float-border))))
+ `(scroll-bar ((t (:foreground ,popup-thumb :background ,popup-scrollbar))))
+ `(link ((t (:foreground ,sky :underline t))))
+ `(link-visited ((t (:foreground ,blossom1 :underline t))))
+ `(error ((t (:foreground ,rose))))
+ `(warning ((t (:foreground ,wood))))
+ `(success ((t (:foreground ,leaf))))
+ `(escape-glyph ((t (:foreground ,fg-special :weight bold))))
+ `(homoglyph ((t (:foreground ,fg-special :weight bold))))
+ `(nobreak-space ((t (:foreground ,fg-special :weight bold))))
+ `(trailing-whitespace ((t (:background ,rose))))
+ `(vertical-border ((t (:foreground ,line-number))))
+ `(window-divider ((t (:foreground ,line-number))))
+ `(window-divider-first-pixel ((t (:foreground ,line-number))))
+ `(window-divider-last-pixel ((t (:foreground ,line-number))))
+ `(match ((t (:background ,search :foreground ,fg))))
+ `(lazy-highlight ((t (:background ,search :foreground ,fg))))
+ `(isearch ((t (:background ,active-search :foreground ,bg :weight bold))))
+ `(isearch-fail ((t (:background ,rose :foreground ,bg :weight bold))))
+ `(show-paren-match ((t (:background ,search :foreground ,fg))))
+ `(show-paren-mismatch ((t (:background ,rose :foreground ,bg :weight bold))))
+ `(font-lock-builtin-face ((t (:foreground ,fg-special :weight bold))))
+ `(font-lock-comment-face ((t (:foreground ,comment :slant italic))))
+ `(font-lock-comment-delimiter-face ((t (:foreground ,comment :slant italic))))
+ `(font-lock-doc-face ((t (:foreground ,comment :slant italic))))
+ `(font-lock-constant-face ((t (:foreground ,fg-constant :slant italic))))
+ `(font-lock-function-name-face ((t (:foreground ,fg))))
+ `(font-lock-function-call-face ((t (:foreground ,fg))))
+ `(font-lock-keyword-face ((t (:foreground ,fg :weight bold))))
+ `(font-lock-number-face ((t (:foreground ,fg-constant :slant normal))))
+ `(font-lock-preprocessor-face ((t (:foreground ,fg :weight bold))))
+ `(font-lock-string-face ((t (:foreground ,fg-constant :slant italic))))
+ `(font-lock-regexp-face ((t (:foreground ,fg-constant :slant italic))))
+ `(font-lock-type-face ((t (:foreground ,type))))
+ `(font-lock-variable-name-face ((t (:foreground ,fg-identifier))))
+ `(font-lock-variable-use-face ((t (:foreground ,fg-identifier))))
+ `(font-lock-property-name-face ((t (:foreground ,fg-identifier))))
+ `(font-lock-property-use-face ((t (:foreground ,fg-identifier))))
+ `(font-lock-operator-face ((t (:foreground ,fg :weight bold))))
+ `(font-lock-negation-char-face ((t (:foreground ,fg :weight bold))))
+ `(font-lock-escape-face ((t (:foreground ,fg-special :weight bold))))
+ `(font-lock-doc-markup-face ((t (:foreground ,fg-special :weight bold))))
+ `(font-lock-bracket-face ((t (:foreground ,delimiter))))
+ `(font-lock-delimiter-face ((t (:foreground ,delimiter))))
+ `(font-lock-misc-punctuation-face ((t (:foreground ,delimiter))))
+ `(font-lock-punctuation-face ((t (:foreground ,delimiter))))
+ `(font-lock-regexp-grouping-backslash ((t (:foreground ,fg-special :weight bold))))
+ `(font-lock-regexp-grouping-construct ((t (:foreground ,fg-special :weight bold))))
  '(font-lock-warning-face ((t (:inherit warning))))
- '(line-number ((t (:inherit default :foreground "#aaaeb1" :distant-foreground unspecified
-                   :weight normal :slant unspecified :underline unspecified
-                   :strike-through unspecified))))
- '(line-number-current-line
-   ((t (:inherit (hl-line default) :foreground "#1b2229" :distant-foreground unspecified
-        :weight normal :slant unspecified :underline unspecified
-        :strike-through unspecified))))
- '(hl-line ((t (:background "#f0f0f0" :extend t))))
+ `(line-number ((t (:foreground ,line-number :weight normal :underline nil
+                   :strike-through nil))))
+ `(line-number-current-line
+   ((t (:foreground ,fg :weight bold :underline nil :strike-through nil))))
+ `(hl-line ((t (:background ,cursor-line :extend t))))
+ `(whitespace-big-indent ((t (:foreground ,non-text))))
+ `(whitespace-hspace ((t (:foreground ,non-text))))
+ `(whitespace-indentation ((t (:foreground ,non-text))))
+ `(whitespace-newline ((t (:foreground ,non-text))))
+ `(whitespace-page-delimiter ((t (:foreground ,non-text))))
+ `(whitespace-space ((t (:foreground ,non-text))))
+ `(whitespace-space-after-tab ((t (:foreground ,non-text))))
+ `(whitespace-space-before-tab ((t (:foreground ,non-text))))
+ `(whitespace-tab ((t (:foreground ,non-text))))
+ `(whitespace-empty ((t (:foreground ,rose :background ,diff-delete-bg))))
+ `(whitespace-missing-newline-at-eof
+   ((t (:foreground ,rose :background ,diff-delete-bg))))
+ `(whitespace-trailing ((t (:foreground ,rose :background ,diff-delete-bg))))
 
  ;; Selection and frame chrome.
  '(icomplete-first-match ((t (:foreground "#4078f2" :weight bold))))
@@ -104,34 +181,42 @@
  '(xref-file-header ((t (:inherit success))))
  '(xref-line-number ((t (:foreground "#4078f2"))))
  '(xref-match ((t (:background "#f0f0f0" :foreground "#50a14f" :weight bold))))
- '(mode-line ((t (:background "#e7e7e7" :foreground "#383a42"))))
- '(mode-line-active ((t (:inherit mode-line))))
- '(mode-line-inactive ((t (:background "#e1e1e1" :foreground "#a190a7"))))
- '(mode-line-emphasis ((t (:foreground "#4078f2"))))
+ `(mode-line ((t (:background ,mode-line :foreground ,fg))))
+ `(mode-line-active ((t (:background ,mode-line :foreground ,fg))))
+ `(mode-line-inactive
+   ((t (:background ,mode-line-inactive-bg :foreground ,mode-line-inactive-fg))))
+ `(mode-line-emphasis ((t (:foreground ,fg :weight bold))))
  '(mode-line-highlight ((t (:inherit highlight))))
- '(mode-line-buffer-id ((t (:weight bold))))
+ `(mode-line-buffer-id ((t (:foreground ,fg :weight bold))))
  '(header-line ((t (:inherit mode-line))))
- '(tab-bar ((t (:background "#f0f0f0" :foreground "#f0f0f0"))))
- '(tab-bar-tab ((t (:background "#fafafa" :foreground "#383a42"))))
- '(tab-bar-tab-inactive ((t (:background "#f0f0f0" :foreground "#9ca0a4"))))
+ `(tab-bar ((t (:background ,mode-line-inactive-bg
+                :foreground ,mode-line-inactive-fg))))
+ `(tab-bar-tab ((t (:background ,mode-line :foreground ,fg :weight bold))))
+ `(tab-bar-tab-inactive
+   ((t (:background ,mode-line-inactive-bg :foreground ,mode-line-inactive-fg))))
+ '(tab-bar-tab-group-current ((t (:inherit tab-bar-tab))))
+ '(tab-bar-tab-group-inactive ((t (:inherit tab-bar-tab-inactive))))
+ '(tab-bar-tab-ungrouped ((t (:inherit tab-bar-tab))))
+ '(tab-bar-tab-highlight ((t (:inherit highlight))))
 
  ;; Terminal, compilation, diagnostics, and diffs.
- '(ansi-color-black ((t (:foreground "#fafafa" :background "#fafafa"))))
- '(ansi-color-red ((t (:foreground "#e45649" :background "#e45649"))))
- '(ansi-color-green ((t (:foreground "#50a14f" :background "#50a14f"))))
- '(ansi-color-yellow ((t (:foreground "#986801" :background "#986801"))))
- '(ansi-color-blue ((t (:foreground "#4078f2" :background "#4078f2"))))
- '(ansi-color-magenta ((t (:foreground "#a626a4" :background "#a626a4"))))
- '(ansi-color-cyan ((t (:foreground "#0184bc" :background "#0184bc"))))
- '(ansi-color-white ((t (:foreground "#383a42" :background "#383a42"))))
- '(ansi-color-bright-black ((t (:foreground "#9ca0a4" :background "#9ca0a4"))))
- '(ansi-color-bright-red ((t (:foreground "#e86b60" :background "#e86b60"))))
- '(ansi-color-bright-green ((t (:foreground "#69ae68" :background "#69ae68"))))
- '(ansi-color-bright-yellow ((t (:foreground "#a77f27" :background "#a77f27"))))
- '(ansi-color-bright-blue ((t (:foreground "#5d8bf4" :background "#5d8bf4"))))
- '(ansi-color-bright-magenta ((t (:foreground "#b247b0" :background "#b247b0"))))
- '(ansi-color-bright-cyan ((t (:foreground "#2696c6" :background "#2696c6"))))
- '(ansi-color-bright-white ((t (:foreground "#1b2229" :background "#1b2229"))))
+ `(ansi-color-black ((t (:foreground ,bg :background ,bg))))
+ `(ansi-color-red ((t (:foreground ,rose :background ,rose))))
+ `(ansi-color-green ((t (:foreground ,leaf :background ,leaf))))
+ `(ansi-color-yellow ((t (:foreground ,wood :background ,wood))))
+ `(ansi-color-blue ((t (:foreground ,water :background ,water))))
+ `(ansi-color-magenta ((t (:foreground ,blossom :background ,blossom))))
+ `(ansi-color-cyan ((t (:foreground ,sky :background ,sky))))
+ `(ansi-color-white ((t (:foreground ,fg :background ,fg))))
+ `(ansi-color-bright-black ((t (:foreground ,bg1 :background ,bg1))))
+ `(ansi-color-bright-red ((t (:foreground ,rose1 :background ,rose1))))
+ `(ansi-color-bright-green ((t (:foreground ,leaf1 :background ,leaf1))))
+ `(ansi-color-bright-yellow ((t (:foreground ,wood1 :background ,wood1))))
+ `(ansi-color-bright-blue ((t (:foreground ,water1 :background ,water1))))
+ `(ansi-color-bright-magenta
+   ((t (:foreground ,blossom1 :background ,blossom1))))
+ `(ansi-color-bright-cyan ((t (:foreground ,sky1 :background ,sky1))))
+ `(ansi-color-bright-white ((t (:foreground ,fg-special :background ,fg-special))))
  '(compilation-column-number ((t (:inherit font-lock-comment-face))))
  '(compilation-line-number ((t (:foreground "#4078f2"))))
  '(compilation-error ((t (:inherit error :weight bold))))
@@ -178,7 +263,7 @@
  '(markdown-inline-code-face ((t (:inherit (markdown-code-face markdown-pre-face) :extend nil :height 1.0))))
  '(markdown-ts-code-span ((t (:inherit (markdown-ts-code-block font-lock-constant-face) :height 1.0))))
 
- ;; Org uses direct heading colors in place of doom-themes-org-config.
+ ;; Org uses direct heading colors for its current package-face coverage.
  '(org-archived ((t (:foreground "#6f7377"))))
  '(org-block ((t (:background "#e7e7e7" :extend t))))
  '(org-block-begin-line ((t (:inherit org-block :foreground "#383a42" :slant italic))))
@@ -229,7 +314,7 @@
  '(org-ref-label-face ((t (:foreground "#4078f2"))))
  '(org-ref-ref-face ((t (:inherit link :foreground "#4db5bd"))))
 
- ;; Magit keeps One Light's semantic colors with fixed pale backgrounds.
+ ;; Magit keeps its current semantic colors with fixed pale backgrounds.
  '(magit-branch-current ((t (:foreground "#4078f2" :weight bold))))
  '(magit-branch-local ((t (:foreground "#0184bc"))))
  '(magit-branch-remote ((t (:foreground "#50a14f"))))
@@ -271,11 +356,12 @@
  '(gptel-context-highlight-face ((t (:background "#e7e7e7" :foreground "#383a42"))))
  '(gptel-context-deletion-face ((t (:background "#f7e2e0" :foreground "#e45649" :strike-through t))))
  '(gptel-rewrite-highlight-face ((t (:background "#dce7fd" :foreground "#202328")))))
+)
 
 (custom-theme-set-variables
- 'mig-one-light
+ 'mig-zenbones-light
  '(frame-background-mode 'light))
 
-(provide-theme 'mig-one-light)
+(provide-theme 'mig-zenbones-light)
 
-;;; mig-one-light-theme.el ends here
+;;; mig-zenbones-light-theme.el ends here
