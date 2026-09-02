@@ -675,6 +675,54 @@
   :mode ("README\\.md\\'" . gfm-mode)
   :init (setq markdown-command "multimarkdown"))
 
+(defun my/markdown-structural-command (table-command ts-command fallback-command)
+  "Run the Markdown structural command appropriate for the current mode."
+  (cond
+   ((eq major-mode 'markdown-ts-mode)
+    (if (markdown-ts-at-table-p)
+        (funcall table-command)
+      (funcall ts-command)))
+   ((derived-mode-p 'markdown-mode)
+    (funcall fallback-command))
+   (t
+    (user-error "Not in a Markdown buffer"))))
+
+(defun my/markdown-move-up ()
+  "Move the current Markdown heading, list item, or table row up."
+  (interactive)
+  (my/markdown-structural-command #'markdown-ts-table-move-row-up
+                                  #'markdown-ts-move-subtree-up
+                                  #'markdown-move-up))
+
+(defun my/markdown-move-down ()
+  "Move the current Markdown heading, list item, or table row down."
+  (interactive)
+  (my/markdown-structural-command #'markdown-ts-table-move-row-down
+                                  #'markdown-ts-move-subtree-down
+                                  #'markdown-move-down))
+
+(defun my/markdown-promote ()
+  "Promote the current Markdown heading or list item, or move a table column left."
+  (interactive)
+  (my/markdown-structural-command #'markdown-ts-table-move-column-left
+                                  #'markdown-ts-promote
+                                  #'markdown-promote))
+
+(defun my/markdown-demote ()
+  "Demote the current Markdown heading or list item, or move a table column right."
+  (interactive)
+  (my/markdown-structural-command #'markdown-ts-table-move-column-right
+                                  #'markdown-ts-demote
+                                  #'markdown-demote))
+
+(defun my/markdown-setup ()
+  "Install buffer-local Markdown structural bindings for Evil."
+  (dolist (state '(normal visual))
+    (evil-local-set-key state (kbd "M-h") #'my/markdown-promote)
+    (evil-local-set-key state (kbd "M-j") #'my/markdown-move-down)
+    (evil-local-set-key state (kbd "M-k") #'my/markdown-move-up)
+    (evil-local-set-key state (kbd "M-l") #'my/markdown-demote)))
+
 
 
 ;; Install the pinned native grammars separately with
@@ -767,6 +815,8 @@
                 nim-mode-hook
                 odin-mode-hook))
   (add-hook hook #'my/parser-tools-mode))
+(add-hook 'markdown-ts-mode-hook #'my/markdown-setup)
+(add-hook 'markdown-mode-hook #'my/markdown-setup)
 (add-to-list
  'auto-mode-alist
  `("\\.md\\'" .

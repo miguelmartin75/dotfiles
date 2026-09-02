@@ -2,12 +2,12 @@
 
 ## Status
 
-Plan status: not started.
+Plan status: in progress.
 
 Implementation status:
 
-- Phase 1: pending
-- Phase 2: pending
+- Phase 1: complete
+- Phase 2: in progress
 - Phase 3: pending
 - Phase 4: pending
 
@@ -101,6 +101,24 @@ fallback.
    `markdown-mode` fallback. It must dispatch to the appropriate public API
    for the active mode, instead of relying on Tree-sitter-only behavior.
 
+## Verified API constraints
+
+- Emacs 31 provides public Tree-sitter structural, table, outline, and generic
+  Tree-sitter node APIs, but no public `markdown-ts-narrow-to-subtree` or fenced
+  code body range command. Tree-sitter narrowing must use public outline
+  boundaries, and fenced code extraction must use public `treesit-*` node APIs.
+- Classic `markdown-mode` has public context-sensitive structure commands and
+  `markdown-narrow-to-subtree`. Its fenced construct APIs identify the bounded
+  construct, after which a fence-only scan can extract the body.
+- Classic `markdown-mode` does not provide native `M-S-<arrow>` table bindings.
+  Its documented table insertion/deletion keys remain `C-c S-<arrow>`, while
+  `markdown-ts-mode` keeps its native `M-S-<arrow>` bindings. The parity layer
+  will not invent a shared direction contract that upstream does not provide.
+- Explicit fenced-body delivery can call `my/send-text-to-target` for target
+  selection and `my/send-text-send-to-last-target` for replay. The interactive
+  region-or-buffer commands do not accept explicit bounds and do not need to be
+  refactored.
+
 The viable alternative is to use Markdown's native `M-<arrow>` bindings only
 and document the differences. That would leave the requested `M-j` and
 `M-k` workflow inconsistent because `outline-minor-mode` wins over a direct
@@ -115,7 +133,7 @@ major-mode Evil binding. A mode-local parity layer is the durable solution.
 | Fold or unfold | `g TAB`, `g S-TAB`; Evil `za`/`zc`/`zo`/`zO` | Same | In a table, `g TAB` and `g S-TAB` traverse cells instead. |
 | Focus current section | `C-x n s`; `C-x n w` restores | Same | Markdown uses its mode-specific narrow command. |
 | Move within a table | `M-h`/`M-l` columns, `M-j`/`M-k` rows | Same | Native Markdown `M-<arrow>` remains available. |
-| Add or remove table rows and columns | `M-S-<arrow>` | `M-S-<arrow>` | Use the Markdown table API's corresponding row and column commands. |
+| Add or remove table rows and columns | `M-S-<arrow>` | Tree-sitter: native `M-S-<arrow>`; fallback: native `C-c S-<arrow>` | Preserve each upstream mode's documented directions. |
 | Align/recalculate table | `SPC o t` | `C-c C-c` in a table and a Markdown leader alias | Org retains recalculation; Markdown aligns its pipe table. |
 | Evaluate or run code at point | `SPC o RET` invokes Babel | `SPC o RET` sends fenced code to Ghostel | Markdown execution does not insert results. |
 | Send selected text | Visual `C-c C-c` | Visual `C-c C-c` | Existing generic terminal sender remains unchanged. |
@@ -123,7 +141,7 @@ major-mode Evil binding. A mode-local parity layer is the durable solution.
 
 ## Phase 1: Add a Markdown Structural Parity Layer
 
-Status: pending.
+Status: complete.
 
 1. In `profiles/common/.config/emacs/init.el`, add public interactive
    Markdown commands for move-up, move-down, promote, and demote.
@@ -155,9 +173,27 @@ Success criteria:
   and operate on Markdown structure.
 - Org keybindings are unchanged.
 
+### Implementation record
+
+Completed: 2026-09-02.
+
+- Added four public context commands and one shared setup hook. Tree-sitter
+  Markdown dispatches tables to the public table movement commands and other
+  structure to the public heading/list commands; fallback Markdown delegates
+  to its four public context commands.
+- Focused Tree-sitter checks exercised adjacent headings, list entries, table
+  rows and columns, and effective normal/visual local bindings. All passed with
+  the installed Markdown grammars.
+- Focused fallback checks exercised headings and all four list operations after
+  fontification. The observed results moved sibling items, promoted a nested
+  item, and demoted an item beneath its preceding sibling. The setup installed
+  all four normal/visual local bindings.
+- `check-parens` and `git diff --check` completed successfully. Org
+  `evil-org-mode` configuration was not changed.
+
 ## Phase 2: Align Folding, Focus, and Table Access
 
-Status: pending.
+Status: in progress.
 
 1. Add a Markdown context command for `g TAB`:
 
@@ -180,10 +216,11 @@ Status: pending.
    with Org's `SPC o t` recalculation binding. The command must reject
    non-table locations with a useful user error. Keep native `C-c C-c` table
    alignment intact.
-6. Verify the real `M-S-<arrow>` Markdown table API directions. If its
-   insertion direction is the inverse of Org's visual direction, keep each
-   mode's documented native direction and document the difference in the
-   keybinding comments rather than swapping commands behind the user's back.
+6. Preserve the real mode-specific table insertion/deletion bindings and
+   document their directions in keybinding comments. Tree-sitter Markdown uses
+   native `M-S-<arrow>` bindings; fallback `markdown-mode` uses native
+   `C-c S-<arrow>` bindings. Do not synthesize a cross-mode remap or swap
+   commands behind the user's back.
 
 Success criteria:
 
@@ -209,13 +246,11 @@ Status: pending.
    text.
 3. When point is not in a complete fenced code block, signal a clear user
    error. Do not silently send the current line, region, or entire file.
-4. Pass only the extracted code body through
-   `my/send-region-or-buffer-to-last-target`. Refactor the generic sender
-   only as needed to accept an explicit region without changing its current
-   interactive behavior, bracketed paste, target picker, or replay rules.
-5. Add a companion command that chooses a Ghostel target before sending the
-   same extracted block. It should use the same target-selection path as
-   `SPC t R`.
+4. Pass only the extracted code body to
+   `my/send-text-send-to-last-target`. Preserve the generic interactive
+   region-or-buffer commands, bracketed paste, target picker, and replay rules.
+5. Add a companion command that passes the same extracted body to
+   `my/send-text-to-target`, using the same target-selection path as `SPC t R`.
 6. Add Markdown-local leader bindings:
 
    - `SPC o RET`: replay the last target and send the fenced code block.
