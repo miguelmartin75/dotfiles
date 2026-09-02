@@ -1,11 +1,14 @@
 ;;; leader-bindings-test.el --- Leader binding behavior tests -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'cl-lib)
 
 (load (expand-file-name "init.el" (file-name-directory (or load-file-name buffer-file-name)))
       nil nil nil t)
 
 (require 'magit)
+(require 'ghostel)
+(require 'evil-ghostel)
 (require 'olivetti)
 (require 'which-key)
 
@@ -106,5 +109,41 @@
               #'my/send-region-or-buffer))
   (should (eq (lookup-key evil-visual-state-map (kbd "C-c C-r"))
               #'my/send-region-or-buffer-to-last-target)))
+
+(ert-deftest my/leader-bindings-ghostel-insert-state-escape-hatches ()
+  (with-temp-buffer
+    (ghostel-mode)
+    (evil-ghostel-mode 1)
+    (unwind-protect
+        (progn
+          (evil-insert-state)
+          (should (eq (key-binding (kbd "C-b")) my/terminal-window-map))
+          (should (eq (key-binding (kbd "M-SPC")) my/leader-map))
+          (should (eq (key-binding (kbd "C-b h"))
+                      (keymap-lookup my/leader-map "w h")))
+          (should (eq (key-binding (kbd "C-b z"))
+                      (keymap-lookup my/leader-map "w z")))
+          (should (eq (key-binding (kbd "C-b t ]"))
+                      (keymap-lookup my/leader-map "w t ]")))
+          (should (eq (key-binding (kbd "M-SPC w z"))
+                      (keymap-lookup my/leader-map "w z")))
+          (let (sent-keys)
+            (cl-letf (((symbol-function 'ghostel-send-key)
+                       (lambda (&rest args)
+                         (push args sent-keys))))
+              (call-interactively (key-binding (kbd "C-b C-b"))))
+            (should (equal sent-keys '(("b" "ctrl")))))
+          (ghostel-char-mode)
+          (should (eq (key-binding (kbd "C-b")) #'ghostel--send-event))
+          (should (eq (key-binding (kbd "M-SPC")) #'ghostel--send-event))
+          (should (eq (key-binding (kbd "M-RET")) #'ghostel-semi-char-mode))
+          (should-not (key-binding (kbd "C-b h")))
+          (should-not (key-binding (kbd "M-SPC w z"))))
+      (evil-ghostel-mode -1)))
+  (with-temp-buffer
+    (fundamental-mode)
+    (evil-insert-state)
+    (should (eq (key-binding (kbd "C-b")) #'backward-char))
+    (should (eq (key-binding (kbd "M-SPC")) #'cycle-spacing))))
 
 ;;; leader-bindings-test.el ends here

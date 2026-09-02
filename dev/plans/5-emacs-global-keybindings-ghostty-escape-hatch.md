@@ -250,7 +250,10 @@ Ghostel key-resolution probes, and a reload-freshness probe.
 
 ## Phase 2: Add behavior-focused regression coverage
 
-Status: not started
+Status: complete
+
+Success criteria status: satisfied by the focused active-binding test and the
+complete leader-binding ERT suite.
 
 ### Changes
 
