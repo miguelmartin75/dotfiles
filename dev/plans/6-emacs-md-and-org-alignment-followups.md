@@ -2,14 +2,14 @@
 
 ## Status
 
-- Overall: in progress, 1/3 phases complete
-- Current phase: Phase 2
+- Overall: in progress, 2/3 phases complete
+- Current phase: Phase 3
 - Parent plan: `dev/plans/6-emacs-md-and-org-alignment.md`
 
 Phase status:
 
 - Phase 1: complete
-- Phase 2: pending
+- Phase 2: complete
 - Phase 3: pending
 
 ## Goal
@@ -301,7 +301,7 @@ Completed: 2026-09-02.
 
 ## Phase 2: Add Safe Markdown Paragraph Swapping
 
-Status: pending.
+Status: complete.
 
 1. Refactor only `my/markdown-move-up` and `my/markdown-move-down` at
    `profiles/common/.config/emacs/init.el:690-702`. Keep
@@ -349,6 +349,26 @@ Success criteria:
   break, code block, section, or buffer boundary.
 - Heading, list, and table movement retains the existing native results.
 - Body text under a heading never causes the heading subtree to move.
+
+### Implementation record
+
+Completed: 2026-09-02.
+
+- Refactored Markdown movement to dispatch tables, list items, actual heading
+  lines, ordinary paragraphs, and unsupported contexts separately in both
+  Markdown implementations.
+- Added one shared paragraph operation that validates exact adjacent prose
+  regions before mutation, swaps only their bodies with `transpose-regions`,
+  and restores point and contained active selections by offset.
+- Tree-sitter discovery uses public ancestry and named-sibling APIs. Fallback
+  discovery uses Markdown paragraph bounds, structural predicates and syntax
+  properties, immediate-adjacency checks, and matching heading anchors.
+- The existing Markdown parity ERT suite passed 3/3. Focused two-mode probes
+  passed for multiline movement in both directions, exact multi-line
+  separator preservation, point offsets, contained selections, body text
+  beneath a heading, list continuation dispatch, and no-mutation structural
+  boundary errors. Batch initialization, `check-parens`, and
+  `git diff --check` passed.
 
 ## Phase 3: Lock the Follow-up Contract with Tests and Documentation
 
