@@ -82,8 +82,8 @@ Neovim configuration.
 ## Status
 
 - Plan: complete
-- Implementation: in progress
-- Current phase: Phase 6
+- Implementation: complete
+- Current phase: Complete
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Current theme: `profiles/common/.config/emacs/themes/mig-one-light-theme.el`
@@ -94,6 +94,18 @@ Neovim configuration.
 
 During execution, update this section and each Phase status only after that
 phase's validation passes.
+
+## Execution results
+
+- All six phases are complete.
+- Automated appearance and regression validation passes 35 tests under Emacs
+  31.1, including all configured programming Tree-sitter modes at font-lock
+  level 4 and the Ghostel palette contract.
+- Manual visual verification is excluded from the implementation scope.
+- The repository-pinned `diff-hl` revision was installed for validation. The
+  user-managed Ghostel checkout is at `7c4cbd9f487b545c3d0452ab749f65eaa3c18b7e`
+  instead of the provisioner's reviewed revision; its face, palette, cursor,
+  and automatic theme synchronization contracts passed the automated tests.
 
 ## Source-of-truth hierarchy
 
@@ -634,7 +646,8 @@ shared font-lock table:
 
 - `typescript-ts-jsx-tag-face`: inherit `font-lock-builtin-face`.
 - `typescript-ts-jsx-attribute-face`: inherit
-  `font-lock-property-name-face`.
+  `font-lock-property-name-face` and set slant to `normal` explicitly because
+  the inherited property face leaves its runtime slant unspecified.
 
 These two overrides reproduce the Zenbones Tree-sitter `@tag` to `Special` and
 `@tag.attribute` to `@property` mappings at
@@ -1012,9 +1025,13 @@ Other Magit and Git modes:
 - `magit-bisect-skip`: inherit `warning`.
 - `magit-bisect-bad`: inherit `error`.
 
-diff-hl uses the core diff faces for fringe and inline hunk presentation. Do
-not hard-code a second set of colors in `init.el`. Verify add/change/delete
-fringe indicators and the configured inline preview at
+diff-hl uses the core diff faces for fringe and inline hunk presentation.
+Retain the upstream `diff-hl-insert` to `diff-added` and `diff-hl-delete` to
+`diff-removed` inheritance, and set `diff-hl-change` to inherit `diff-changed`
+because upstream otherwise resolves it to raw `blue3`. The three
+`diff-hl-reference-*` faces inherit their matching `diff-hl-*` parents. Do not
+hard-code a second set of colors in `init.el`. Verify add/change/delete fringe
+indicators, their reference variants, and the configured inline preview at
 `profiles/common/.config/emacs/init.el:576-592`.
 
 ### Dired, help, and special buffers
@@ -1408,9 +1425,9 @@ Status: complete
   behavior are unchanged.
 - term-sessions and ghostel-compile buffers display the same palette.
 
-## Phase 6: Add focused automated and visual verification
+## Phase 6: Add focused automated verification
 
-Status: pending
+Status: complete
 
 ### Automated test changes
 
@@ -1548,7 +1565,10 @@ weaken assertions, or skip configured package families. Existing unrelated
 warnings from loading `init.el` are allowed only when they were captured before
 implementation and the command still exits successfully.
 
-### Manual visual matrix
+### Optional manual visual matrix
+
+Manual visual verification is excluded from the implementation scope. The
+matrix remains as optional operator guidance and is not a completion gate.
 
 Open one representative buffer for each row and compare it with the exact face
 contract rather than subjective similarity:

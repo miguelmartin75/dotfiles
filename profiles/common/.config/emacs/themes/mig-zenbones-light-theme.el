@@ -159,7 +159,7 @@
  ;; Tree-sitter and fallback programming modes.
  '(typescript-ts-jsx-tag-face ((t (:inherit font-lock-builtin-face))))
  '(typescript-ts-jsx-attribute-face
-   ((t (:inherit font-lock-property-name-face))))
+   ((t (:inherit font-lock-property-name-face :slant normal))))
  '(nim-font-lock-export-face ((t (:inherit font-lock-builtin-face))))
  '(nim-font-lock-pragma-face ((t (:inherit font-lock-preprocessor-face))))
  '(nim-non-overloadable-face ((t (:inherit font-lock-builtin-face))))
@@ -433,6 +433,7 @@
  `(diff-added ((t (:foreground ,leaf :background ,diff-add-bg :extend t))))
  `(diff-removed ((t (:foreground ,rose :background ,diff-delete-bg :extend t))))
  `(diff-changed ((t (:foreground ,water :background ,diff-change-bg :extend t))))
+ '(diff-hl-change ((t (:inherit diff-changed))))
  `(diff-refine-added ((t (:foreground ,fg :background ,diff-add-bg :weight bold))))
  `(diff-refine-removed
    ((t (:foreground ,fg :background ,diff-delete-bg :weight bold))))
