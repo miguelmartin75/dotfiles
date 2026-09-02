@@ -2,14 +2,14 @@
 
 ## Status
 
-Plan status: in progress.
+Plan status: complete.
 
 Implementation status:
 
 - Phase 1: complete
 - Phase 2: complete
 - Phase 3: complete
-- Phase 4: in progress
+- Phase 4: complete
 
 ## Goal
 
@@ -241,8 +241,11 @@ Completed: 2026-09-02.
   Markdown implementation and issue a user error for table alignment outside
   a table.
 - Extended the shared Markdown setup with normal/visual `g TAB`, `g S-TAB`,
-  `C-x n s`, and `SPC o m`. Focused checks confirmed raw normal-state `TAB`
-  and `C-i` retain their existing Evil binding.
+  `C-x n s`, and `SPC o m`. Physical GUI Tab arrives as the separate `<tab>`
+  event, so normal state binds it locally to `evil-jump-forward`; physical
+  `g <tab>` and `g <backtab>` aliases preserve the documented chords without
+  globally changing Markdown or Evil. Focused checks confirmed raw normal-state
+  `TAB`, `<tab>`, and `C-i` retain the existing Evil behavior.
 - A focused two-mode ERT harness passed 2/2 tests covering local heading
   folding, subtree narrowing and widening, table alignment, next/previous cell
   traversal, non-table alignment errors, and effective bindings.
@@ -313,7 +316,7 @@ Completed: 2026-09-02.
 
 ## Phase 4: Lock the Contract with Tests and Documentation
 
-Status: in progress.
+Status: complete.
 
 1. Extend `profiles/common/.config/emacs/leader-bindings-test.el`, or add a
    focused neighboring ERT file, to load the configuration and assert the
@@ -331,19 +334,54 @@ Status: in progress.
 5. Add leader-binding tests proving mode-local Markdown `SPC o RET`,
    `SPC t b`, and `SPC t B` do not change the existing Org and generic
    terminal bindings.
-6. Run the relevant Emacs batch ERT tests with the repository configuration,
-   then manually verify raw input in a GUI or terminal Emacs session using
-   `C-h k` for `TAB`, `g TAB`, `M-j`, and `M-S-<arrow>`. Raw key event
-   translation differs between GUI and terminal Emacs, so this final check
-   must exercise both environments used by the configuration.
+6. Run the relevant Emacs batch ERT tests with the repository configuration.
+   Verify GUI function events through `emacsclient` evaluation against an
+   isolated graphical server and verify terminal ASCII events through focused
+   keymap tests. Do not send operating-system-level synthetic input.
 
 Success criteria:
 
 - Automated tests cover behavior in the Tree-sitter and fallback Markdown
   modes, not just static key declarations.
 - Existing Org, Ghostel-target, and visual-selection tests still pass.
-- Manual checks confirm the intended key events arrive in both supported
-  Emacs front ends.
+- ERT and isolated-server checks confirm the intended ASCII and function-event
+  bindings in both supported Emacs front ends.
+
+### Implementation record
+
+Automated verification completed: 2026-09-02.
+
+- Added `profiles/common/.config/emacs/markdown-parity-test.el` with three
+  behavior-focused ERT tests for both Markdown implementations. They cover
+  heading, list, and pipe-table structural operations; folding, narrowing,
+  table traversal, and table-alignment dispatch; fenced backtick and tilde
+  extraction including empty bodies plus absent and incomplete errors; replay
+  and target-choice delivery; Markdown-local normal and visual bindings; and
+  Org and generic terminal binding scope.
+- Table fixtures activate the real Tree-sitter table minor map and prove that
+  ASCII `TAB`, physical `<tab>`, and `C-i` resolve to `evil-jump-forward`, while
+  both ASCII and physical-event `g TAB`/`g S-TAB` forms traverse table cells.
+- `emacs -Q --batch -l profiles/common/.config/emacs/markdown-parity-test.el
+  -f ert-run-tests-batch-and-exit` passed 3/3 tests.
+- `emacs -Q --batch -L profiles/common/.config/emacs -l
+  profiles/common/.config/emacs/send-text-targets-test.el -f
+  ert-run-tests-batch-and-exit` passed 5/5 existing target and
+  visual-selection tests.
+- With the pinned `diff-hl` source on `load-path`, the combined leader,
+  send-target, and real-Git diff integration suite passed 12/12 tests.
+- Batch `check-parens` passed for the Markdown source and all three relevant
+  ERT files. `git diff --check` passed.
+
+- After reloading the current configuration into an isolated graphical Emacs
+  server, an `emacsclient` keymap query in a real Tree-sitter table resolved
+  `TAB`, `<tab>`, and `C-i` to `evil-jump-forward`; `g TAB` and `g <tab>` to
+  `my/markdown-cycle`; and `g <backtab>` to
+  `my/markdown-cycle-buffer`.
+- The table behavior fixture now activates the real Tree-sitter table minor
+  map before checking the ASCII and graphical function-event bindings. The
+  final focused ERT run passed 3/3 tests.
+- Per user direction, acceptance uses `emacsclient` and ERT only. No
+  operating-system-level synthetic input is part of this workflow.
 
 ## Completion Criteria
 
