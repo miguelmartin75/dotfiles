@@ -20,7 +20,6 @@
 (setq my/config-directory
       (file-name-directory (or load-file-name user-init-file))
       config-path (expand-file-name "init.el" my/config-directory))
-(add-to-list 'load-path my/config-directory)
 
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
                          ("elpa" . "https://elpa.gnu.org/packages/")))
@@ -440,7 +439,8 @@
   :after (consult embark))
 
 
-(require 'my-file-picker)
+(require 'my-file-picker
+         (expand-file-name "my-file-picker.el" my/config-directory))
 
 (setq completion-styles '(basic partial-completion flex)
       completion-category-overrides '((eglot-capf (styles flex))
@@ -944,8 +944,10 @@
 (use-package ob-async)
 
 
-(require 'my-org-datetree)
-(require 'org-autolist)
+(require 'my-org-datetree
+         (expand-file-name "my-org-datetree.el" my/config-directory))
+(require 'org-autolist
+         (expand-file-name "org-autolist.el" my/config-directory))
 (add-hook 'org-mode-hook
           (lambda ()
             (org-autolist-mode 1)))
@@ -1011,7 +1013,8 @@
   :commands term-sessions-store-org-link)
 
 
-(require 'my-send-text)
+(require 'my-send-text
+         (expand-file-name "my-send-text.el" my/config-directory))
 
 (defvar my/project-commands nil
   "Project-local alist of task labels and shell commands.
