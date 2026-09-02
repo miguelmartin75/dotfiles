@@ -21,6 +21,10 @@
            ;; Durable zmx sessions and Emacs/Org interfaces.
            (:url "https://github.com/ArthurHeymans/emacs-term-sessions.git")
            "0815dbea006128df1d61e9d29e5a8ada53b349c1")
+          (diff-hl
+           ;; Source-buffer Git hunk state and actions.
+           (:url "https://github.com/dgutov/diff-hl.git")
+           "3d9552c575fd14ac98ac97bf3c19cdef39f79305")
           (odin-mode
            ;; Odin editing mode for the retained language surface.
            (:url "https://github.com/mattt-b/odin-mode.git")

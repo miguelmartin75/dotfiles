@@ -2,8 +2,8 @@
 
 ## Status
 
-- Overall: not started, 0/4 phases complete
-- Current phase: Phase 1
+- Overall: in progress, 1/4 phases complete
+- Current phase: Phase 2
 - Scope: local and TRAMP file buffers, Git working-tree review, and queued
   annotations sent through the existing target transport
 
@@ -282,7 +282,7 @@ Sending preserves the current behavior at
 
 ## Phase 1: Make external agent edits visible with live gutter state
 
-Status: not started
+Status: complete
 
 ### Changes
 
@@ -326,6 +326,36 @@ Status: not started
 - Tracked source buffers show live unstaged hunk state against the Git index.
 - Package installation and startup remain deterministic and startup performs no
   package or network mutation.
+
+### Implementation record
+
+Completed: 2026-09-02
+
+- `emacs --batch -Q --eval '<isolated package-vc install and commit assertion>'`
+  installed `diff-hl` version 1.11.1 at
+  `3d9552c575fd14ac98ac97bf3c19cdef39f79305`. Repeating the isolated
+  descriptor assertion printed `DIFF_HL_REUSED
+  3d9552c575fd14ac98ac97bf3c19cdef39f79305` without archive refresh or a
+  package write. The isolated invocation set `project-list-file` inside the
+  temporary package directory so `package-vc` did not write user project
+  history.
+- `emacs --batch -Q --eval '<diff-hl configuration assertions>'` printed
+  `DIFF_HL_CONFIGURATION_OK backend=inline posframe=absent`, confirming the
+  explicit inline renderer, unstaged-only state, confirmed revert setting,
+  global gutter and flydiff modes, and Magit refresh hook.
+- `emacs --batch -Q --eval '<clean and modified auto-revert exercise>'`
+  printed `AUTO_REVERT_CLEAN_AND_MODIFIED_CONTRACT_OK
+  remote-polling=disabled`: a clean visiting buffer refreshed after a file
+  write, while a modified buffer retained its local edit.
+- `emacs --batch -Q --eval '<check-parens for install-packages.el and init.el>'`
+  printed `CHECK_PARENS_OK`. `git diff --check` completed without output, and
+  the configuration contains no custom `diff-hl` faces, margin mode, or
+  `posframe` dependency.
+
+Manual acceptance remains for the running graphical and terminal Emacs
+servers: external writes, added/modified/deleted Git hunk markers, Magit
+index refresh, Difftastic-unavailable startup, and representative TRAMP
+latency.
 
 ## Phase 2: Add Neovim-compatible hunk navigation and actions
 

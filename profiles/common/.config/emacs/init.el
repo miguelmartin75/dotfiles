@@ -114,6 +114,8 @@
 (add-hook 'before-save-hook 'delete-trailing-whitespace)
 (setq require-final-newline t)
 
+(setq auto-revert-remote-files nil)
+(global-auto-revert-mode 1)
 
 (electric-indent-mode 1)
 (setq server-kill-new-buffers t)
@@ -564,6 +566,20 @@
 
 (use-package magit
   :commands magit-status)
+
+(use-package diff-hl
+  :defer 1
+  :init
+  (setq diff-hl-show-staged-changes nil
+        diff-hl-ask-before-revert-hunk t)
+  :config
+  (require 'diff-hl-flydiff)
+  (require 'diff-hl-show-hunk)
+  (setq diff-hl-show-hunk-function #'diff-hl-show-hunk-inline)
+  (global-diff-hl-mode 1)
+  (diff-hl-flydiff-mode 1)
+  (add-hook 'magit-post-refresh-hook #'diff-hl-magit-post-refresh))
+
 (when (and (executable-find "difft")
            (package-installed-p 'difftastic))
   (require 'difftastic-bindings)
