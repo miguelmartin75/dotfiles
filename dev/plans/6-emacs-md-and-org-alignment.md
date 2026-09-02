@@ -7,8 +7,8 @@ Plan status: in progress.
 Implementation status:
 
 - Phase 1: complete
-- Phase 2: in progress
-- Phase 3: pending
+- Phase 2: complete
+- Phase 3: in progress
 - Phase 4: pending
 
 ## Goal
@@ -193,7 +193,7 @@ Completed: 2026-09-02.
 
 ## Phase 2: Align Folding, Focus, and Table Access
 
-Status: in progress.
+Status: complete.
 
 1. Add a Markdown context command for `g TAB`:
 
@@ -232,9 +232,28 @@ Success criteria:
   shadow Org's table recalculation.
 - Normal-state `TAB` still performs the existing Evil `C-i` behavior.
 
+### Implementation record
+
+Completed: 2026-09-02.
+
+- Added public local-cycle, buffer-cycle, subtree-focus, and table-alignment
+  commands. They dispatch only through the public APIs verified for each
+  Markdown implementation and issue a user error for table alignment outside
+  a table.
+- Extended the shared Markdown setup with normal/visual `g TAB`, `g S-TAB`,
+  `C-x n s`, and `SPC o m`. Focused checks confirmed raw normal-state `TAB`
+  and `C-i` retain their existing Evil binding.
+- A focused two-mode ERT harness passed 2/2 tests covering local heading
+  folding, subtree narrowing and widening, table alignment, next/previous cell
+  traversal, non-table alignment errors, and effective bindings.
+- Upstream table mutation bindings remain unchanged and are documented in the
+  setup: Tree-sitter uses `M-S-<arrow>`, while fallback Markdown uses
+  `C-c S-<arrow>`.
+- `check-parens` and `git diff --check` completed successfully.
+
 ## Phase 3: Send Fenced Markdown Code to Ghostel
 
-Status: pending.
+Status: in progress.
 
 1. Extend `profiles/common/.config/emacs/my-send-text.el` with a public
    interactive command that obtains the fenced code block at point.

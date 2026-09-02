@@ -715,13 +715,85 @@
                                   #'markdown-ts-demote
                                   #'markdown-demote))
 
+(defun my/markdown-cycle ()
+  "Cycle the current Markdown heading or advance a table cell."
+  (interactive)
+  (cond
+   ((eq major-mode 'markdown-ts-mode)
+    (if (markdown-ts-at-table-p)
+        (markdown-ts-table-next-cell)
+      (outline-back-to-heading)
+      (markdown-ts-outline-cycle)))
+   ((derived-mode-p 'markdown-mode)
+    (if (markdown-table-at-point-p)
+        (markdown-table-forward-cell)
+      (markdown-back-to-heading-over-code-block t)
+      (markdown-cycle)))
+   (t
+    (user-error "Not in a Markdown buffer"))))
+
+(defun my/markdown-cycle-buffer ()
+  "Cycle Markdown buffer visibility or move to the previous table cell."
+  (interactive)
+  (cond
+   ((eq major-mode 'markdown-ts-mode)
+    (if (markdown-ts-at-table-p)
+        (markdown-ts-table-previous-cell)
+      (outline-cycle-buffer)))
+   ((derived-mode-p 'markdown-mode)
+    (if (markdown-table-at-point-p)
+        (markdown-table-backward-cell)
+      (markdown-shifttab)))
+   (t
+    (user-error "Not in a Markdown buffer"))))
+
+(defun my/markdown-narrow-to-subtree ()
+  "Narrow the current Markdown heading subtree."
+  (interactive)
+  (cond
+   ((eq major-mode 'markdown-ts-mode)
+    (outline-back-to-heading)
+    (let ((beginning (point))
+          (end (save-excursion
+                 (outline-end-of-subtree)
+                 (point))))
+      (narrow-to-region beginning end)))
+   ((derived-mode-p 'markdown-mode)
+    (markdown-narrow-to-subtree))
+   (t
+    (user-error "Not in a Markdown buffer"))))
+
+(defun my/markdown-align-table ()
+  "Align the Markdown table at point."
+  (interactive)
+  (cond
+   ((eq major-mode 'markdown-ts-mode)
+    (if (markdown-ts-at-table-p)
+        (markdown-ts-table-align-table)
+      (user-error "Not at a Markdown table")))
+   ((derived-mode-p 'markdown-mode)
+    (if (markdown-table-at-point-p)
+        (markdown-table-align)
+      (user-error "Not at a Markdown table")))
+   (t
+    (user-error "Not in a Markdown buffer"))))
+
+;; Preserve upstream table mutation directions: Tree-sitter uses M-S arrows;
+;; classic Markdown uses C-c S arrows for its insert/delete row and column keys.
 (defun my/markdown-setup ()
   "Install buffer-local Markdown structural bindings for Evil."
+  (evil-local-set-key 'normal (kbd "<tab>") #'evil-jump-forward)
   (dolist (state '(normal visual))
     (evil-local-set-key state (kbd "M-h") #'my/markdown-promote)
     (evil-local-set-key state (kbd "M-j") #'my/markdown-move-down)
     (evil-local-set-key state (kbd "M-k") #'my/markdown-move-up)
-    (evil-local-set-key state (kbd "M-l") #'my/markdown-demote)))
+    (evil-local-set-key state (kbd "M-l") #'my/markdown-demote)
+    (evil-local-set-key state (kbd "g TAB") #'my/markdown-cycle)
+    (evil-local-set-key state (kbd "g <tab>") #'my/markdown-cycle)
+    (evil-local-set-key state (kbd "g S-TAB") #'my/markdown-cycle-buffer)
+    (evil-local-set-key state (kbd "g <backtab>") #'my/markdown-cycle-buffer)
+    (evil-local-set-key state (kbd "C-x n s") #'my/markdown-narrow-to-subtree)
+    (evil-local-set-key state (kbd "SPC o m") #'my/markdown-align-table)))
 
 
 
