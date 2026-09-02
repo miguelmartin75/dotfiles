@@ -83,7 +83,7 @@ Neovim configuration.
 
 - Plan: complete
 - Implementation: in progress
-- Current phase: Phase 5
+- Current phase: Phase 6
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Current theme: `profiles/common/.config/emacs/themes/mig-one-light-theme.el`
@@ -1382,7 +1382,7 @@ Status: complete
 
 ## Phase 5: Apply Zenbones light to Ghostel terminal buffers
 
-Status: pending
+Status: complete
 
 ### Changes
 
