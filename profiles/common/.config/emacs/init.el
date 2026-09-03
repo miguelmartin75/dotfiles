@@ -423,10 +423,12 @@
              consult-isearch-history
              consult-line
              consult-line-multi
+             consult-preview-at-point-mode
              consult-recent-file
              consult-ripgrep
              consult-xref
              consult-yank-from-kill-ring)
+  :bind ([remap switch-to-buffer] . consult-buffer)
   :init
   (setq xref-show-xrefs-function #'consult-xref
         xref-show-definitions-function #'consult-xref
@@ -455,12 +457,14 @@
       completions-format 'one-column
       completions-detailed t
       completions-max-height 14
-      minibuffer-visible-completions nil
-      minibuffer-completion-auto-choose nil)
+      minibuffer-visible-completions nil)
+
+(setq-default minibuffer-completion-auto-choose t)
 
 (add-hook 'completion-list-mode-hook
           (lambda ()
             (setq-local window-min-height completions-max-height)))
+(add-hook 'completion-list-mode-hook #'consult-preview-at-point-mode)
 
 (keymap-set completion-in-region-mode-map "TAB"
             #'minibuffer-next-completion)

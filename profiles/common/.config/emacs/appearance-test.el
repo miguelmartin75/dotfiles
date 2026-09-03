@@ -359,6 +359,8 @@
   (should completion-eager-display)
   (should completion-eager-update)
   (should (eq completions-format 'one-column))
+  (should (default-value 'minibuffer-completion-auto-choose))
+  (should (eq (key-binding (kbd "C-x b")) #'consult-buffer))
   (save-window-excursion
     (dolist (line-count '(2 30))
       (with-current-buffer-window
@@ -367,6 +369,7 @@
             (window-height . completions--fit-window-to-buffer))
           nil
         (completion-list-mode)
+        (should consult-preview-at-point-mode)
         (dotimes (_ line-count)
           (insert "candidate\n")))
       (let ((window (get-buffer-window "*Completions*")))
