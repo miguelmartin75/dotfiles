@@ -2,13 +2,13 @@
 
 ## Status
 
-- Overall: in progress, 1/3 phases complete
-- Current phase: Phase 2
+- Overall: in progress, 2/3 phases complete
+- Current phase: Phase 3
 
 Phase status:
 
 - Phase 1: complete
-- Phase 2: pending
+- Phase 2: complete
 - Phase 3: pending
 
 Update this section during execution whenever a phase starts or completes.
@@ -224,7 +224,7 @@ Implementation result:
 
 ## Phase 2: Configure Pretty Tables and the Shared Toggle
 
-Status: pending.
+Status: complete.
 
 1. Add a `use-package markdown-table-wrap-pretty` declaration near the
    existing `markdown-mode` declaration in
@@ -270,6 +270,13 @@ Success criteria:
   table, and overlapping tables for an active region.
 - `SPC o m` and all existing table commands retain their current bindings.
 - Reloading `init.el` does not install or update packages.
+
+Implementation result:
+
+- Added the shared deferred package declaration with the exact four-mode
+  default list and the three required hooks. Added `SPC o w` through
+  `my/leader-map`; batch checks confirmed immediate decoration in all four
+  modes while preserving the existing Markdown alignment binding.
 
 ## Phase 3: Add Focused Regression Coverage and Validate Display Behavior
 

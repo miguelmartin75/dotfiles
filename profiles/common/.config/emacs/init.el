@@ -680,6 +680,17 @@
   (setq markdown-command "multimarkdown"
         markdown-indent-on-enter 'indent-and-new-item))
 
+(use-package markdown-table-wrap-pretty
+  :commands (markdown-table-wrap-pretty-mode
+             markdown-table-wrap-pretty-toggle)
+  :init
+  (setq markdown-table-wrap-pretty-default-on-major-modes
+        '(org-mode markdown-mode gfm-mode markdown-ts-mode))
+  :hook
+  ((org-mode . markdown-table-wrap-pretty-mode)
+   (markdown-mode . markdown-table-wrap-pretty-mode)
+   (markdown-ts-mode . markdown-table-wrap-pretty-mode)))
+
 (defun my/markdown-return ()
   "Delete an empty Markdown item or preserve native return behavior."
   (interactive)
@@ -1818,6 +1829,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("o i" . org-roam-node-insert)
        ("o t" . org-set-tags-command)
        ("o r" . org-table-recalculate-buffer-tables)
+       ("o w" . markdown-table-wrap-pretty-toggle)
        ("o RET" . org-babel-execute-src-block)
        ("h o" . customize)
        ("h h" . info)
