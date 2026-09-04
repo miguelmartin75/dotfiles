@@ -2,7 +2,7 @@
 
 ## Status
 
-- Plan: draft, project storage layout awaiting confirmation
+- Plan: draft, project section schema confirmed
 - Implementation: not started
 - Current phase: Phase 1
 - Core completion boundary: Phases 1 through 6 and the mandatory Phase 9 checks
@@ -23,7 +23,7 @@ file, not an external tracker:
 
 ```text
 Org project file
-  project log, task headings, design, personal TODO state, and note links
+  curated docs, task headings, personal TODO state, note links, and project log
         |
         +-> journal.org
         |     chronological private log linked by Org ID
@@ -41,11 +41,11 @@ Org project file
 ```
 
 Org is sufficient with no Linear account, executable, API key, identifier,
-URL, module load, or network. Org owns local task identity and personal TODO
-state. The journal owns chronology only. When a task is associated with Linear,
-Linear owns only the team-visible issue state and communication. Org TODO state
-and Linear workflow state are separate dimensions and never synchronize
-automatically.
+URL, module load, or network. Org remains the private workflow control plane
+and owns local task identity and personal TODO state. The journal owns
+chronology only. When a task is associated with Linear, Linear owns only the
+team-visible issue state and communication. Org TODO state and Linear workflow
+state are separate dimensions and never synchronize automatically.
 
 Partition work by project. The recommended default is one file at
 `~/org/work/projects/<project-key>.org`. A project that needs adjacent note or
@@ -61,10 +61,11 @@ protocols and lifecycle guarantees.
 ## Proposed project file
 
 Use one project heading as the storage boundary with exactly three standard
-sections: `Log`, `Tasks`, and `Design`. `Log` is the dated project chronology.
-`Active` is the only task subtree for open work; completed or canceled tasks
-move to `Archive` only through an explicit archive command. `Design` holds
-durable project-level design text or links.
+sections in this order: `Docs`, `Tasks`, and `Log`. `Docs` is a curated index of
+durable project documentation, especially repository Markdown shared with
+teammates. `Active` is the only task subtree for open work; completed or
+canceled tasks move to `Archive` only through an explicit archive command.
+`Log` is the dated project chronology.
 
 Recommended default path:
 
@@ -85,12 +86,9 @@ Example contents:
 :PROJECT_ROOT: /Users/migmartin/repos/dotfiles/
 :END:
 
-** Log
-*** 2026
-**** 2026-09 September
-***** 2026-09-03 Thursday
-****** 09:30 [[id:task-org-id][emacs-agent-workflow]]
-Decided to keep Linear optional and use Org IDs as the durable identity.
+** Docs
+- [[file:/Users/migmartin/repos/dotfiles/docs/architecture.md][Architecture]]
+- [[file:/Users/migmartin/repos/dotfiles/docs/agent-workflow.md][Agent workflow]]
 
 ** Tasks
 *** Active
@@ -110,15 +108,24 @@ Decided to keep Linear optional and use Org IDs as the durable identity.
 :WORK_KEY: retire-journal-work-capture
 :END:
 
-** Design
-*** Agent workflow
-- [[file:~/org/notes/emacs-agent-workflow.md][Agent workflow design]]
+** Log
+*** 2026
+**** 2026-09 September
+***** 2026-09-03 Thursday
+****** 09:30 [[id:task-org-id][emacs-agent-workflow]]
+Decided to keep Linear optional and use Org IDs as the durable identity.
 ```
 
 The example task intentionally has no narrative subsections. The minimum valid
 task is a TODO heading with a property drawer containing `ID`. `WORK_KEY`,
 `WORKSPACE_ROOT`, note/session properties, free-form body text, and any
 user-chosen task subsections are added only when relevant.
+
+`Docs` is a curated project documentation index, not an automatically generated
+list of task notes. A task-specific file remains linked through `NOTE_FILE` and
+appears under `Docs` only when it becomes a durable project reference. Keep
+repository Markdown as the shared source of truth and link it from Org; do not
+mirror its content into the project file.
 
 The project `Log` datetree is for optional detailed project chronology. The
 global `~/org/journal.org` remains the concise cross-project daily index and
@@ -130,7 +137,7 @@ The directory form uses the same `index.org` contents:
 ```text
 ~/org/work/projects/dotfiles/
   index.org
-  design/
+  notes/
     emacs-agent-workflow.md
 ```
 
@@ -142,8 +149,8 @@ changing storage form does not require rewriting journal links.
 
 - Start or resume a local Org task by selecting an existing task or creating
   one from a title, with an optional human-facing local key.
-- Partition tasks, archive, optional dated logs, and design by project while
-  keeping the global journal as the cross-project daily index.
+- Partition curated docs, tasks, archive, and optional dated logs by project
+  while keeping the global journal as the cross-project daily index.
 - Maintain one durable Org `ID` per task regardless of whether any external
   tracker is associated.
 - Keep one timestamped daily log in `~/org/journal.org`, with every entry
@@ -188,6 +195,8 @@ changing storage form does not require rewriting journal links.
 - Do not expose an Emacs TCP server or forward a raw Emacs server socket from a
   shared or untrusted host.
 - Do not add a generic tracker framework before a second real tracker exists.
+- Do not mirror content between Org and Markdown. Keep shared repository
+  documentation in Markdown and link it from the private Org control plane.
 
 ## Current codebase findings
 
@@ -363,10 +372,7 @@ project heading and exactly three standard branches:
 :PROJECT_ROOT: initial-normalized-root
 :END:
 
-** Log
-*** YYYY
-**** YYYY-MM Month
-***** YYYY-MM-DD Day
+** Docs
 
 ** Tasks
 *** Active
@@ -379,14 +385,23 @@ project heading and exactly three standard branches:
 
 *** Archive :ARCHIVE:
 
-** Design
+** Log
+*** YYYY
+**** YYYY-MM Month
+***** YYYY-MM-DD Day
 ```
 
 Rules:
 
-- Create the project-level `Log`, `Tasks`, and `Design` headings. Their content
-  is optional; `Log` follows the datetree shape when entries exist, `Tasks`
-  contains `Active` and `Archive`, and `Design` has no required internal schema.
+- Create the project-level `Docs`, `Tasks`, and `Log` headings in that order.
+  Their user-authored content is optional; `Docs` has no required internal
+  schema, `Tasks` contains `Active` and `Archive`, and `Log` follows the
+  datetree shape when entries exist. Any additional user-authored content or
+  subsections are optional; the workflow still owns `Tasks/Active`,
+  `Tasks/Archive`, and the `Log` datetree conventions.
+- Treat `Docs` as a curated index of durable project documentation, especially
+  repository Markdown shared with teammates. Do not populate it automatically
+  from task notes and do not copy linked document content into Org.
 - Every managed task must have a property drawer, and `ID` is the only property
   required for every task. Generate it before the first save and resolve all
   durable links by that ID.
@@ -406,7 +421,9 @@ Rules:
   `CODEX_THREAD_ID` are optional. Omit them when unset rather than creating
   empty properties.
 - When set, `NOTE_FILE` names one existing `.org` or `.md` file. Use an Org
-  `file:` link and do not copy the external note content.
+  `file:` link and do not copy the external note content. Keep this link on the
+  task; add the same file under `Docs` only when it becomes a durable project
+  reference.
 - The task body and all task subsections are optional. The workflow must not
   create or require `Outcome`, `Plan`, `Log`, `Decisions`, `Evidence`,
   `Artifacts`, `Update drafts`, or any other narrative heading.
@@ -508,7 +525,7 @@ tests must inject failures after task preparation and after journal save.
 
 `my/work-draft-update` assembles an editable Markdown buffer from the task
 headline and TODO state, plus explicitly selected free-form task text, project
-Log entries, Design text, and current-day journal entries:
+Docs links or text, Log entries, and current-day journal entries:
 
 ```text
 Changed
@@ -526,9 +543,9 @@ Next step
 
 The command is useful with no tracker. By default it includes only the task
 headline, TODO state, and explicitly selected current-day journal entries. All
-task body, project Log, and Design text requires selection. Strip property
-drawers and targets of local `file:`/TRAMP links while retaining safe link
-labels. Scan remaining plain text for absolute paths, home-relative paths,
+task body, project Docs content, and Log entries require selection. Strip
+property drawers and targets of local `file:`/TRAMP links while retaining safe
+link labels. Scan remaining plain text for absolute paths, home-relative paths,
 TRAMP syntax, and common credential forms. A match produces a visible warning
 and requires acknowledgement before copy/finalize. This is review assistance,
 not a claim of complete secret detection.
@@ -1012,10 +1029,10 @@ optional Linear commands under `M-x` initially.
 - Store work TODOs in `journal.org`: chronology and current task state have
   different retention and agenda behavior.
 - Use one global `tasks.org` file by default: it loses useful project boundaries
-  for Log, Design, capture, archive, and agenda navigation. Keep the shared-file
-  form configurable for users who prefer it.
+  for Docs, Tasks, Log, capture, archive, and agenda navigation. Keep the
+  shared-file form configurable for users who prefer it.
 - Generate one Org file per work item: it creates unnecessary file sprawl and
-  makes project logs, design, and archives harder to browse. Use one primary
+  makes project docs, logs, and archives harder to browse. Use one primary
   file per project and durable Org IDs.
 - Add a generalized tracker adapter registry: only one optional tracker adapter
   is currently in scope. Namespaced Linear functions and properties are
@@ -1025,8 +1042,9 @@ optional Linear commands under `M-x` initially.
   manual use and GraphQL debugging.
 - Duplicate every Linear field in Org: it creates synchronization conflicts.
   Persist identity and URL only; display the rest ephemerally.
-- Generate both Markdown and Org task records: use Org for managed task state
-  and link existing Markdown detail notes.
+- Generate both Markdown and Org task records: keep Org as the private workflow
+  control plane and link shared repository Markdown or existing detail notes
+  without mirroring their content.
 - Use Gptel as the Codex harness: Gptel does not own Codex app-server threads,
   sandboxing, approvals, or skills.
 - Build a custom app-server client now: pilot and pin `emacs-codex-ide` before
@@ -1082,7 +1100,7 @@ Status: pending
 - With no Linear executable, module, auth-source entry, or network, a title-only
   start creates the project structure, one Active Org TODO, journal backlink,
   and bound tab context.
-- A new project contains only the standard `Log`, `Tasks`, and `Design`
+- A new project contains only the standard `Docs`, `Tasks`, and `Log`
   branches. A new task requires only its heading and property drawer; every
   narrative body or subsection is optional.
 - Existing tasks resume by Org ID or project-scoped local key without duplicate
