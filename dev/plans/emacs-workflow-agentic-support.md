@@ -19,10 +19,10 @@ applicable verification pass.
 ## Outcome
 
 Build an Emacs-centered workflow whose complete baseline is an Org project
-file, not an external tracker:
+index, not an external tracker:
 
 ```text
-Org project file
+Org project index
   curated docs, task headings, personal TODO state, note links, and project log
         |
         +-> journal.org
@@ -47,18 +47,17 @@ chronology only. When a task is associated with Linear, Linear owns only the
 team-visible issue state and communication. Org TODO state and Linear workflow
 state are separate dimensions and never synchronize automatically.
 
-Partition work by project. The recommended default is one file at
-`~/org/work/projects/<project-key>.org`. A project that needs adjacent note or
-artifact files can instead use `~/org/work/projects/<project-key>/index.org`.
-A shared `projects.org` file with one heading per project remains configurable,
-but it is not the default. A task keeps its detailed notes below its heading or
-links one existing Org or Markdown file.
+Partition work by project. Each project uses one directory with one primary Org
+index at `~/org/work/projects/<project-key>/index.org`. Project-scoped
+supporting notes or artifacts can live below that directory, but only
+`index.org` is added to the agenda. A task keeps its detailed notes below its
+heading or links one existing Org or Markdown file.
 
 Emacs tabs hold only live projections. Codex app-server, Gptel, terminal agents,
 and lifecycle events remain separate surfaces because they have different
 protocols and lifecycle guarantees.
 
-## Proposed project file
+## Proposed project index
 
 Use one project heading as the storage boundary with exactly three standard
 sections in this order: `Docs`, `Tasks`, and `Log`. `Docs` is a curated index of
@@ -67,10 +66,10 @@ teammates. `Active` is the only task subtree for open work; completed or
 canceled tasks move to `Archive` only through an explicit archive command.
 `Log` is the dated project chronology.
 
-Recommended default path:
+Canonical path:
 
 ```text
-~/org/work/projects/dotfiles.org
+~/org/work/projects/dotfiles/index.org
 ```
 
 Example contents:
@@ -97,7 +96,7 @@ Example contents:
 :ID: task-org-id
 :WORK_KEY: emacs-agent-workflow
 :WORKSPACE_ROOT: /Users/migmartin/repos/dotfiles/
-:NOTE_FILE: ~/org/notes/emacs-agent-workflow.md
+:NOTE_FILE: ~/org/work/projects/dotfiles/notes/emacs-agent-workflow.md
 :SESSION_BACKEND: codex-native
 :END:
 
@@ -125,14 +124,15 @@ user-chosen task subsections are added only when relevant.
 list of task notes. A task-specific file remains linked through `NOTE_FILE` and
 appears under `Docs` only when it becomes a durable project reference. Keep
 repository Markdown as the shared source of truth and link it from Org; do not
-mirror its content into the project file.
+mirror its content into the project index.
 
 The project `Log` datetree is for optional detailed project chronology. The
 global `~/org/journal.org` remains the concise cross-project daily index and
 links to the task Org ID plus any selected detail note. Do not automatically
 write the same text to both places.
 
-The directory form uses the same `index.org` contents:
+The project directory can contain supporting files alongside its canonical
+index:
 
 ```text
 ~/org/work/projects/dotfiles/
@@ -140,10 +140,6 @@ The directory form uses the same `index.org` contents:
   notes/
     emacs-agent-workflow.md
 ```
-
-The shared-file form repeats the complete project heading, beginning at
-`* dotfiles`, for every project. Project and task Org IDs remain canonical, so
-changing storage form does not require rewriting journal links.
 
 ## Goals
 
@@ -216,8 +212,8 @@ changing storage form does not require rewriting journal links.
   `org-agenda-files`, while the later runtime assignment at
   `profiles/common/.config/emacs/init.el:1376` leaves only `~/org/life.org`.
   Replace both with one explicit runtime agenda containing `life.org` and every
-  existing primary project Org file. Keep `journal.org` and directory-form
-  auxiliary note files outside the agenda.
+  discovered `~/org/work/projects/*/index.org`. Keep `journal.org` and all
+  project-scoped auxiliary note files outside the agenda.
 - Org Roam already indexes `~/org/` and starts database autosync at
   `profiles/common/.config/emacs/init.el:1456-1463`. Do not add another note
   index.
@@ -295,14 +291,15 @@ changing storage form does not require rewriting journal links.
 Use independent identities and never conflate them:
 
 1. A project Org `ID` and `PROJECT_KEY` identify the durable project grouping.
-   The storage path is configurable and is not its identity.
+   The canonical storage path is derived from `PROJECT_KEY` and is not itself
+   the project identity.
 2. A task Org `ID` is the durable task identity and primary key for journal links,
    tab state, agent routing, and resumption.
 3. `WORK_KEY` is an optional, immutable, project-scoped local label. It can be
    `parser-refactor`, `ENG-123`, or a generated `work-YYYYMMDD-HHMMSS` value.
    It is not a remote identity.
 4. The normalized local or TRAMP root is the live workspace identity. Linked
-   worktrees may share a project file while retaining distinct task roots.
+   worktrees may share a project index while retaining distinct task roots.
 5. Optional Linear UUID is the durable identity only inside the Linear
    adapter. Linear identifier and URL are mutable display references.
 
@@ -329,39 +326,42 @@ Add configurable defaults in `my-workflow.el`:
 
 ```text
 project storage root   ~/org/work/projects/
-storage style          file
-file style             ~/org/work/projects/<project-key>.org
-directory style        ~/org/work/projects/<project-key>/index.org
-shared style           ~/org/work/projects.org
+project index          ~/org/work/projects/<project-key>/index.org
 daily journal          ~/org/journal.org
 optional detail note   any user-selected .org or .md file
 ```
 
-Expose `my/work-project-storage-style` with values `file`, `directory`, or
-`shared`; default to `file`. Derive the initial project key from `project-name`
-and let the user edit it. If the resolved path or shared-file heading already
-belongs to a different project, require an explicit existing-project choice or
-a different key. Never overwrite based only on a colliding directory name.
+Expose configurable project storage root and journal paths. Derive the initial
+project key from `project-name` and let the user edit it. Before composing a
+path, require a nonempty single directory component: reject absolute paths,
+`.` or `..`, and any directory separator. Resolve only
+`<project-storage-root>/<project-key>/index.org`. Enumerate existing-project
+choices only from immediate-child project indexes whose heading schema is valid
+and whose `PROJECT_KEY` matches the directory name. If the resolved index
+already belongs to a different project, or the project directory exists without
+the expected index, require an explicit existing-project choice or a different
+key. Never overwrite based only on a colliding directory name.
 
-Create a project file, directory, and heading structure on the first explicit
-task creation, project log entry, or work-task capture, not during startup. At
-startup, set `org-agenda-files` from existing `~/org/life.org` plus only the
-primary Org file for each discovered project. For directory style, include
-`<project-key>/index.org`, not every `.org` note below the directory. Register a
-new primary file immediately so it appears in the same Emacs session. This
-avoids an agenda error on a fresh machine and avoids creating private data as a
-startup side effect. Keep `journal.org` outside the agenda.
+Create the project directory, `index.org`, and heading structure on the first
+explicit task creation, project log entry, or work-task capture, not during
+startup. At startup, set `org-agenda-files` from existing `~/org/life.org` plus
+only existing immediate-child `*/index.org` project indexes. Do not discover
+flat project Org files, a shared project file, or any other `.org` file below a
+project directory. Register a new project index immediately so it appears in
+the same Emacs session. This avoids an agenda error on a fresh machine and
+avoids creating private data as a startup side effect. Keep `journal.org`
+outside the agenda.
 
 Redirect the existing `T` capture through an owned target function. It resolves
-or prompts for a project, creates the required parent directory and project
-headings, then returns the `Tasks/Active` target. Do not rely on an Org file
-capture target to create missing parents.
+or prompts for a project, creates its canonical directory, index, and headings,
+then returns the `Tasks/Active` target. Do not rely on an Org file capture target
+to create missing parents.
 
 Do not add private `~/org/` data to this repository.
 
 ### Project and task schema
 
-Use the complete shape in `Proposed project file`. A project file has one
+Use the complete shape in `Proposed project index`. A project index has one
 project heading and exactly three standard branches:
 
 ```org
@@ -485,8 +485,8 @@ directly.
 `my/work-start` is an ordered, failure-safe operation:
 
 1. Resolve the current project root, including its TRAMP prefix, derive the
-   project key, and select or create the project storage target. Allow an
-   explicit directory and project key only when no project exists.
+   project key, and select or create its canonical project index. Allow an
+   explicit workspace root and project key only when no Emacs project exists.
 2. Offer tasks below the project's `Tasks/Active` subtree or create one from a
    title and optional project-scoped `WORK_KEY`. It never asks for Linear.
 3. Validate project/path collisions, prompts, key uniqueness, note extension,
@@ -633,7 +633,7 @@ once when creating a new local task; refresh never changes the local title or
 TODO state. Copying `branchName` into a worktree command requires a separate
 explicit action.
 
-Before attaching a resolved UUID, scan every registered primary project file
+Before attaching a resolved UUID, scan every discovered canonical project index
 for that UUID and for conflicting provisional identifiers. If another Org ID
 already owns the UUID, make no edits and show both tasks for an explicit
 detach/reassign decision. Do not auto-merge headings, rewrite journal history,
@@ -695,7 +695,7 @@ Configure it lazily:
 - `SPC a a` opens or resumes native Codex for the active Org work context.
 - New sessions use the normalized local project root and may include the local
   work key, title, note link, and a user-approved context summary.
-- Do not send the whole project file, journal, or optional tracker metadata
+- Do not send the whole project index, journal, or optional tracker metadata
   automatically.
 - Public package APIs own session creation, resumption, approvals, and diffs.
   Do not inspect package internals to recover thread state.
@@ -940,7 +940,7 @@ TRAMP from the remote terminal group at `refs/eng-workflow.md:320-376`.
 Generalize its Linear-first identity into this ownership model:
 
 ```text
-local task identity/state  Org task in its project file
+local task identity/state  Org task in its project index
 private chronology         journal.org
 detail notes               Org task body or linked Org/Markdown file
 optional team tracker      Linear adapter
@@ -1028,9 +1028,13 @@ optional Linear commands under `M-x` initially.
   journaling, agents, layouts, and remote work must function without it.
 - Store work TODOs in `journal.org`: chronology and current task state have
   different retention and agenda behavior.
-- Use one global `tasks.org` file by default: it loses useful project boundaries
-  for Docs, Tasks, Log, capture, archive, and agenda navigation. Keep the
-  shared-file form configurable for users who prefer it.
+- Use one global `tasks.org` or `projects.org` file: it loses useful project
+  boundaries for Docs, Tasks, Log, supporting files, capture, archive, and
+  agenda navigation.
+- Store primary project files directly as `<project-key>.org`: it provides no
+  project-scoped location for supporting files and creates a second path
+  contract without adding capability. Use one `<project-key>/index.org` per
+  project.
 - Generate one Org file per work item: it creates unnecessary file sprawl and
   makes project docs, logs, and archives harder to browse. Use one primary
   file per project and durable Org IDs.
@@ -1066,9 +1070,10 @@ Status: pending
 
 ### Changes
 
-1. Add `my-workflow.el` with configurable project storage root/style and journal
-   path. Default to one `<project-key>.org` file; support directory `index.org`
-   and shared-file forms through the same heading contract.
+1. Add `my-workflow.el` with configurable project storage root and journal path.
+   Resolve every project through the canonical
+   `<project-storage-root>/<project-key>/index.org` path. Do not discover or
+   create flat `<project-key>.org` or shared project files.
 2. Implement project resolution and collision handling, project/task Org IDs,
    Active task selection and creation, project-scoped local keys, local TODO
    state, local/TRAMP task roots, note binding, and effective-note opening. Do
@@ -1088,12 +1093,14 @@ Status: pending
 8. Load the module in `init.el` and `my/soft-reload`, redirect work TODO capture
    through the directory-creating target function, add `SPC o w`, `SPC o l`,
    and `SPC o u`, remove the stale Custom agenda value, and build
-   `org-agenda-files` from existing `life.org` and primary project files.
-   Register newly created project files immediately and exclude auxiliary note
-   files.
-9. Add focused ERT tests with temporary project/journal storage in all three
-   layouts. Test with
-   `my-linear.el` unavailable and never touch the real `~/org/` tree.
+   `org-agenda-files` from existing `life.org` and canonical project indexes.
+   Register newly created indexes immediately and exclude auxiliary note files.
+9. Add focused ERT tests with temporary project/journal storage. Cover canonical
+   index creation, startup discovery, invalid project keys, immediate agenda
+   registration, and project-key/path collisions. Prove auxiliary Org notes,
+   flat `<project-key>.org` files, and shared project files are not discovered,
+   selected, mutated, or added to the agenda. Test with `my-linear.el`
+   unavailable and never touch the real `~/org/` tree.
 
 ### Success criteria
 
@@ -1109,9 +1116,10 @@ Status: pending
   collision never overwrites an existing project heading.
 - Two tasks on one day share one date and `Work log`; one task across multiple
   days retains the same Org ID.
-- Local work TODOs from every primary project file appear in the agenda. The
-  journal, directory-form auxiliary notes, and archived subtree remain absent.
-- `org-agenda` works before any project file exists and includes a primary file
+- Local work TODOs from every canonical project index appear in the agenda. The
+  journal, all project-scoped auxiliary notes, and archived subtree remain
+  absent.
+- `org-agenda` works before any project index exists and includes a new index
   immediately after capture or `my/work-start` creates it.
 - Project Log entries use the documented datetree, while the global journal
   receives only its separate concise entry. Explicit archive preserves task Org
@@ -1413,12 +1421,12 @@ emacs -Q --batch \
 
 ### Mandatory manual verification matrix
 
-1. Create two project files and resume Org-only tasks in each, including the
-   same project-scoped local key. Confirm agenda state, distinct stable IDs,
-   and no Linear metadata.
-2. Exercise the default file layout, directory `index.org` layout, and shared
-   multi-project file. Confirm all use the same project/task heading contract
-   and auxiliary directory notes do not enter the agenda.
+1. Create two canonical project directories and indexes, then resume Org-only
+   tasks in each, including the same project-scoped local key. Confirm agenda
+   state, distinct stable IDs, and no Linear metadata.
+2. Confirm both project indexes use the same project/task heading contract and
+   that auxiliary Org files below their project directories do not enter the
+   agenda.
 3. Link an Org detail note to one task and a Markdown note to another. Follow
    every task, journal, and detail link.
 4. Add one project datetree note and one global journal entry. Confirm neither
@@ -1451,10 +1459,12 @@ emacs -Q --batch \
 
 ### Final success criteria
 
-- One command resolves a project file and starts or resumes an Org-backed task
-  from a title or project-scoped key for a local or TRAMP root without Linear.
-- Project and task Org IDs remain canonical across file, directory, and shared
-  storage layouts. Org TODO remains personal task state.
+- One command resolves a canonical project index and starts or resumes an
+  Org-backed task from a title or project-scoped key for a local or TRAMP root
+  without Linear.
+- Project and task Org IDs remain canonical within the
+  `<project-key>/index.org` storage contract. Org TODO remains personal task
+  state.
 - The journal is chronology and links to the durable task plus optional Org or
   Markdown detail notes.
 - Native Codex, Gptel, terminal agents, events, layouts, MCP, and remote work all
