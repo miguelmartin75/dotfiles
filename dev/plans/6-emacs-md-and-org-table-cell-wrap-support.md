@@ -2,12 +2,12 @@
 
 ## Status
 
-- Overall: not started, 0/3 phases complete
-- Current phase: Phase 1
+- Overall: in progress, 1/3 phases complete
+- Current phase: Phase 2
 
 Phase status:
 
-- Phase 1: pending
+- Phase 1: complete
 - Phase 2: pending
 - Phase 3: pending
 
@@ -190,7 +190,7 @@ second fence parser.
 
 ## Phase 1: Provision the Reviewed Package
 
-Status: pending.
+Status: complete.
 
 1. Add `markdown-table-wrap` to the `vc-packages` list in
    `profiles/common/.config/emacs/install-packages.el`.
@@ -212,6 +212,15 @@ Success criteria:
 - A second provisioner run succeeds without changing the installed revision.
 - Normal Emacs startup still performs no network access or package
   installation.
+
+Implementation result:
+
+- Added the single pinned `markdown-table-wrap` checkout to the explicit VC
+  provisioner. In an isolated package directory, the provisioner installed
+  revision `f846b77d13f34fba57c80214c1a61e00c94048a3`, completed a second
+  idempotent run, and a clean batch process located and required both supplied
+  libraries. The isolated run avoided an unrelated locally installed Ghostel
+  revision that does not match its existing repository pin.
 
 ## Phase 2: Configure Pretty Tables and the Shared Toggle
 

@@ -25,6 +25,10 @@
            ;; Source-buffer Git hunk state and actions.
            (:url "https://github.com/dgutov/diff-hl.git")
            "3d9552c575fd14ac98ac97bf3c19cdef39f79305")
+          (markdown-table-wrap
+           ;; Display-only wrapped Org and Markdown table cells.
+           (:url "https://github.com/dnouri/markdown-table-wrap.git")
+           "f846b77d13f34fba57c80214c1a61e00c94048a3")
           (odin-mode
            ;; Odin editing mode for the retained language surface.
            (:url "https://github.com/mattt-b/odin-mode.git")
