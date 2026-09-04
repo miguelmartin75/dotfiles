@@ -13,6 +13,13 @@
         (second-position (string-match (regexp-quote second) text)))
     (and first-position second-position (< first-position second-position))))
 
+(defun my/markdown-test-pretty-overlays-p ()
+  "Return non-nil when the current buffer has a pretty-table overlay."
+  (cl-some
+   (lambda (overlay)
+     (overlay-get overlay 'markdown-table-wrap-pretty-display))
+   (overlays-in (point-min) (point-max))))
+
 (defun my/markdown-test-return-result (mode text point-text &optional include-points)
   "Return the effective RET command and resulting text in MODE.
 Point is placed immediately after POINT-TEXT before invoking the command.
@@ -437,6 +444,53 @@ and whether it ends at the beginning of a line."
     (should (eq (key-binding (kbd "C-c C-c")) #'my/send-region-or-buffer))
     (should (eq (key-binding (kbd "C-c C-r"))
                 #'my/send-region-or-buffer-to-last-target))))
+
+(ert-deftest my/markdown-parity-pretty-table-integration ()
+  (dolist (mode '(org-mode markdown-mode gfm-mode markdown-ts-mode))
+    (with-temp-buffer
+      (let ((source
+             (concat "| Header | Description |\n"
+                     (if (eq mode 'org-mode) "|---+---|\n" "|---|---|\n")
+                     "| one | This middle cell is deliberately long so the display renderer must wrap it without changing the canonical pipe-table source. |\n")))
+        (insert source)
+        (funcall mode)
+        (font-lock-ensure)
+        (should markdown-table-wrap-pretty-mode)
+        (evil-normal-state)
+        (should (eq (key-binding (kbd "SPC o w"))
+                    #'markdown-table-wrap-pretty-toggle))
+        (evil-visual-state)
+        (should (eq (key-binding (kbd "SPC o w"))
+                    #'markdown-table-wrap-pretty-toggle))
+        (evil-normal-state)
+        (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                       source))
+        (should (my/markdown-test-pretty-overlays-p))
+        (goto-char (point-min))
+        (search-forward "middle cell")
+        (markdown-table-wrap-pretty-toggle)
+        (should-not (my/markdown-test-pretty-overlays-p))
+        (markdown-table-wrap-pretty-toggle)
+        (should (my/markdown-test-pretty-overlays-p))
+        (search-forward "without changing")
+        (let ((before (buffer-substring-no-properties (point-min) (point)))
+              (after (buffer-substring-no-properties (point) (point-max))))
+          (insert "!")
+          (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                         (concat before "!" after))))
+        (should-not (my/markdown-test-pretty-overlays-p)))))
+  (with-temp-buffer
+    (insert "```markdown\n| Header | Description |\n|---|---|\n| one | This fenced table must remain raw. |\n```\n")
+    (markdown-ts-mode)
+    (font-lock-ensure)
+    (should markdown-table-wrap-pretty-mode)
+    (should-not (my/markdown-test-pretty-overlays-p)))
+  (with-temp-buffer
+    (insert "#+begin_src markdown\n| Header | Description |\n|---+---|\n| one | This source-block table must remain raw. |\n#+end_src\n")
+    (org-mode)
+    (font-lock-ensure)
+    (should markdown-table-wrap-pretty-mode)
+    (should-not (my/markdown-test-pretty-overlays-p))))
 
 (ert-deftest my/markdown-parity-fenced-code-extraction-and-delivery ()
   (dolist (mode '(markdown-ts-mode markdown-mode))
