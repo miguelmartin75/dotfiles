@@ -350,6 +350,8 @@
    (setq evil-want-C-i-jump t)
    (setq evil-want-C-w-delete t)
    (setq evil-want-C-w-in-emacs-state t)
+   (setq evil-vsplit-window-right t)
+   (setq evil-split-window-below t)
    (setq evil-undo-system 'undo-redo)
    (setq evil-mode-line-format '(after . mode-line-front-space)
          evil-normal-state-tag (propertize " NORMAL " 'face 'success)
@@ -1534,8 +1536,9 @@ When UP is non-nil, swap with the preceding paragraph."
   ;; returns the Ghostel axis to semi-char; C-c M-d enters char mode, where every
   ;; key goes inward until M-RET exits.  In semi-char plus outer insert, C-w reaches
   ;; the PTY, C-b opens a window prefix with C-b C-b sending literal Ctrl-B, and
-  ;; M-SPC opens the shared leader.  Char mode keeps C-b and M-SPC inward; outer
-  ;; normal retains its C-w window prefix.
+  ;; M-SPC opens the shared leader.  Outer Normal and Visual state use the same
+  ;; C-b window prefix with C-b C-b scrolling a page up.  Char mode keeps C-b and
+  ;; M-SPC inward.
   :hook (ghostel-mode . evil-ghostel-mode)
   :config
   (keymap-set ghostel-char-mode-map "s-<escape>"
@@ -1761,6 +1764,14 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("w j" . evil-window-down)
        ("w k" . evil-window-up)
        ("w l" . evil-window-right)
+       ("w v" . evil-window-vsplit)
+       ("w %" . evil-window-vsplit)
+       ("w s" . evil-window-split)
+       ("w \"" . evil-window-split)
+       ("w H" . evil-window-decrease-width)
+       ("w J" . evil-window-increase-height)
+       ("w K" . evil-window-decrease-height)
+       ("w L" . evil-window-increase-width)
        ("w q" . delete-window)
        ("w x" . window-swap-states)
        ("w =" . balance-windows)
@@ -1841,6 +1852,14 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("h l" . display-line-numbers-mode)))
   (keymap-set my/leader-map (car binding) (cdr binding)))
 
+(defvar my/editor-window-map nil
+  "Window prefix map for Evil Normal and Visual states.")
+
+(setq my/editor-window-map (make-sparse-keymap))
+(set-keymap-parent my/editor-window-map
+                   (keymap-lookup my/leader-map "w"))
+(keymap-set my/editor-window-map "C-b" #'evil-scroll-page-up)
+
 (defvar my/terminal-window-map nil
   "Window prefix map for terminal input in Evil Insert state.")
 
@@ -1889,6 +1908,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (keymap-set my/visual-leader-map "r" my/visual-review-map)
 (evil-define-key 'normal 'global (kbd "SPC") my/normal-leader-map)
 (evil-define-key 'visual 'global (kbd "SPC") my/visual-leader-map)
+(evil-define-key '(normal visual) 'global
+  (kbd "C-b") my/editor-window-map)
 
 (defvar magit-mode-map)
 (evil-define-key 'normal magit-mode-map (kbd "SPC") my/normal-leader-map)
@@ -1937,4 +1958,12 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "z" "zen mode no zoom"
     "v" "code mode"
     "w" "windows"
+    "w v" "split right"
+    "w %" "split right"
+    "w s" "split below"
+    "w \"" "split below"
+    "w H" "decrease width"
+    "w J" "increase height"
+    "w K" "decrease height"
+    "w L" "increase width"
     "w t" "tabs"))
