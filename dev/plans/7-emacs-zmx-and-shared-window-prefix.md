@@ -53,9 +53,9 @@ does not reopen their completed phases.
 ## Status
 
 - Plan: complete
-- Implementation: in progress
-- Overall: 2/3 phases complete
-- Current phase: Phase 3 - Integrated acceptance and closeout
+- Implementation: complete
+- Overall: 3/3 phases complete
+- Current phase: none
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal workflow module: `profiles/common/.config/emacs/my-send-text.el`
@@ -296,9 +296,13 @@ prior state:
 
 Normalize in this order:
 
-1. Call public `ghostel-semi-char-mode` in the selected frontend buffer.
-2. Call public `evil-ghostel-insert` so Evil enters Insert through the
-   terminal-aware cursor synchronization path.
+1. Call `ghostel-semi-char-mode` in the selected frontend buffer.
+2. If the buffer is not already in Evil Insert, call `evil-ghostel-insert` so
+   Evil enters Insert through the terminal-aware cursor synchronization path.
+3. Until Ghostel has published its first cursor position, a configuration-owned
+   guard skips only evil-ghostel's cursor synchronization hook. The Evil state
+   transition still completes, and normal terminal-aware synchronization
+   resumes as soon as cursor metadata exists.
 
 Afterward, `s-<escape>` enters outer Evil Normal state once. It does not change
 the Ghostel input mode. `i`, `o`, or Return returns to terminal-aware Insert.
@@ -528,7 +532,7 @@ Status: complete
 
 ## Phase 3: Integrated acceptance and closeout
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -594,6 +598,37 @@ pass.
   pre-existing user work.
 - This plan is marked complete with measured outcomes; earlier plan files remain
   unchanged.
+
+### Implementation outcome
+
+- The one holistic GPT-5.6-sol xhigh review ran only after Phases 1 and 2 were
+  fully implemented. It found an empty-name selector edge case and missing real
+  state-transition coverage. Both findings were resolved before closeout.
+- Empty selector input now raises a user error before prompting for a creation
+  command, opening a frontend, sending text, or replacing the saved target.
+- Reopening no longer repeats an Evil Insert transition when the selected
+  frontend is already in Insert. A reload-safe evil-ghostel advice also permits
+  a reused live terminal to enter Insert before Ghostel has published its first
+  cursor position, while preserving the original cursor-aware hook afterward.
+- The seven ERT suites passed in isolated Emacs processes: 9 appearance, 1
+  diff-hl integration, 6 leader, 6 Markdown parity, 8 file picker, 1 Org
+  datetree, and 5 send-target tests, for 36/36 total. A single-process aggregate
+  run was not used as the acceptance result because its suites mutate shared
+  global keymaps and contaminated later unrelated Markdown assertions.
+- `check-parens`, `git diff --check`, the unchanged package-pin check, and
+  guarded offline double startup passed. The only startup diagnostics were
+  expected sandbox denials when recentf and savehist attempted to write outside
+  the repository.
+- Isolated real zmx acceptance passed fresh creation, reuse from Evil Normal
+  before cursor metadata existed, and reuse from Ghostel char mode after cursor
+  metadata existed. Every path finished in `ghostel-mode`, semi-char, and Evil
+  Insert. All temporary test sessions were terminated afterward.
+- The running Emacs server socket did not respond to `emacsclient`, so no server
+  process was restarted or signaled. Reload safety was instead verified through
+  repeated guarded loads. Remote TRAMP selection remains environment-dependent
+  because no disposable connected remote was available.
+- The term-sessions source and configured revision remain unchanged. No pull or
+  merge request is part of this execution.
 
 ## Alternatives rejected
 

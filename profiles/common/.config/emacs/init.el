@@ -1541,6 +1541,14 @@ When UP is non-nil, swap with the preceding paragraph."
   ;; M-SPC inward.
   :hook (ghostel-mode . evil-ghostel-mode)
   :config
+  (defun my/evil-ghostel-insert-state-entry-when-cursor-ready (original)
+    "Run ORIGINAL after Ghostel has published its cursor position."
+    (when ghostel--cursor-pos
+      (funcall original)))
+  (advice-remove 'evil-ghostel--insert-state-entry
+                 #'my/evil-ghostel-insert-state-entry-when-cursor-ready)
+  (advice-add 'evil-ghostel--insert-state-entry :around
+              #'my/evil-ghostel-insert-state-entry-when-cursor-ready)
   (keymap-set ghostel-char-mode-map "s-<escape>"
               (lambda ()
                 (interactive)

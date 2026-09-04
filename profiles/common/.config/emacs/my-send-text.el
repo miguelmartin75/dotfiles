@@ -122,13 +122,16 @@
        (require 'term-sessions-list)
        (let* ((default-directory source-directory)
               (entry (term-sessions--read-session-entry "zmx session: " nil)))
+         (when (string-empty-p (plist-get entry :name))
+           (user-error "zmx session name cannot be empty"))
          (unless (plist-member entry :session)
            (let ((display-buffer-overriding-action my/send-text-right-split-action))
              (term-sessions-open entry nil)
              (let ((buffer (current-buffer)))
                (with-current-buffer buffer
                  (ghostel-semi-char-mode)
-                 (evil-ghostel-insert)))))
+                 (unless (eq evil-state 'insert)
+                   (evil-ghostel-insert))))))
          (setq target (list :type 'zmx
                             :name (plist-get entry :name)
                             :directory (plist-get entry :directory)))))
@@ -333,6 +336,8 @@ suitable interpreter.  No results are written back to the Markdown file."
      (require 'term-sessions-list)
      (let ((default-directory directory))
        (setq entry (term-sessions--read-session-entry "zmx session: " nil)))
+     (when (string-empty-p (plist-get entry :name))
+       (user-error "zmx session name cannot be empty"))
      (when (and current-prefix-arg (not (plist-member entry :session)))
        (setq command (read-string "Command for new session: ")))
      (list entry command)))
@@ -342,7 +347,8 @@ suitable interpreter.  No results are written back to the Markdown file."
     (let ((buffer (current-buffer)))
       (with-current-buffer buffer
         (ghostel-semi-char-mode)
-        (evil-ghostel-insert)))
+        (unless (eq evil-state 'insert)
+          (evil-ghostel-insert))))
     (my/send-text-save-last-target
      (list :type 'zmx
            :name (plist-get entry :name)
