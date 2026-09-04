@@ -18,13 +18,14 @@ and outer Evil Insert state. Second, every window operation should be defined
 once under `SPC w`; state-specific `C-b` prefix maps should inherit that shared
 map instead of copying its leaves.
 
-The pinned term-sessions revision already contains the internal machinery for
-location-aware open-or-create completion, but it does not expose that machinery
-as a supported public reader. It also does not consistently return the opened
-frontend buffer on every creation path. Extend the upstream package contract
-first, publish a reachable reviewed revision, then update the dotfiles pin and
-consume only the new public APIs. Do not repeat the previous private-selector
-compromise or pin an unpublished local revision.
+The pinned term-sessions revision already contains the complete location-aware
+open-or-create selector as `term-sessions--read-session-entry`. Emacs Lisp does
+not enforce private access, and the exact package revision is pinned, so the
+configuration can call that function directly without changing or repinning the
+package. The open command selects the resulting frontend even though its fresh
+Ghostel path does not consistently return that buffer. Capture the selected
+`current-buffer` immediately after opening, then apply the configuration-owned
+state policy there.
 
 This is a standalone plan. It does not add follow-ups to earlier Emacs plans and
 does not reopen their completed phases.
@@ -53,18 +54,14 @@ does not reopen their completed phases.
 
 - Plan: complete
 - Implementation: in progress
-- Overall: 1/4 phases complete
-- Current phase: Phase 2 - Publish and pin the unified term-sessions API
+- Overall: 2/3 phases complete
+- Current phase: Phase 3 - Integrated acceptance and closeout
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Terminal workflow module: `profiles/common/.config/emacs/my-send-text.el`
-- Dotfiles package provisioner:
-  `profiles/common/.config/emacs/install-packages.el`
-- Upstream package checkout: `refs/emacs-term-sessions`
 - Existing dotfiles tests:
   `profiles/common/.config/emacs/leader-bindings-test.el` and
   `profiles/common/.config/emacs/send-text-targets-test.el`
-- Upstream package tests: `refs/emacs-term-sessions/term-sessions-tests.el`
 
 ## Scope and terminology
 
@@ -81,29 +78,30 @@ does not reopen their completed phases.
   every key inward except its `M-RET` escape hatch.
 - `SPC w` is the canonical shared window-command map. `C-b` is another entry
   point, not a second implementation table.
-- `refs/emacs-term-sessions` is a separate Git repository ignored by the
-  dotfiles repository. Its upstream change, review, publication, and tests are
-  separate from the dotfiles commit history.
+- The configured term-sessions dependency remains pinned to
+  `0815dbea006128df1d61e9d29e5a8ada53b349c1`. This plan changes no package
+  source, revision, or upstream repository state.
 - The existing modification to
   `dev/plans/emacs-workflow-agentic-support.md` is unrelated user work and must
   not be changed, staged, reverted, or included while executing this plan.
 
 ## Execution, commit, and review policy
 
-- Execute the phases in order because the dotfiles integration depends on the
-  published term-sessions contract.
+- Execute the phases in order because the zmx integration builds on the shared
+  window-prefix behavior.
 - Use GPT-5.6-terra at xhigh reasoning for implementation sub-agents.
 - Finish every phase with a focused Git commit containing only that phase's
   implementation and status update. Never combine changes from two phases in
-  one commit. Because `refs/emacs-term-sessions` is a separate repository,
-  Phase 2 has its upstream commit there and a separate dotfiles commit for the
-  plan status and reachable package pin.
+  one commit.
 - Do not run sub-agent review after individual phases. Run one GPT-5.6-sol
   xhigh review only after all implementation work is present, and have it
-  review the complete plan, both repositories' full diffs and commit series,
-  and the complete validation evidence.
+  review the complete plan, the dotfiles diff and commit series, and the
+  complete validation evidence.
+- Do not create, reopen, or submit a pull request or merge request for this
+  execution. Leave the phase commits local unless the user explicitly requests
+  another publication action.
 - Resolve every actionable holistic-review finding, rerun affected validation,
-  and record the final result in Phase 4 before declaring the plan complete.
+  and record the final result in Phase 3 before declaring the plan complete.
 
 ## Current behavior and root causes
 
@@ -116,21 +114,19 @@ does not reopen their completed phases.
   branch of the explicit text-target chooser. It first asks for `existing` or
   `create new`; existing selection then opens a second completion.
 - `profiles/common/.config/emacs/my-send-text.el:19` declares and
-  `:123-128` calls the private
+  `:123-128` calls the existing-only
   `term-sessions--read-existing-session-entry` function.
 - The two-step target chooser was introduced because the pinned package exposes
-  no public reader that combines location-aware existing entries with unmatched
-  creation input. That API boundary, rather than a separate action menu, is the
-  root problem.
+  no separately named reader that combines location-aware existing entries with
+  unmatched creation input. That does not require a package change because the
+  combined selector is callable Lisp in the pinned revision.
 - `refs/emacs-term-sessions/term-sessions-frontends.el:367-401` already owns the
   required find-file-like completion internally. It returns the selected full
   entry when a candidate matches and a name/current-directory entry for
   unmatched text.
-- `refs/emacs-term-sessions` currently has unpublished local commit `acc8726`,
-  which exposes only existing-session selection. The dotfiles provisioner pins
-  reachable upstream revision `0815dbea006128df1d61e9d29e5a8ada53b349c1`
-  at `profiles/common/.config/emacs/install-packages.el:20-23`. Do not pin
-  `acc8726` or another local-only revision.
+- Existing entries from this selector contain `:session`; unmatched entries
+  contain only `:name` and the caller's `:directory`. The configuration can use
+  that pinned data shape to decide whether creation is required.
 
 ### Reused zmx buffers preserve stale interaction state
 
@@ -145,16 +141,17 @@ does not reopen their completed phases.
 - `refs/emacs-term-sessions/term-sessions-frontends.el:434-436` takes that reuse
   path before the Ghostel adapter runs. The adapter's semi-char normalization at
   `:80-108` is therefore bypassed for an already-open frontend.
-- `my/open-or-create-zmx-session-in-split` ignores the value returned by
-  `term-sessions-open`, so it cannot normalize the selected frontend after a
-  successful open.
+- `my/open-or-create-zmx-session-in-split` ignores the selected frontend after
+  `term-sessions-open`, so it cannot normalize the buffer after a successful
+  open.
 - The live failure state was outer Evil Normal plus inner Ghostel semi-char.
   `s-<escape>` correctly resolved to no command because it is an Insert-state
   escape hatch, not a Normal-state toggle.
 - On a fresh Ghostel open, the current package's Ghostel wrapper ends with
   `rename-buffer` and can return a string rather than the opened buffer. The
-  upstream open API must guarantee a buffer result before the dotfiles depend
-  on it.
+  command nevertheless selects the frontend through `pop-to-buffer`, so the
+  configuration must use `current-buffer` immediately after a successful open
+  instead of depending on that incidental return value.
 
 ### The shared window map is incomplete and `C-b` is terminal-only
 
@@ -186,7 +183,7 @@ does not reopen their completed phases.
   two-step zmx chooser by design.
 - `profiles/common/.config/emacs/send-text-targets-test.el:757-786` checks the
   split command's prompts, directory, display action, and saved target, but
-  stubs away the returned frontend and never asserts its final Evil or Ghostel
+  never provides a selected frontend or asserts its final Evil or Ghostel
   state.
 
 ## Historical context
@@ -200,8 +197,6 @@ These commits explain the current behavior but do not own this new plan:
 - `70b3aab` finalized explicit target selection and the two-step zmx chooser.
 - `3abcfcf`, `768202c`, and `f8de451` added and verified the terminal-local
   `C-b` and `M-SPC` maps.
-- `acc8726` in `refs/emacs-term-sessions` exposes existing-only selection but
-  is not published on the configured upstream remote.
 - `ed50655` implements Markdown and Org table wrapping and is unrelated to
   terminal state, zmx selection, or window prefixes.
 
@@ -229,26 +224,25 @@ These commits explain the current behavior but do not own this new plan:
    `C-b` behavior supplements it but does not replace or globalize it.
 10. Keep `s-<escape>` one-way from Ghostel Insert to Evil Normal. Fix the
     opener's postcondition instead of adding a Normal-state toggle.
-11. Add a supported public term-sessions reader for the unified selection. Do
-    not copy its completion table, query zmx independently, advise an interactive
-    command, scrape minibuffer state, or call a private package function.
-12. Have the public selector state whether the result matched an existing
-    session. Existing selection remains headless in the send-target flow; only
-    unmatched creation needs to open a frontend before delivery.
-13. Make `term-sessions-open` and `term-sessions-open-with-frontend` return the
-    exact frontend buffer on both reuse and fresh-open paths. Document and test
-    that return contract upstream.
-14. Publish the reviewed upstream commit at the original repository URL before
-    changing the dotfiles pin. A local commit hash is not an installable
-    dependency.
-15. Preserve caller `default-directory` before any completion or display
+11. Call the pinned `term-sessions--read-session-entry` selector directly. Do
+    not copy its completion table, query zmx independently, advise an
+    interactive command, or scrape minibuffer state.
+12. Require `term-sessions-list` before selection so the selector includes its
+    location-aware local and already-known remote rows. Treat an entry with
+    `:session` as existing and an entry without it as unmatched creation input.
+    Existing selection remains headless in the send-target flow; only unmatched
+    creation needs to open a frontend before delivery.
+13. Do not depend on the incidental return value of `term-sessions-open`.
+    Capture its selected `current-buffer` immediately after a successful open
+    and apply the Ghostel state policy there.
+14. Preserve caller `default-directory` before any completion or display
     changes. An unmatched session name creates in that captured directory.
-16. Save a tab target only after selection, required creation, state
+15. Save a tab target only after selection, required creation, state
     normalization, and any requested delivery succeed. Preserve the old target
     on cancellation or failure.
-17. Do not attempt to kill a zmx session when a later normalization or delivery
+16. Do not attempt to kill a zmx session when a later normalization or delivery
     step fails. Creation and terminal output may already be externally visible.
-18. Extend the existing focused ERT tests rather than adding source-content
+17. Extend the existing focused ERT tests rather than adding source-content
     assertions or proliferating one-assertion tests.
 
 ## Complete zmx selection contract
@@ -264,22 +258,23 @@ shown.
 | Empty or cancelled selection | Abort without opening, sending, or saving | None | Prior target preserved |
 | Selection or open error | Signal the package error | Do not start later steps | Prior target preserved |
 
-The public package reader returns a location-aware entry with an explicit
-transient marker:
+The pinned package selector returns a location-aware existing entry that
+includes its source session metadata:
 
 ```elisp
-(:name NAME :directory DIRECTORY :existing t)
+(:name NAME :directory DIRECTORY :session SESSION ...)
 ```
 
-for an existing candidate, or:
+For unmatched creation input it returns:
 
 ```elisp
-(:name NAME :directory DIRECTORY :existing nil)
+(:name NAME :directory DIRECTORY)
 ```
 
-for unmatched creation input. Existing package metadata such as `:cwd`,
-`:where`, and `:session` may remain on existing entries. The dotfiles remove the
-transient `:existing` decision marker when constructing the durable tab target.
+Existing package metadata such as `:cwd` and `:where` may remain on the selected
+entry. The dotfiles use `plist-member` for `:session` only while deciding whether
+the selection exists, then construct the durable tab target from `:name` and
+`:directory`.
 
 With a prefix argument, `SPC t z` prompts for a creation command only after an
 unmatched new name is selected. Selecting an existing session never asks for or
@@ -301,7 +296,7 @@ prior state:
 
 Normalize in this order:
 
-1. Call public `ghostel-semi-char-mode` in the returned frontend buffer.
+1. Call public `ghostel-semi-char-mode` in the selected frontend buffer.
 2. Call public `evil-ghostel-insert` so Evil enters Insert through the
    terminal-aware cursor synchronization path.
 
@@ -440,105 +435,38 @@ Status: complete
 - The focused leader ERT suite passed 6/6 tests. `check-parens` and
   `git diff --check` passed for the changed Phase 1 files.
 
-## Phase 2: Publish and pin the unified term-sessions API
+## Phase 2: Unify zmx workflows and enforce input-ready opens
 
-Status: pending
-
-### Changes
-
-1. Work in the separate `refs/emacs-term-sessions` Git repository. Preserve the
-   useful location-aware and lazy-loading changes in unpublished commit
-   `acc8726`, but do not publish its existing-only API as the final contract.
-2. Add public autoloaded `term-sessions-read-session-entry`, which invokes the
-   package-owned location-aware completion with creation allowed.
-3. Keep public `term-sessions-read-existing-session-entry` for callers that
-   require a match, implemented through the same private completion core.
-4. Return the explicit `:existing t` or `:existing nil` marker described above
-   without losing existing name, backend directory, cwd, remote, annotation, or
-   completion-category metadata.
-5. Make interactive `term-sessions-open` use the public unified reader.
-6. Make `term-sessions-open` and `term-sessions-open-with-frontend` return the
-   exact opened or reused frontend buffer. Correct the Ghostel adapter and any
-   other frontend adapter that currently returns an incidental string or other
-   value.
-7. Document the two public readers, the creation marker, location semantics,
-   and the buffer return contract in `refs/emacs-term-sessions/README.org` and
-   function docstrings.
-8. Extend `refs/emacs-term-sessions/term-sessions-tests.el` with focused
-   behavior checks for:
-   - existing local selection;
-   - existing known-remote selection;
-   - unmatched creation input in the captured current directory;
-   - require-match existing selection;
-   - cancellation;
-   - exact `:existing` marker semantics;
-   - exact buffer return on reuse and fresh Ghostel open.
-9. Run the complete upstream ERT and MELPA-oriented load, byte-compile,
-   checkdoc, and package-lint checks available in its CI workflow.
-10. Create a coherent upstream Git commit and publish it through an authorized
-    branch or accepted upstream change. Confirm the final hash is fetchable from
-    `https://github.com/ArthurHeymans/emacs-term-sessions.git` before continuing.
-11. Update only the term-sessions revision in
-    `profiles/common/.config/emacs/install-packages.el` to that reachable hash.
-12. Provision an isolated clean Emacs package directory, load the new public
-    APIs, and run the full provisioner a second time to verify idempotency.
-
-### Verification
-
-Run the upstream suite from its repository:
-
-```sh
-emacs -Q --batch -L . -l term-sessions-tests.el \
-  -f ert-run-tests-batch-and-exit
-```
-
-Run the upstream CI-equivalent checks documented by the checkout. Then run the
-dotfiles provisioner in an isolated package environment at least twice and
-verify the installed descriptor reports the exact new revision.
-
-### Success criteria
-
-- One supported public reader handles existing local, existing known-remote,
-  and unmatched new session input.
-- Its return value preserves location identity and states whether the candidate
-  existed.
-- The existing-only reader still requires a completion match.
-- Every successful open API path returns the exact frontend buffer.
-- The full upstream suite passes.
-- The reviewed commit is reachable from the configured original URL.
-- Fresh installation and a second provisioner run use the exact new pin without
-  network work during normal Emacs startup.
-
-## Phase 3: Unify zmx workflows and enforce input-ready opens
-
-Status: pending
+Status: complete
 
 ### Changes
 
 1. Update deferred declarations in
    `profiles/common/.config/emacs/init.el` and
-   `profiles/common/.config/emacs/my-send-text.el` to use public
-   `term-sessions-read-session-entry`, `term-sessions-open`,
-   `ghostel-semi-char-mode`, and `evil-ghostel-insert` contracts.
+   `profiles/common/.config/emacs/my-send-text.el` for
+   `term-sessions--read-session-entry`, `term-sessions-open`,
+   `ghostel-semi-char-mode`, and `evil-ghostel-insert`.
 2. Remove every call and declaration of
    `term-sessions--read-existing-session-entry` from repository-owned code.
 3. Change `my/open-or-create-zmx-session-in-split` to:
    - capture the caller's directory before prompting;
-   - invoke the public unified reader once;
-   - prompt for an optional creation command only when `:existing` is nil and a
-     prefix argument was supplied;
+   - require `term-sessions-list` and invoke
+     `term-sessions--read-session-entry` once with creation allowed;
+   - prompt for an optional creation command only when `:session` is absent and
+     a prefix argument was supplied;
    - bind the existing right-side display action;
    - pass the full selected entry to `term-sessions-open`;
-   - capture the returned frontend buffer;
+   - capture the selected `current-buffer` immediately after the open;
    - normalize it with `ghostel-semi-char-mode`, then
      `evil-ghostel-insert`;
    - save only the durable name/directory descriptor after success.
-4. Change the zmx branch of `my/send-text-to-target` to use the same one public
-   reader invocation after the top-level `zmx` choice.
+4. Change the zmx branch of `my/send-text-to-target` to use the same one
+   `term-sessions--read-session-entry` invocation after the top-level `zmx`
+   choice.
 5. When the selector reports an existing session, send directly without
    opening a frontend. When it reports a new name, open/create it through
-   `term-sessions-open` before delivery and normalize any displayed Ghostel
-   frontend through the same public state calls.
+   `term-sessions-open` before delivery and normalize the selected Ghostel
+   frontend through the same state calls.
 6. Preserve exact zmx delivery as text followed by one carriage return.
 7. Preserve current tab-local replay behavior. Replaying a saved target performs
    no completion and no frontend open.
@@ -557,13 +485,13 @@ Status: pending
 - Assert existing selection does not open a frontend in the send-target path.
 - Assert new selection opens before sending and retains the captured source
   directory.
-- Assert `SPC t z` passes the full entry and existing display action, consumes
-  the exact returned buffer, calls semi-char before Evil Insert, and saves only
-  afterward.
+- Assert `SPC t z` passes the full entry and existing display action, ignores
+  the open function's incidental return value, captures the selected current
+  buffer, calls semi-char before Evil Insert, and saves only afterward.
 - Prepare reused Ghostel buffers in Normal, Visual, char, copy, line, and Emacs
   input states and confirm the documented final state.
 - Assert local and remote durable descriptors preserve the exact selector
-  directory and omit transient `:existing` metadata.
+  directory and omit transient package metadata.
 - Assert cancellation and each failure boundary preserve the previous tab
   target.
 
@@ -582,39 +510,53 @@ Status: pending
   remain correct.
 - The complete send-target ERT suite passes.
 
-## Phase 4: Integrated acceptance and closeout
+### Implementation outcome
+
+- Replaced both two-step and raw-name zmx selection with the pinned package's
+  location-aware `term-sessions--read-session-entry` completion.
+- Kept existing send targets headless and opened unmatched targets before
+  delivery. Both new send-target frontends and every `SPC t z` frontend are
+  normalized to Ghostel semi-char mode followed by Evil Insert state.
+- Captured the selected current buffer after `term-sessions-open` instead of
+  depending on its incidental fresh-Ghostel return value.
+- Preserved local and remote durable identity, creation-directory capture,
+  exact carriage-return delivery, replay, and prior targets across failure.
+- The focused send-target ERT suite passed 5/5 tests. `check-parens`, scoped
+  `git diff --check`, and the character-format check passed for all Phase 2
+  files.
+- The configured term-sessions source and revision remain unchanged.
+
+## Phase 3: Integrated acceptance and closeout
 
 Status: pending
 
 ### Changes
 
-1. Re-read the complete diff in both Git repositories for scope, public API
-   consistency, reload safety, and test quality.
-2. Run the complete upstream term-sessions test and package checks.
-3. Run the dotfiles leader and send-target ERT suites plus every existing Emacs
+1. Re-read the complete dotfiles diff for scope, pinned-package integration,
+   reload safety, and test quality.
+2. Run the dotfiles leader and send-target ERT suites plus every existing Emacs
    suite affected by loading `init.el`.
-4. Run `check-parens` and byte compilation or guarded load checks for each
+3. Run `check-parens` and byte compilation or guarded load checks for each
    changed Emacs Lisp file.
-5. Run `git diff --check` independently in the dotfiles and term-sessions
-   repositories.
-6. Run the isolated package provisioner twice and guarded offline double startup
-   with package refresh, installation, and VC installation entry points disabled.
-7. Reload the user's running Emacs server and exercise a real local zmx session:
+4. Run `git diff --check` in the dotfiles repository.
+5. Run guarded offline double startup with package refresh, installation, and
+   VC installation entry points disabled.
+6. Reload the user's running Emacs server and exercise a real local zmx session:
    - select an existing session from the first `SPC t z` completion;
    - type an unmatched name and create a session;
    - leave a frontend in Evil Normal plus Ghostel semi-char and reopen it;
    - leave a frontend in Ghostel char mode and reopen it;
    - confirm both reopen paths finish semi-char plus Insert;
    - confirm `s-<escape>`, `i`, `o`, and Return follow the state contract.
-8. In regular and Ghostel buffers, exercise navigation, both split naming
+7. In regular and Ghostel buffers, exercise navigation, both split naming
    schemes, resize directions, close, balance, focus, Winner, and tab operations
    under both `SPC w` and `C-b`.
-9. Confirm regular Insert, minibuffer, Evil Emacs state, Ghostel char mode,
+8. Confirm regular Insert, minibuffer, Evil Emacs state, Ghostel char mode,
    terminal `C-b C-b`, editor `C-b C-b`, and `M-SPC` remain unchanged.
-10. Exercise known-remote selection when an existing TRAMP connection is
+9. Exercise known-remote selection when an existing TRAMP connection is
     available. Record it as environment-dependent rather than failing the plan
     solely because no remote is connected.
-11. Update only this plan's status and measured outcomes. Do not edit or add
+10. Update only this plan's status and measured outcomes. Do not edit or add
     follow-ups to earlier plan files.
 
 ### Validation commands
@@ -630,31 +572,26 @@ emacs --batch -Q \
   -l profiles/common/.config/emacs/send-text-targets-test.el \
   -f ert-run-tests-batch-and-exit
 
-emacs -Q --batch -L refs/emacs-term-sessions \
-  -l refs/emacs-term-sessions/term-sessions-tests.el \
-  -f ert-run-tests-batch-and-exit
-
 git diff --check
-git -C refs/emacs-term-sessions diff --check
 ```
 
-Use the repository's established guarded startup and package-provisioning probes
-for the remaining checks. Do not weaken tests or suppress errors to make a
-validation command pass.
+Use the repository's established guarded startup probes for the remaining
+checks. Do not weaken tests or suppress errors to make a validation command
+pass.
 
 ### Success criteria
 
-- All automated upstream and dotfiles tests pass.
-- Parentheses, compilation/load, whitespace, exact-pin, provisioning,
-  idempotency, reload, and offline-startup checks pass.
+- All affected dotfiles tests pass.
+- Parentheses, compilation/load, whitespace, reload, and offline-startup checks
+  pass.
 - Real local zmx creation and reuse demonstrate the exact selection and state
   contracts.
 - `SPC w` and `C-b` expose the same shared window commands in their documented
   states.
 - Preserved key ownership behaves exactly as documented.
-- The upstream revision is reachable and the dotfiles working tree contains
-  only this plan's intended implementation changes plus untouched pre-existing
-  user work.
+- The package source and pin remain unchanged, and the dotfiles working tree
+  contains only this plan's intended implementation changes plus untouched
+  pre-existing user work.
 - This plan is marked complete with measured outcomes; earlier plan files remain
   unchanged.
 
@@ -664,20 +601,22 @@ validation command pass.
   existing local and remote sessions.
 - Keep the `existing` versus `create new` action menu: it adds a prompt for a
   distinction completion can infer from whether the input matched.
-- Call private `term-sessions--read-session-entry` or the current private
-  existing selector: this creates another unsupported package boundary and was
-  the reason the two dotfiles flows diverged.
+- Change term-sessions upstream or repin a fork: the pinned implementation
+  already contains the required selector, and Emacs Lisp permits the
+  configuration to call it directly.
 - Reimplement zmx listing, TRAMP discovery, completion annotations, and entry
   identity in the dotfiles: term-sessions already owns those contracts.
 - Shell out to `zmx list` from repository code: this would duplicate package
   parsing and omit known remote locations.
-- Call `term-sessions-open` interactively and scrape the selected buffer: it
-  couples data selection to display side effects and cannot keep existing
-  send-target selection headless.
+- Call `term-sessions-open` interactively to perform selection: it cannot keep
+  existing send-target selection headless. Select first with
+  `term-sessions--read-session-entry`, then open only when the workflow requires
+  a frontend.
 - Always open an existing session before sending text: target selection should
   not steal focus or create an unnecessary frontend.
-- Pin `acc8726` or another unpublished reference commit: a clean machine cannot
-  fetch it from the configured URL.
+- Depend on `term-sessions-open` returning the frontend buffer: the pinned fresh
+  Ghostel path can return `rename-buffer`'s result. Use the buffer the command
+  selects instead.
 - Treat a frontend buffer name as zmx identity: buffers are disposable and
   title changes can rename them; durable identity is name plus backend location.
 - Bind `s-<escape>` in Evil Normal as a toggle: it would mask the opener's broken
@@ -706,11 +645,10 @@ Repository code:
 - `profiles/common/.config/emacs/leader-bindings-test.el:147-195`
 - `profiles/common/.config/emacs/send-text-targets-test.el:249-386`
 - `profiles/common/.config/emacs/send-text-targets-test.el:757-786`
-- `profiles/common/.config/emacs/install-packages.el:20-23`
 - `profiles/common/.tmux.conf:1-35`
 - `profiles/common/.config/nvim/init.lua:634-649`
-- `refs/emacs-term-sessions/term-sessions-frontends.el:367-466`
-- `refs/emacs-term-sessions/term-sessions-tests.el:641-788`
+- `refs/emacs-term-sessions/term-sessions-frontends.el:367-463` at pinned
+  revision `0815dbea006128df1d61e9d29e5a8ada53b349c1`
 - `refs/ghostel/extensions/evil-ghostel/evil-ghostel.el:506-520`
 - `refs/ghostel/extensions/evil-ghostel/evil-ghostel.el:855-939`
 
@@ -721,15 +659,14 @@ Upstream projects:
 
 ## Final success criteria
 
-- Zmx selection uses one public, location-aware existing-or-create completion in
-  every repository-owned workflow.
+- Zmx selection uses the pinned package's one location-aware existing-or-create
+  completion in every repository-owned workflow.
 - `SPC t z` always returns an input-ready Ghostel semi-char plus Evil Insert
   frontend and records the correct durable target only after success.
 - `s-<escape>` remains a reliable one-way Insert-to-Normal escape hatch.
 - `SPC w` owns the complete documented window command vocabulary.
 - `C-b` exposes that same vocabulary in regular Evil Normal/Visual and Ghostel
   Evil Insert states while preserving all documented state-specific exceptions.
-- The public term-sessions API is tested, documented, published, reachable, and
-  exactly pinned.
-- All upstream, dotfiles, provisioner, startup, reload, and live interaction
-  checks pass without modifying earlier plan files or unrelated user work.
+- The term-sessions source and pin remain unchanged.
+- All dotfiles, startup, reload, and live interaction checks pass without
+  modifying earlier plan files or unrelated user work.

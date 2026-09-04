@@ -14,9 +14,12 @@
 (declare-function ghostel-create "ghostel" (name action))
 (declare-function ghostel-paste-string "ghostel" (text))
 (declare-function ghostel-send-key "ghostel" (key &optional modifier))
-(declare-function term-sessions-open "term-sessions-frontends" (entry command))
+(declare-function ghostel-semi-char-mode "ghostel")
+(declare-function evil-ghostel-insert "evil-ghostel")
+(declare-function term-sessions-open "term-sessions-frontends" (entry &optional command))
 (declare-function term-sessions-send "term-sessions-zmx" (name text))
-(declare-function term-sessions--read-existing-session-entry "term-sessions-list" (prompt))
+(declare-function term-sessions--read-session-entry "term-sessions-frontends"
+                  (&optional prompt require-existing))
 
 (defconst my/send-text-right-split-action
   '((display-buffer-in-direction)
@@ -116,28 +119,19 @@
         target)
     (pcase target-class
       ("zmx"
-       (pcase (completing-read
-               "zmx target: "
-               '("existing" "create new")
-               nil t)
-         ("existing"
-          (require 'term-sessions-list)
-          (let ((entry (term-sessions--read-existing-session-entry "zmx session: ")))
-            (setq target (list :type 'zmx
-                               :name (plist-get entry :name)
-                               :directory (plist-get entry :directory)))))
-         ("create new"
-          (let ((name (read-string "zmx session name: ")))
-            (let ((default-directory source-directory)
-                  (display-buffer-overriding-action my/send-text-right-split-action))
-              (term-sessions-open
-               (list :name name :directory source-directory)
-               nil))
-            (setq target (list :type 'zmx
-                               :name name
-                               :directory source-directory))))
-         (_
-          (user-error "Unknown zmx target selection"))))
+       (require 'term-sessions-list)
+       (let* ((default-directory source-directory)
+              (entry (term-sessions--read-session-entry "zmx session: " nil)))
+         (unless (plist-member entry :session)
+           (let ((display-buffer-overriding-action my/send-text-right-split-action))
+             (term-sessions-open entry nil)
+             (let ((buffer (current-buffer)))
+               (with-current-buffer buffer
+                 (ghostel-semi-char-mode)
+                 (evil-ghostel-insert)))))
+         (setq target (list :type 'zmx
+                            :name (plist-get entry :name)
+                            :directory (plist-get entry :directory)))))
       ("buffer"
        (require 'ghostel)
        (let ((ghostel-buffers (ghostel-buffer-list))
@@ -330,22 +324,29 @@ suitable interpreter.  No results are written back to the Markdown file."
       (user-error "Created Ghostel buffer cannot accept input"))
     (my/send-text-save-last-target target)))
 
-(defun my/open-or-create-zmx-session-in-split (&optional name command directory)
-  "Open or create a zmx session in a right-side split and save it for this tab."
+(defun my/open-or-create-zmx-session-in-split (&optional entry command)
+  "Open or create zmx session ENTRY in a split and save it for this tab."
   (interactive
    (let ((directory default-directory)
-         (name (read-string "zmx session name: "))
+         entry
          command)
-     (when current-prefix-arg
+     (require 'term-sessions-list)
+     (let ((default-directory directory))
+       (setq entry (term-sessions--read-session-entry "zmx session: " nil)))
+     (when (and current-prefix-arg (not (plist-member entry :session)))
        (setq command (read-string "Command for new session: ")))
-     (list name command directory)))
-  (unless directory
-    (setq directory default-directory))
-  (let ((default-directory directory)
+     (list entry command)))
+  (let ((default-directory (plist-get entry :directory))
         (display-buffer-overriding-action my/send-text-right-split-action))
-    (term-sessions-open (list :name name :directory directory) command)
+    (term-sessions-open entry command)
+    (let ((buffer (current-buffer)))
+      (with-current-buffer buffer
+        (ghostel-semi-char-mode)
+        (evil-ghostel-insert)))
     (my/send-text-save-last-target
-     (list :type 'zmx :name name :directory directory))))
+     (list :type 'zmx
+           :name (plist-get entry :name)
+           :directory (plist-get entry :directory)))))
 
 (defvar my/annotations nil
   "Queued source annotations awaiting explicit target selection.")
