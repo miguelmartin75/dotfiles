@@ -3,9 +3,10 @@
 ## Status
 
 - Plan: active, project section schema and Phase 1 shared contract confirmed
-- Implementation: in progress
-- Current phase: Phase 9, mandatory core verification in progress
-- Next milestone: Phase 9, complete mandatory core verification and handoff
+- Implementation: core implementation complete; Phase 9 automated verification
+  complete; mandatory manual acceptance pending
+- Current phase: Phase 9, mandatory manual acceptance pending
+- Next milestone: Phase 9, complete mandatory manual acceptance and handoff
 - Core completion boundary: Phases 1, 3, 4, and 6 plus the mandatory core
   Phase 9 checks
 - Optional enhancements: Phases 2 and 5 add local native Codex and narrow MCP
@@ -1687,7 +1688,8 @@ This phase depends on Phase 7 but no core phase depends on it.
 
 ## Phase 9: End-to-end verification and handoff
 
-Status: in progress, mandatory core verification
+Status: core implementation and automated verification complete; mandatory
+manual acceptance pending
 
 ### Mandatory core no-package automated verification
 
@@ -1695,24 +1697,36 @@ Run with temporary Org paths. The core test harness stages only the declared
 core modules and tests in a temporary directory and uses that directory as its
 only repository-owned `load-path`. This remains reproducible even when optional
 modules exist in the final checkout. Use a fresh temporary `package-user-dir`
-and verify `emacs-codex-ide` is absent from `load-path` and not installed. The
-harness must prove no `require`, autoload, feature check, capability probe, or
-startup path loads or fetches `my-linear.el` or `codex-ide`:
+for the isolated core suites and verify `emacs-codex-ide` is absent from
+`load-path` and not installed. Run the leader and full-init checks separately
+with their already provisioned nonoptional dependencies, without fetching, and
+make the same optional-feature assertions. The harness must prove no `require`,
+autoload, feature check, capability probe, or startup path loads or fetches
+`my-linear.el` or `codex-ide`:
 
 ```sh
 core_test_dir="$(mktemp -d)"
+package_test_dir="$(mktemp -d)"
 cp profiles/common/.config/emacs/my-workflow.el \
   profiles/common/.config/emacs/my-workflow-test.el \
   profiles/common/.config/emacs/my-agent-events.el \
   profiles/common/.config/emacs/my-agent-events-test.el \
   profiles/common/.config/emacs/my-org-datetree.el \
+  profiles/common/.config/emacs/my-org-datetree-test.el \
+  profiles/common/.config/emacs/my-send-text.el \
+  profiles/common/.config/emacs/send-text-targets-test.el \
+  profiles/common/.config/emacs/my-window-layouts.el \
+  profiles/common/.config/emacs/window-layouts-test.el \
   "$core_test_dir/"
+cp refs/emacs-term-sessions/*.el "$core_test_dir/"
 
 emacs -Q --batch -L "$core_test_dir" \
+  --eval "(setq package-user-dir \"$package_test_dir\")" \
   -l "$core_test_dir/my-workflow-test.el" \
   -f ert-run-tests-batch-and-exit
 
 emacs -Q --batch -L "$core_test_dir" \
+  --eval "(setq package-user-dir \"$package_test_dir\")" \
   -l "$core_test_dir/my-agent-events-test.el" \
   -f ert-run-tests-batch-and-exit
 
@@ -1720,13 +1734,28 @@ emacs -Q --batch \
   -l profiles/common/.config/emacs/leader-bindings-test.el \
   -f ert-run-tests-batch-and-exit
 
-emacs -Q --batch \
-  -l profiles/common/.config/emacs/send-text-targets-test.el \
+emacs -Q --batch -L "$core_test_dir" \
+  --eval "(setq package-user-dir \"$package_test_dir\")" \
+  -l "$core_test_dir/my-org-datetree-test.el" \
   -f ert-run-tests-batch-and-exit
 
-emacs -Q --batch \
-  -l profiles/common/.config/emacs/window-layouts-test.el \
+emacs -Q --batch -L "$core_test_dir" \
+  --eval "(setq package-user-dir \"$package_test_dir\")" \
+  -l "$core_test_dir/send-text-targets-test.el" \
   -f ert-run-tests-batch-and-exit
+
+emacs -Q --batch -L "$core_test_dir" \
+  --eval "(setq package-user-dir \"$package_test_dir\")" \
+  -l "$core_test_dir/window-layouts-test.el" \
+  -f ert-run-tests-batch-and-exit
+
+TZ=UTC emacs -Q --batch -L "$core_test_dir" \
+  --eval "(setq package-user-dir \"$package_test_dir\")" \
+  -l "$core_test_dir/term-sessions-tests.el" \
+  -f ert-run-tests-batch-and-exit
+
+PYTHONDONTWRITEBYTECODE=1 \
+  python3 -m unittest dev.tests.emacs_agent_event_test
 
 emacs -Q --batch \
   --eval '(progn (find-file "profiles/common/.config/emacs/init.el") (check-parens))'
@@ -1737,6 +1766,26 @@ git diff --check
 Byte-compile every Phase 1, 3, 4, and 6 core module and focused test into a
 temporary directory with the same empty package boundary. Do not add tests
 that search source files for declarations.
+
+### Phase 9 automated verification results
+
+- Passed workflow 9/9, agent events 17/17, datetree 1/1, send 5/5, layouts
+  14/14, leader 8/8, pinned term-sessions under `TZ=UTC` 123/123, and event
+  wrapper 16/16.
+- Passed isolated byte compilation for all 10 core Phase 1, 3, 4, and 6 module
+  and test files, plus a separate leader binding test compile. The only output
+  was expected upstream obsolete-macro warnings and unresolved optional
+  runtime byte-compiler warnings.
+- Passed batch `init.el` load, `check-parens`, hooks JSON validation, wrapper
+  executable-mode validation, and `git diff --check`.
+- The fresh `package-user-dir` remained empty. Explicit isolation results were
+  Codex feature nil, library nil, and installed nil; `my-linear` feature nil
+  and library nil. The temporary staged core directory was the only
+  repository-owned source added to the isolated load boundary. Default package
+  provisioning contained no Codex or Linear package.
+- Optional Phase 2, 5, 7, and 8 verification was skipped because those optional
+  phases were not exercised. `emacs-codex-ide` is not needed for the complete
+  baseline or for TRAMP.
 
 ### Optional local-native automated verification
 
@@ -1761,6 +1810,11 @@ emacs -Q --batch \
 ```
 
 ### Mandatory core no-package manual verification matrix
+
+Status: pending. Items 1-11 require interactive representative Org data,
+linked worktrees, real agent, UI, and TTY sessions, and a configured live
+SSH/TRAMP host. Automated verification did not touch external hosts or user
+Org data.
 
 1. Create two canonical project directories and indexes, then resume Org-only
    tasks in each, including the same project-scoped local key. Confirm agenda
