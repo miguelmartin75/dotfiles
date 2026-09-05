@@ -158,6 +158,16 @@
   (should (eq (lookup-key evil-visual-state-map (kbd "C-c C-r"))
               #'my/send-region-or-buffer-to-last-target)))
 
+(ert-deftest my/leader-bindings-workflow-commands ()
+  (with-temp-buffer
+    (dolist (state '(evil-normal-state evil-visual-state))
+      (funcall state)
+      (should (eq (key-binding (kbd "SPC o w")) #'my/work-start))
+      (should (eq (key-binding (kbd "SPC o W"))
+                  #'markdown-table-wrap-pretty-toggle))
+      (should (eq (key-binding (kbd "SPC o l")) #'my/work-log))
+      (should (eq (key-binding (kbd "SPC o u")) #'my/work-draft-update)))))
+
 (ert-deftest my/leader-bindings-ghostel-insert-state-escape-hatches ()
   (let ((shared-window-bindings
          '(("h" . evil-window-left)

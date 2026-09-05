@@ -2,11 +2,14 @@
 
 ## Status
 
-- Plan: draft, project section schema confirmed
-- Implementation: not started
-- Current phase: Phase 1
-- Core completion boundary: Phases 1 through 6 and the mandatory Phase 9 checks
-- Optional integration: Phases 7 and 8 add Linear without gating the Org-only workflow
+- Plan: active, project section schema and Phase 1 shared contract confirmed
+- Implementation: in progress
+- Current phase: Phase 1, complete
+- Next milestone: Phase 3, named server and local agent events
+- Core completion boundary: Phases 1, 3, 4, and 6 plus the mandatory core
+  Phase 9 checks
+- Optional enhancements: Phases 2 and 5 add local native Codex and narrow MCP
+  context; Phases 7 and 8 add Linear. None gates the core workflow.
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Package provisioner: `profiles/common/.config/emacs/install-packages.el`
@@ -34,7 +37,7 @@ Org project index
         +-> Emacs task tab
               live projection of one workspace root and one Org task
                     |
-                    +-> native Codex through codex app-server
+                    +-> optional local native Codex through codex app-server
                     +-> Gptel for lightweight chat and rewriting
                     +-> Ghostel/zmx for Claude, remote Codex, and fallback
                     +-> agent event buffer for progress and attention
@@ -97,7 +100,7 @@ Example contents:
 :WORK_KEY: emacs-agent-workflow
 :WORKSPACE_ROOT: /Users/migmartin/repos/dotfiles/
 :NOTE_FILE: ~/org/work/projects/dotfiles/notes/emacs-agent-workflow.md
-:SESSION_BACKEND: codex-native
+:SESSION_BACKEND: terminal-agent
 :END:
 
 *** Archive :ARCHIVE:
@@ -156,8 +159,9 @@ index:
 - Bind the Org task, normalized workspace root, note, agent session, terminal,
   and review buffers to one Emacs task tab without using the tab name as an
   identity.
-- Add a full-fidelity native Codex surface while retaining Gptel and the working
-  Ghostel/zmx terminal flow.
+- Optionally add a full-fidelity native Codex surface for explicitly
+  provisioned local use while retaining Gptel and the working Ghostel/zmx
+  terminal flow as the complete baseline.
 - Let Codex and Claude report bounded lifecycle events to a running GUI,
   daemon, or direct `emacs -nw` session through a fixed, data-only entry point.
 - Permit narrowly reviewed editor context tools without exposing a generic
@@ -186,8 +190,10 @@ index:
   handling.
 - Do not build `workd`, SQLite state, or a custom dashboard in this plan.
 - Do not replace zmx with tmux merely to anticipate a future dashboard.
-- Do not make native Codex over TRAMP a baseline requirement before live
-  support is proven.
+- Do not use native Codex over TRAMP at the accepted package pin. TRAMP always
+  uses the terminal-agent/Ghostel/zmx backend.
+- Do not require, fetch, install, or load `emacs-codex-ide` for Org, tabs,
+  journal, events, layouts, the MCP-disabled baseline, or remote relay work.
 - Do not expose an Emacs TCP server or forward a raw Emacs server socket from a
   shared or untrusted host.
 - Do not add a generic tracker framework before a second real tracker exists.
@@ -244,9 +250,13 @@ index:
   interactive Emacs UI.
 - `emacs-codex-ide` uses app-server and provides ordinary Emacs transcript
   buffers, native diffs, links, approvals, model and sandbox controls, and
-  session resumption. It is the recommended native Codex client. Because it is
-  a community package over an evolving interface, commit-pin it and keep the
-  terminal fallback.
+  session resumption. It is an optional local enhancement over the complete
+  terminal-agent baseline.
+- The completed upstream audit accepted commit
+  `5eba84dd58ad8609e8f7e8c4159d4aac90b4f303` only as an immutable local opt-in
+  pin. That revision has no documented or tested TRAMP support. It launches
+  `codex app-server` with `make-process` without `:file-handler t` and uses a
+  pipe for stderr, so native Codex over TRAMP is unsupported at this pin.
 
 ### Emacs server and TRAMP gap
 
@@ -417,9 +427,8 @@ Rules:
   datetree. It is separate from the global journal.
 - `WORKSPACE_ROOT` is added when the task is bound to work and preserves the
   complete normalized local or TRAMP root.
-- `NOTE_FILE`, `EXEC_HOST`, `SESSION_BACKEND`, `SESSION_ID`, and
-  `CODEX_THREAD_ID` are optional. Omit them when unset rather than creating
-  empty properties.
+- `NOTE_FILE`, `EXEC_HOST`, `SESSION_BACKEND`, and `SESSION_ID` are optional.
+  Omit them when unset rather than creating empty properties.
 - When set, `NOTE_FILE` names one existing `.org` or `.md` file. Use an Org
   `file:` link and do not copy the external note content. Keep this link on the
   task; add the same file under `Docs` only when it becomes a durable project
@@ -427,8 +436,10 @@ Rules:
 - The task body and all task subsections are optional. The workflow must not
   create or require `Outcome`, `Plan`, `Log`, `Decisions`, `Evidence`,
   `Artifacts`, `Update drafts`, or any other narrative heading.
-- Store a Codex thread ID only when the selected package exposes one through a
-  stable public API. Otherwise its session manager remains authoritative.
+- Keep `CODEX_THREAD_ID` absent unless a documented public package API is
+  separately reviewed and accepted. Never infer a thread ID from package
+  internals; until that API is accepted, the optional package session manager
+  remains authoritative.
 - Store terminal sessions through the existing `term-session:` Org link when
   useful. Do not infer agent identity by parsing a process command.
 - Never store API tokens, hook secrets, approval decisions, or entire agent
@@ -516,8 +527,10 @@ tests must inject failures after task preparation and after journal save.
   project's `Log` datetree without changing the global journal.
 - `my/work-archive` moves a completed or canceled task from `Tasks/Active` to
   `Tasks/Archive` while preserving its Org ID and journal links.
-- `my/work-open-session` resumes native Codex through a public package API or
-  follows the recorded terminal-session link.
+- `my/work-codex` follows the recorded terminal-session link by default. For a
+  local root it may use the optional native client only when the package and
+  local `codex` executable are available; a TRAMP root always uses
+  terminal-agent.
 - Existing hunk review and annotation commands remain independent. They do not
   implicitly change the task or journal.
 
@@ -573,6 +586,12 @@ my-agent-events.el
 native Codex, event, layout, MCP, or TRAMP code may require Linear. Do not build
 a generalized tracker protocol yet; keep the single optional adapter in
 `my-linear.el`.
+
+Core workflow, event, layout, and remote modules must also compile, load, and
+run when `emacs-codex-ide` is absent from `load-path` and is not installed.
+Capability detection may observe an already available local package but must
+not load, fetch, or install it. Only optional Phase 2 code may call its public
+APIs after that capability is selected.
 
 ## Optional Linear adapter decision
 
@@ -678,30 +697,41 @@ Linear's official MCP server may optionally give an agent issue context. It
 does not replace the deterministic Emacs GraphQL adapter or its publication
 confirmation.
 
-## Native Codex decision
+## Optional local native Codex decision
 
-Add `codex-ide` from `https://github.com/dgillis/emacs-codex-ide` to the
-immutable VC-package table at
-`profiles/common/.config/emacs/install-packages.el:10-40`.
+Retain `codex-ide` from `https://github.com/dgillis/emacs-codex-ide` at accepted
+commit `5eba84dd58ad8609e8f7e8c4159d4aac90b4f303`, but keep it outside the default
+package provisioning path. Expose a separate explicit opt-in such as
+`my/provision-codex-ide`; only that command may fetch or install the immutable
+revision. Never use `:newest`, fetch during startup, install it through the
+default provisioner, or add a top-level `require`.
 
-The candidate baseline observed during planning is main commit
-`5eba84dd58ad8609e8f7e8c4159d4aac90b4f303`. Phase 2 must inspect that commit's
-package metadata, app-server calls, process environment, approval handling, MCP
-bridge, and tests before accepting it. Record the accepted revision and reason
-in this plan. Never install `:newest` or update during normal startup.
+The separate upstream audit found no documented or tested TRAMP support at the
+accepted pin. Its app-server launch uses `make-process` without
+`:file-handler t` and a pipe-backed stderr process, so native Codex is local
+only. See the [accepted upstream commit](https://github.com/dgillis/emacs-codex-ide/commit/5eba84dd58ad8609e8f7e8c4159d4aac90b4f303)
+and the [Emacs `make-process` file-handler contract](https://www.gnu.org/software/emacs/manual/html_node/elisp/Asynchronous-Processes.html).
 
-Configure it lazily:
+The repository owns `my/work-codex` and always binds it at `SPC a a` as part of
+the core layout/backend work:
 
-- `SPC a a` opens or resumes native Codex for the active Org work context.
-- New sessions use the normalized local project root and may include the local
-  work key, title, note link, and a user-approved context summary.
-- Do not send the whole project index, journal, or optional tracker metadata
-  automatically.
+- A TRAMP root opens terminal-agent through Ghostel/zmx without loading or
+  probing `codex-ide`.
+- A local root uses native Codex only when the optional package is locally
+  available and a local `codex` executable is available.
+- Package absence, executable absence, or native startup failure reports the
+  cause and falls back to terminal-agent without changing Org task metadata,
+  tab identity, session properties, or existing terminal targets.
+- New optional native sessions use the normalized local project root and may
+  include the local work key, title, note link, and a user-approved context
+  summary. Do not send the whole project index, journal, or optional tracker
+  metadata automatically.
 - Public package APIs own session creation, resumption, approvals, and diffs.
-  Do not inspect package internals to recover thread state.
+  Never inspect package internals to recover thread state.
 - Existing `SPC a c`, `SPC a s`, and visual `SPC a r` retain Gptel semantics.
-- Ghostel/zmx remains the Claude path, remote-agent default, and Codex fallback.
-- App-server protocol state must not become a `my-send-text.el` target.
+- Ghostel/zmx remains the Claude path, every remote-agent path, and the Codex
+  baseline and fallback. App-server state never becomes a
+  `my-send-text.el` target.
 
 ## Emacs server and agent event ingress
 
@@ -815,7 +845,7 @@ contracts. Do not parse terminal rendering or scrollback to infer agent state.
 
 ## Reviewed Emacs tool access
 
-The optional `emacs-codex-ide` MCP bridge is separate from notifications:
+The optional local `emacs-codex-ide` MCP bridge is separate from notifications:
 
 ```text
 app-server       Codex threads, streaming, diffs, and approvals
@@ -823,7 +853,8 @@ hook event API   one-way lifecycle and attention notifications
 MCP bridge       on-demand structured inspection or approved UI action
 ```
 
-Keep the bridge disabled during the native-client pilot. Audit its tools and
+Keep all Codex IDE MCP flags disabled before and during initial optional native
+sessions. Phase 5 may audit its tools and
 initially allow only the smallest read surface needed for:
 
 - current buffer, region, and point;
@@ -848,7 +879,7 @@ TRAMP and `emacsclient` solve different problems:
 | Remote | Same remote host | Remote named server socket | Remote filesystem | Supported |
 | Local | Remote | Dedicated event-only reverse Unix socket | Local Emacs uses TRAMP | Supported after Phase 6 |
 | Local | Remote | Raw Emacs socket reverse-forward | Local Emacs uses TRAMP | Trusted-host escape hatch only |
-| Local | Remote native app-server | Package-specific remote process/path mapping | TRAMP | Deferred until proven |
+| Local | Remote native app-server | Unsupported by the accepted package pin | TRAMP | Not used |
 
 ### Default remote workflow
 
@@ -947,7 +978,7 @@ optional team tracker      Linear adapter
 task presentation          Emacs tab and deterministic layouts
 persistent PTY             zmx
 PTY rendering              Ghostel
-native Codex thread        codex app-server
+optional local Codex thread codex app-server
 semantic events            Codex/Claude hooks
 ```
 
@@ -966,8 +997,8 @@ Add only provider-neutral direct routes after their commands exist:
 | `SPC o w` | `my/work-start` | Select, create, resume, or open an Org task and bind the task tab. |
 | `SPC o l` | `my/work-log` | Append one reviewed entry to today's work log. |
 | `SPC o u` | `my/work-draft-update` | Build a generic editable status update. |
-| `SPC a a` | `my/work-codex` | Open or resume native Codex for the active Org task. |
-| `SPC A` | Layout catalog agent entry | Show the selected native or terminal agent backend after Phase 4. |
+| `SPC a a` | `my/work-codex` | For TRAMP, open terminal-agent. For local roots, use optional native Codex when available and otherwise report and fall back to terminal-agent. |
+| `SPC A` | Layout catalog agent entry | Show the capability-selected local native or terminal agent backend after Phase 4; TRAMP always uses terminal-agent. |
 
 Retain all current Gptel, terminal, review, Org, and Magit keys. Do not bind
 these commands in Ghostel char mode or replace terminal escape hatches. Keep
@@ -1006,10 +1037,12 @@ optional Linear commands under `M-x` initially.
 
 - `profiles/common/.config/emacs/init.el`
   - Load core modules, configure paths, start the named server, redirect work
-    TODO capture, set the explicit agenda, configure native Codex lazily, add
-    keys, and preserve existing transports.
+    TODO capture, set the explicit agenda, add the repository-owned
+    `my/work-codex` dispatcher and keys, and preserve existing transports.
 - `profiles/common/.config/emacs/install-packages.el`
-  - Add one reviewed immutable `codex-ide` VC pin.
+  - Retain one reviewed immutable `codex-ide` VC pin only behind a separate
+    explicit opt-in such as `my/provision-codex-ide`. Default provisioning must
+    not fetch or install it.
 - `profiles/common/.config/emacs/my-org-datetree-test.el`
   - Change only if a genuinely shared date primitive is added to
     `my-org-datetree.el`; otherwise leave the generic helper untouched.
@@ -1066,7 +1099,23 @@ optional Linear commands under `M-x` initially.
 
 ## Phase 1: Deliver project-partitioned Org tasks and daily logging
 
-Status: pending
+Status: complete
+
+### Shared contract
+
+- `my/workspace-normalize-root` resolves a selected local or TRAMP directory
+  through nonprompting `project-current`, preserves the remote prefix, and
+  returns one trailing-slash identity without using `file-truename`.
+- `my/tab-current-property`, `my/tab-set-current-property`, and
+  `my/tab-find-index-by-property` are the public generic tab-property boundary.
+  They use only public tab-bar accessors. Setting a property to nil removes it.
+- `my/workspace-tab-index` and `my/workspace-select-or-create-tab` identify and
+  select one managed tab by exact normalized root equality, never by tab name.
+- Phase 1 stores only `my/workspace-root` and the active Org identity in
+  `my/work-task-id`. Layout edit buffers, window roles, companion caches,
+  terminal targets, and agent targets remain owned by Phase 4.
+- The existing `my/send-text-last-target` property remains independent in
+  Phase 1. Phase 4 may migrate its repeated tab scans to the shared accessors.
 
 ### Changes
 
@@ -1101,6 +1150,30 @@ Status: pending
    flat `<project-key>.org` files, and shared project files are not discovered,
    selected, mutated, or added to the agenda. Test with `my-linear.el`
    unavailable and never touch the real `~/org/` tree.
+
+### Implementation results
+
+- Added `profiles/common/.config/emacs/my-workflow.el` with 896 lines and
+  `profiles/common/.config/emacs/my-workflow-test.el` with 498 lines.
+- Added the project index, task lifecycle, journal and project logs, note
+  binding, archive, individually selected draft sources, root identity, and
+  generic tab-property contracts described above.
+- Integrated the module, agenda refresh, work capture target, and leader
+  bindings in `profiles/common/.config/emacs/init.el`. The displaced Markdown
+  table wrap command remains available at `SPC o W`.
+- Updated `profiles/common/.config/emacs/leader-bindings-test.el` and
+  `dev/plans/3-emacs-annoyances-layouts.md` for the shared contract and retained
+  bindings.
+- The combined review ran at 817 production additions and 248 test additions.
+  Main-session inspection resolved its transaction ordering, schema, input,
+  duplicate log, draft privacy, source selection, link redaction, binding, and
+  test findings before the review checkpoint was reset.
+- Passed 9 workflow ERT tests, 1 datetree regression test, 7 leader binding
+  tests, and 5 send-target regression tests. Staged byte compilation,
+  `check-parens` for the module, test, and `init.el`, plus `git diff --check`
+  also passed.
+- Confirmed that the core implementation has no Linear, agent, network,
+  terminal, or `emacs-codex-ide` dependency.
 
 ### Success criteria
 
@@ -1137,34 +1210,50 @@ Status: pending
 
 ## Phase 2: Pilot native Codex locally
 
-Status: pending
+Status: pending, optional. The separate upstream audit is complete, but no
+Phase 2 implementation is claimed.
+
+Skipping this phase leaves the core workflow complete. Phase 3 is independent
+of Phase 2.
 
 ### Changes
 
-1. Audit the candidate `emacs-codex-ide` commit, run its upstream tests, and
-   record the accepted immutable revision.
-2. Add the accepted VC package to the explicit provisioner and provision it
-   outside normal startup.
-3. Add lazy configuration and `my/work-codex` without enabling MCP.
-4. Start or resume a session at the active local root. Include only local task
+1. Retain the separately audited and accepted local-only revision
+   `5eba84dd58ad8609e8f7e8c4159d4aac90b4f303` as an immutable pin.
+2. Add a separate explicit opt-in such as `my/provision-codex-ide`. Keep the
+   package out of default provisioning and every startup fetch/install path.
+3. Add only lazy optional package configuration. Never add a top-level
+   `require`, and keep every Codex IDE MCP flag disabled.
+4. Integrate the core-owned `my/work-codex` dispatcher with the optional local
+   native capability. Start or resume a session at the active local root and
+   include only local task
    key/title and user-approved note context.
-5. Record a public stable thread ID when available; otherwise rely on the
-   package session manager.
-6. Add `SPC a a` and document one-command Ghostel/zmx fallback.
+5. Keep `CODEX_THREAD_ID` absent unless a documented public API is separately
+   reviewed and accepted. Never infer it from package internals.
+6. Verify package absence, executable absence, and app-server startup failure
+   each report the cause and use the core terminal-agent fallback without
+   mutating task or tab state.
 
 ### Success criteria
 
-- An Org-only work context opens a normal Emacs Codex session buffer.
+- When explicitly provisioned, an Org-only local work context opens a normal
+  Emacs Codex session buffer.
 - Streaming, links, approvals, diff navigation, model/sandbox controls,
   interruption, and resumption work against the installed Codex CLI.
 - A second worktree gets independent task and session context.
 - Gptel and Ghostel/zmx behave as before.
-- App-server failure leaves Emacs responsive and terminal fallback usable.
-- Normal startup performs no package or network operation.
+- App-server failure leaves Emacs responsive, reports the cause, and opens the
+  terminal fallback without task-state mutation.
+- TRAMP never loads the optional package and always opens terminal-agent.
+- Default provisioning does not fetch or install `codex-ide`; normal startup
+  performs no package or network operation.
 
 ## Phase 3: Establish the named server and local agent events
 
 Status: pending
+
+This core phase is independent of optional Phase 2 and uses terminal-agent as
+its required Codex baseline.
 
 ### Changes
 
@@ -1174,8 +1263,9 @@ Status: pending
    non-focus-stealing display.
 3. Add the fixed-expression wrapper. Put literal `--` before data, consume and
    clear every `server-eval-args-left` value, and reject wrong argument counts.
-4. Add minimal Codex hooks and document equivalent Claude hooks. Review Codex
-   hooks explicitly with `/hooks`.
+4. Add minimal Codex CLI/provider hooks and document equivalent Claude hooks.
+   These hooks do not require `emacs-codex-ide`. Review Codex hooks explicitly
+   with `/hooks`.
 5. Pass non-secret Org ID/root context when an agent is launched from Emacs;
    test cwd-only routing for manually launched agents and reject task/root
    mismatches.
@@ -1211,10 +1301,14 @@ Status: pending
    Do not introduce a second root or tab identity implementation.
 2. Extend tab state with active Org ID, local key, effective note, and selected
    agent backend. Optional Linear fields are derived display data only.
-3. Replace the planned zmx-only coding provider with `codex-native`, default for
-   local roots, and `terminal-agent`, default for TRAMP and explicit fallback.
-4. Make `SPC A` render the selected backend. Only terminal selection updates
-   `my/send-text-last-target`.
+3. Implement terminal-agent as the required backend. Prefer `codex-native` for
+   a local root only when the optional package and local `codex` executable are
+   available. Always select terminal-agent for TRAMP without loading
+   `codex-ide`.
+4. Implement the repository-owned `my/work-codex`, bind it unconditionally at
+   `SPC a a`, and make `SPC A` use the same capability decision. Report native
+   absence or startup failure and fall back to terminal-agent without mutating
+   task state. Only terminal selection updates `my/send-text-last-target`.
 5. Preserve Gptel, terminal, Magit providers, transactional rendering,
    root-scoped session names, and the public term-sessions migration.
 6. Update the old plan's status, superseded text, and actual term-sessions pin.
@@ -1223,7 +1317,9 @@ Status: pending
 
 - One normalized root owns one tab and one active Org task even when tab labels
   collide.
-- Local `SPC A` uses native Codex; TRAMP `SPC A` uses terminal-agent.
+- Local `SPC A` and `SPC a a` prefer native Codex only when its optional
+  capability is available and otherwise use terminal-agent. TRAMP always uses
+  terminal-agent without loading `codex-ide`.
 - `SPC G`, `SPC T`, and `SPC M` retain Gptel, terminal, and Magit behavior.
 - Switching layouts kills no threads, terminals, zmx sessions, tasks, or source
   buffers.
@@ -1233,11 +1329,15 @@ Status: pending
 
 ## Phase 5: Audit and enable narrow Emacs MCP context
 
-Status: pending
+Status: pending, optional, disabled
+
+This phase depends on optional Phase 2 and a narrow local allowlisting
+boundary. No core phase depends on it.
 
 ### Changes
 
-1. Enumerate every tool exposed by the pinned `emacs-codex-ide` MCP bridge and
+1. Keep all MCP flags off before optional native sessions. Enumerate every tool
+   exposed by the pinned `emacs-codex-ide` MCP bridge and
    record its parameters and authority.
 2. Enable only the read operations listed above, or add a local allowlisting
    adapter if upstream cannot restrict its surface.
@@ -1252,11 +1352,15 @@ Status: pending
 - Arbitrary Elisp, unrestricted processes, buffer killing, and unapproved
   writes are unavailable.
 - Cross-workspace context requires explicit approval.
-- Disabling MCP leaves native Codex, Gptel, terminal agents, and events working.
+- Disabling MCP leaves optional native Codex, Gptel, terminal agents, events,
+  layouts, and remote work operating normally.
 
 ## Phase 6: Add the remote event relay and TRAMP acceptance
 
 Status: pending
+
+This core phase depends on Phases 1 and 3. It does not depend on optional
+Phases 2 or 5, and terminal-agent is its required agent baseline.
 
 ### Changes
 
@@ -1273,8 +1377,9 @@ Status: pending
    a same-host agent.
 6. Document raw Emacs socket forwarding only as a trusted single-user-host
    escape hatch with its full authority warning.
-7. Evaluate `agent-shell-tramp` only if unified remote buffers become more
-   important than direct Codex fidelity.
+7. Keep native Codex disabled for TRAMP at the accepted package pin. Evaluate
+   `agent-shell-tramp` only if unified remote buffers become more important
+   than direct Codex fidelity.
 
 ### Success criteria
 
@@ -1366,13 +1471,15 @@ This phase depends on Phase 7 but no core phase depends on it.
 
 Status: pending
 
-### Mandatory automated verification
+### Mandatory core no-package automated verification
 
 Run with temporary Org paths. The core test harness stages only the declared
 core modules and tests in a temporary directory and uses that directory as its
 only repository-owned `load-path`. This remains reproducible even when optional
-`my-linear.el` exists in the final checkout and proves no `require`, autoload,
-or feature check loads it:
+modules exist in the final checkout. Use a fresh temporary `package-user-dir`
+and verify `emacs-codex-ide` is absent from `load-path` and not installed. The
+harness must prove no `require`, autoload, feature check, capability probe, or
+startup path loads or fetches `my-linear.el` or `codex-ide`:
 
 ```sh
 core_test_dir="$(mktemp -d)"
@@ -1400,14 +1507,30 @@ emacs -Q --batch \
   -f ert-run-tests-batch-and-exit
 
 emacs -Q --batch \
+  -l profiles/common/.config/emacs/window-layouts-test.el \
+  -f ert-run-tests-batch-and-exit
+
+emacs -Q --batch \
   --eval '(progn (find-file "profiles/common/.config/emacs/init.el") (check-parens))'
 
 git diff --check
 ```
 
-Byte-compile each core module and focused test into a temporary directory. Run
-the pinned `emacs-codex-ide` upstream suite separately. Do not add tests that
-search source files for declarations.
+Byte-compile every Phase 1, 3, 4, and 6 core module and focused test into a
+temporary directory with the same empty package boundary. Do not add tests
+that search source files for declarations.
+
+### Optional local-native automated verification
+
+Run only when optional Phase 2 is exercised:
+
+- Run the accepted `emacs-codex-ide` upstream suite at
+  `5eba84dd58ad8609e8f7e8c4159d4aac90b4f303` separately.
+- Run focused local native startup, interruption, diff, approval, independent
+  worktree, fallback, and resumption tests with MCP flags disabled.
+- If optional Phase 5 is exercised, separately verify its narrow local
+  allowlisting boundary and confirm all disallowed tools remain unavailable.
+- Do not run or claim native TRAMP acceptance at this pin.
 
 ### Optional Linear verification
 
@@ -1419,7 +1542,7 @@ emacs -Q --batch \
   -f ert-run-tests-batch-and-exit
 ```
 
-### Mandatory manual verification matrix
+### Mandatory core no-package manual verification matrix
 
 1. Create two canonical project directories and indexes, then resume Org-only
    tasks in each, including the same project-scoped local key. Confirm agenda
@@ -1434,18 +1557,36 @@ emacs -Q --batch \
 5. Move a completed task to the project Archive and confirm its Org ID and old
    journal links still resolve while the task leaves the active agenda.
 6. Use two linked worktrees with colliding tab labels. Verify isolated tasks,
-   native sessions, terminal sessions, Gptel, Magit, and events.
-7. Review a native Codex change through its session diff and the existing
-   source-buffer `diff-hl` workflow.
+   terminal-agent sessions, Gptel, Magit, and events.
+7. Review a terminal-agent Codex change through the existing source-buffer
+   `diff-hl` workflow.
 8. Run Codex and Claude in Ghostel/zmx, use the current explicit sender, and
    receive hook events without parsing terminal output.
 9. Test daemon GUI/TTY and direct GUI/`-nw` against named server `main`.
 10. Disconnect and reconnect the SSH event tunnel while remote zmx remains
    alive. Test clean, modified, stale, and out-of-order TRAMP file events.
 11. Start with no network, no Linear credentials/configuration, `my-linear`
-   unloaded, and native Codex unavailable. Confirm task, journal, generic draft,
-   Gptel, and terminal workflows remain usable. Phase 1 separately proves the
-   pre-adapter case where `my-linear.el` does not exist.
+   unloaded, and `emacs-codex-ide` absent from `load-path` and not installed.
+   Confirm `SPC a a` remains bound, local and TRAMP roots open terminal-agent,
+   and task, journal, generic draft, Gptel, layouts, events, and remote relay
+   remain usable. Phase 1 separately proves the pre-adapter case where
+   `my-linear.el` does not exist.
+
+### Optional local-native manual verification
+
+Run only when optional Phase 2 is exercised:
+
+1. Explicitly provision the accepted pin and confirm a local root prefers a
+   native session while a TRAMP root opens terminal-agent without loading the
+   package.
+2. Review a local native Codex change through its session diff and the existing
+   source-buffer `diff-hl` workflow. Exercise streaming, links, approvals,
+   interruption, and resumption.
+3. Remove or hide the package, hide the local `codex` executable, and induce
+   native startup failure in turn. Confirm each cause is reported and fallback
+   opens terminal-agent without changing task or tab state.
+4. If optional Phase 5 is exercised, verify only the allowlisted local MCP
+   context is exposed and that disabling MCP leaves the native session usable.
 
 ### Optional Linear manual verification
 
@@ -1467,22 +1608,28 @@ emacs -Q --batch \
   state.
 - The journal is chronology and links to the durable task plus optional Org or
   Markdown detail notes.
-- Native Codex, Gptel, terminal agents, events, layouts, MCP, and remote work all
-  function without Linear.
-- Native local Codex provides streaming, navigation, diffs, approvals, and
-  resumable sessions in normal Emacs buffers.
+- Gptel, terminal agents, events, layouts, and remote work function without
+  Linear or `emacs-codex-ide`.
+- `my/work-codex` is always bound at `SPC a a`. It uses terminal-agent as the
+  complete baseline, never attempts native Codex for TRAMP, and prefers native
+  local Codex only when the optional capability is available.
 - GUI and `-nw` sessions receive bounded semantic events through one named
   server without evaluating agent-provided Lisp.
-- Reviewed MCP tools expose only intended editor context.
+- When optional Phase 2 is exercised, native local Codex provides streaming,
+  navigation, diffs, approvals, and resumable sessions in normal Emacs
+  buffers. When optional Phase 5 is also exercised, reviewed MCP tools expose
+  only intended local editor context.
 - Remote events expose no raw local Emacs authority and never overwrite a
   modified buffer.
 - Linear optionally adds team-visible identity/context and reviewed comment
   publication without changing the core task contract.
 - Linear failure affects only Linear-specific commands. Every mutation shows
   exact target/content and requires human confirmation.
-- Normal startup remains offline, provisioning is deterministic, applicable
-  ERT/upstream tests pass, byte compilation and `check-parens` succeed, and
-  `git diff --check` is clean.
+- Normal startup and default provisioning remain offline and never fetch or
+  install `codex-ide`. Core ERT, byte compilation, and `check-parens` succeed
+  without the optional package. When Phase 2 is exercised, its explicit
+  opt-in provisioning is deterministic and its separate upstream/native tests
+  pass. `git diff --check` is clean.
 
 ## References
 

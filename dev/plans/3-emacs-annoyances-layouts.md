@@ -36,10 +36,16 @@ durable zmx session again, or choose the correct Magit buffer for a newly
 selected root. A catalog plus resource-specific buffer providers can rebuild a
 deterministic view while keeping the task's edit buffer and companion choices.
 
-This plan is independently implementable. It contains its own workspace
-selection, layout bindings, Magit leader precedence boundary, package pin
-change, provider contracts, tests, and validation. It does not require any
-writing-shortcut, line-number, typography, or completion change.
+This plan is the detailed layout design and execution context for Phase 4 of
+`dev/plans/emacs-workflow-agentic-support.md`. Phase 1 of that workflow plan
+owns and implements the normalized-root resolver, generic tab-property
+accessors, exact root-to-tab lookup and creation, `my/workspace-root`, and
+active `my/work-task-id` ownership. Phase 4 must consume those primitives and
+must not add a second workspace or tab identity implementation. It implements
+the still-pending focus and companion layouts described here without requiring
+any writing-shortcut, line-number, typography, or completion change.
+Phase 4 is a core phase and does not depend on optional native Codex Phase 2;
+terminal-agent is its complete coding-agent baseline.
 
 References:
 
@@ -64,8 +70,11 @@ References:
 
 ## Status
 
-- Plan: complete
-- Implementation: not started
+- Plan: complete design, retained as the implementation specification for
+  workflow Phase 4
+- Implementation: Phase 1 of `dev/plans/emacs-workflow-agentic-support.md`
+  implements the shared root/tab foundation; focus rendering, direct layout
+  bindings, providers, and layout verification remain pending its Phase 4
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Package provisioner: `profiles/common/.config/emacs/install-packages.el`
@@ -76,26 +85,24 @@ References:
 
 ### Existing primitives
 
-- Magit is configured at `profiles/common/.config/emacs/init.el:105`.
-- Gptel is configured at `profiles/common/.config/emacs/init.el:253`.
-- term-sessions is configured at
-  `profiles/common/.config/emacs/init.el:440`.
-- The current 50 percent right-split action is at
-  `profiles/common/.config/emacs/init.el:454`.
-- Tab-local terminal send-target state starts at
-  `profiles/common/.config/emacs/init.el:460` and is updated near
-  `profiles/common/.config/emacs/init.el:654`.
-- The code calls a private term-sessions selector at
-  `profiles/common/.config/emacs/init.el:558`.
-- Plain Ghostel and zmx split commands are at
-  `profiles/common/.config/emacs/init.el:677` and
-  `profiles/common/.config/emacs/init.el:696`.
-- Tab-bar configuration begins at
-  `profiles/common/.config/emacs/init.el:1148`.
-- The leader table begins at `profiles/common/.config/emacs/init.el:1202`.
-- Winner undo and redo are bound at
-  `profiles/common/.config/emacs/init.el:1233`; Winner is enabled at
-  `profiles/common/.config/emacs/init.el:1473`.
+- Magit is configured at `profiles/common/.config/emacs/init.el:572`.
+- Gptel is configured at `profiles/common/.config/emacs/init.el:1644`.
+- term-sessions deferred configuration is at
+  `profiles/common/.config/emacs/init.el:1568-1578`.
+- The current 50 percent right-split action, tab-local terminal send-target
+  scans and rewrites, and the plain Ghostel and zmx split commands are in
+  `profiles/common/.config/emacs/my-send-text.el:24-40`,
+  `profiles/common/.config/emacs/my-send-text.el:215-231`, and
+  `profiles/common/.config/emacs/my-send-text.el:311-355`.
+- The current private term-sessions selector declaration and calls are in
+  `profiles/common/.config/emacs/my-send-text.el:21-22`,
+  `profiles/common/.config/emacs/my-send-text.el:124`, and
+  `profiles/common/.config/emacs/my-send-text.el:338`.
+- Tab-bar configuration is at `profiles/common/.config/emacs/init.el:274-277`.
+- The leader table begins at
+  `profiles/common/.config/emacs/init.el:1744`; Winner is enabled at
+  `profiles/common/.config/emacs/init.el:302`, and its undo and redo bindings
+  are at `profiles/common/.config/emacs/init.el:1789-1790`.
 
 ### Layout behavior
 
@@ -118,14 +125,16 @@ References:
 
 ### Magit leader precedence
 
-- The normal and visual leaders are installed only in global Evil state maps
-  at `profiles/common/.config/emacs/init.el:1325`.
+- The normal and visual leaders are installed globally at
+  `profiles/common/.config/emacs/init.el:1920-1921` and are already installed
+  state-locally on `magit-mode-map` at
+  `profiles/common/.config/emacs/init.el:1925-1927`.
 - Magit's shared `magit-mode-map` binds plain `SPC` to
   `magit-diff-show-or-scroll-up`, and Evil Collection gives that overriding map
   precedence over global state maps.
-- Layout shortcuts therefore would not be reachable from the Magit companion
-  pane unless the existing leader maps are installed state-locally on
-  `magit-mode-map`.
+- Layout shortcuts are already reachable from the Magit companion pane through
+  those state-local entries. Phase 4 must preserve and test that precedence
+  boundary while adding the pending layout bindings.
 - `S-SPC` already retains the displaced Magit scroll action. Insert, Emacs, and
   Transient input must remain native.
 
@@ -133,27 +142,35 @@ References:
 
 1. Represent layouts as recipes over live buffers. Use one layout catalog, one
    dispatcher, and provider functions that return live companion buffers.
-2. Make one tab represent one task root. Store the normalized root in
-   `my/workspace-root`; switching a layout never creates another tab.
-3. Select or create task tabs by root through direct `SPC p`. Never use the tab
-   name as identity.
-4. Store the primary edit buffer, companion cache, terminal target, agent
-   target, and generic send target as tab properties.
+2. Consume the workflow plan's one-normalized-root/one-managed-tab contract.
+   Phase 1 stores `my/workspace-root`; switching a layout never creates another
+   tab.
+3. Use Phase 1's property-based root/tab lookup and creation APIs. The pending
+   direct `SPC p` action must never use the tab name as identity.
+4. In Phase 4, store the primary edit buffer, companion cache, terminal target,
+   and agent target as tab properties. `my/send-text-last-target` remains
+   independent until Phase 4 deliberately migrates its tab scans.
 5. Make each direct layout key deterministic and idempotent. Repeating a key
    does not alternate between split and focused views.
 6. Layout actions create, reuse, and display buffers only. They never kill a
    buffer, process, or zmx session.
 7. Keep lower-frequency terminal, AI, Git, and manual window operations in
    their current groups. Direct promotion is additive.
-8. Use `SPC e` for focus edit and retain `SPC w z` as an exact alias of the
-   same primary-buffer-aware action. Reserve `SPC z` for the historical
-   unzoomed writing action; this layout plan does not add or change it.
-9. Bind `SPC` state-specifically on `magit-mode-map` in normal and visual
-   states so layouts work from a Magit companion. If the exact entries already
-   exist, reuse them. Never unset Magit's ordinary map entry.
+8. In Phase 4, use `SPC e` for focus edit and retarget `SPC w z` as an exact
+   alias of the same primary-buffer-aware action. Reserve `SPC z` for the
+   historical unzoomed writing action; this layout plan does not add or change
+   it.
+9. Preserve the existing state-specific `SPC` bindings on `magit-mode-map` in
+   normal and visual states so layouts work from a Magit companion. Never unset
+   Magit's ordinary map entry.
 10. Generalize the existing right-split action and share it between terminal
     transport and layout rendering.
 11. Use public package entry points and preserve deferred loading.
+12. Keep repository-owned `my/work-codex` available at `SPC a a` regardless of
+    optional package state. TRAMP always uses terminal-agent. Local roots use
+    native Codex only when the optional package and local `codex` executable
+    are available, with reported terminal-agent fallback and no task-state
+    mutation on absence or startup failure.
 
 The state-local Magit boundary is:
 
@@ -165,8 +182,8 @@ The state-local Magit boundary is:
   (kbd "SPC") my/visual-leader-map)
 ```
 
-This plan must produce these entries even when no other keybinding work has
-been implemented. `evil-define-key` handles both deferred and already-loaded
+These entries are already implemented. Phase 4 must retain them while adding
+layout behavior. `evil-define-key` handles both deferred and already-loaded
 Magit without forcing startup loading.
 
 ## Complete keybinding contract
@@ -178,21 +195,22 @@ added to Evil Insert or Emacs state, Ghostel character input, or Transient.
 | Key | Disposition | Command or map | Scope and exact behavior |
 | --- | --- | --- | --- |
 | `SPC` | Retained globally, ensured locally in Magit | `my/normal-leader-map` or `my/visual-leader-map` | Makes the same leader reachable from a Magit companion in normal and visual states only. |
-| `SPC p` | Added | Workspace selection command | Selects or creates a tab by normalized project or folder root. With a prefix argument, atomically rebinds the current tab. |
-| `SPC e` | Added | Catalog `focus` through `my/layout-apply` | Restores the tab's primary edit buffer as the only window. |
-| `SPC T` | Added | Catalog `terminal` through `my/layout-apply` | Shows edit left and the selected plain Ghostel or zmx terminal right. Uppercase preserves the lowercase terminal group. |
-| `SPC A` | Added | Catalog `agent` through `my/layout-apply` | Shows edit left and the tab's coding-agent zmx session right. Uppercase preserves the lowercase AI group. |
-| `SPC G` | Added | Catalog `gptel` through `my/layout-apply` | Shows edit left and the selected Gptel conversation right. Uppercase preserves the lowercase Git group. |
-| `SPC M` | Added | Catalog `magit` through `my/layout-apply` | Shows edit left and Magit status for `my/workspace-root` right. |
-| `SPC W` | Added | `my/layout-select` | Opens native completion over catalog layouts. It is not a recursive catalog entry. |
-| `SPC w z` | Retained and retargeted | Catalog `focus` through `my/layout-apply` | Becomes an exact alias of `SPC e` instead of calling raw `delete-other-windows`. |
+| `SPC p` | Pending Phase 4 | Workspace selection command | Prompts for a project or folder root, then uses the Phase 1 root/tab APIs. With a prefix argument, it will atomically rebind the current tab. |
+| `SPC e` | Pending Phase 4 | Catalog `focus` through `my/layout-apply` | Restores the tab's primary edit buffer as the only window. |
+| `SPC T` | Pending Phase 4 | Catalog `terminal` through `my/layout-apply` | Shows edit left and the selected plain Ghostel or zmx terminal right. Uppercase preserves the lowercase terminal group. |
+| `SPC A` | Pending Phase 4 | Catalog `agent` through `my/layout-apply` | Shows edit left and uses the same capability routing as `my/work-codex`: local native only when available, otherwise terminal-agent; TRAMP always uses terminal-agent. |
+| `SPC G` | Pending Phase 4 | Catalog `gptel` through `my/layout-apply` | Shows edit left and the selected Gptel conversation right. Uppercase preserves the lowercase Git group. |
+| `SPC M` | Pending Phase 4 | Catalog `magit` through `my/layout-apply` | Shows edit left and Magit status for `my/workspace-root` right. |
+| `SPC W` | Pending Phase 4 | `my/layout-select` | Opens native completion over catalog layouts. It is not a recursive catalog entry. |
+| `SPC w z` | Pending Phase 4 retargeting | Catalog `focus` through `my/layout-apply` | Will become an exact alias of `SPC e` instead of calling raw `delete-other-windows`. |
 | `SPC w u` | Intentionally retained | `winner-undo` | Preserves manual and explicit layout history undo. |
 | `SPC w r` | Intentionally retained | `winner-redo` | Preserves manual and explicit layout history redo. |
 | `SPC g g` | Intentionally retained | `magit-status` | Remains the general Git route. `SPC M` changes only the view. |
 | `SPC a c` | Intentionally retained | Normal: `gptel`; visual: `my/gptel-compose-region` | Remains conversation creation or visual-region composition. `SPC G` never consumes a selection. |
 | `SPC a s` | Intentionally retained | `gptel-send` | Keeps prompt sending separate from view selection. |
 | `SPC a r` | Intentionally retained | Visual: `gptel-rewrite`; no new normal binding | Keeps its current visual-only semantics. |
-| `SPC t r` | Intentionally retained | `my/send-region-or-buffer-to-last-target` | Sends to the tab's last target. Applying `SPC A` synchronizes this target to the visible agent. |
+| `SPC a a` | Pending core Phase 4 | `my/work-codex` | Always bound. TRAMP opens terminal-agent without loading `codex-ide`; a local root prefers optional native Codex only when available and otherwise reports and falls back without changing task state. |
+| `SPC t r` | Intentionally retained | `my/send-region-or-buffer-to-last-target` | Sends to the tab's last terminal target. Phase 4 terminal-agent selection may synchronize this target; native Codex never overwrites it. |
 | `SPC z` | Reserved and unchanged | Historical `my/write-mode-no-zoom` binding when present | Focus edit must not claim this key. This plan does not install or remove the writing binding. |
 | `S-SPC` in Magit | Intentionally retained | `magit-diff-show-or-scroll-up` | Preserves scrolling after plain `SPC` becomes the normal or visual leader. |
 | Plain `SPC` in Magit Insert or Emacs state | Intentionally retained | `magit-diff-show-or-scroll-up` from the ordinary Magit map | The ordinary Magit binding remains unchanged outside normal and visual states. |
@@ -207,8 +225,10 @@ owned by Emacs; a zmx session is durable and only rendered through Ghostel.
 
 ### Root resolution
 
-Represent a task workspace with a full normalized directory, including any
-TRAMP prefix:
+Phase 1 of `dev/plans/emacs-workflow-agentic-support.md` owns and implements
+`my/workspace-normalize-root`. Phase 4 must call that shared resolver rather
+than reimplementing root identity. It represents a task workspace with a full
+normalized directory, including any TRAMP prefix:
 
 1. Expand the selected directory and normalize it with
    `file-name-as-directory`.
@@ -224,30 +244,40 @@ unconditionally because remote roots must retain their TRAMP identity.
 
 ### Workspace selection
 
-The direct `SPC p` command performs this operation:
+`my/work-start` owns project and Org task selection. After its required saves
+succeed, it uses the Phase 1 root/tab APIs with the normalized task root and
+commits `my/work-task-id`. Phase 1 owns confirmation and failure preservation
+for a task rebind. It does not initialize Dired, `my/layout-edit-buffer`, window
+roles, companion caches, terminal targets, agent targets, or send targets.
+
+Phase 4 adds the still-pending direct `SPC p` command. It performs this
+presentation and layout-specific operation using the shared Phase 1 APIs:
 
 1. Prompt through public `project-prompt-project-dir`, which supports known
    projects and explicit directories. From a companion window, default from
    the saved primary edit buffer's `default-directory`; from an ordinary edit
    window, use the selected buffer directly.
-2. Resolve the normalized workspace root.
-3. Search `tab-bar-tabs` for a tab whose `my/workspace-root` exactly matches,
-   then select it by public tab index.
-4. If none exists, create a tab, store the root through `tab-bar-tabs-set`,
-   derive a friendly initial name from the basename, and show Dired at the root
-   as the initial primary edit buffer.
-5. With a prefix argument, rebind the current tab. Resolve the root and prepare
-   its Dired buffer first, then rebuild the tab, store it as
-   `my/layout-edit-buffer`, commit the new root, and clear companion, terminal,
-   agent, and send-target state. If preparation or rendering fails, preserve
-   the old root, edit buffer, windows, and caches. Do not kill old resources.
+2. Resolve the normalized workspace root through
+   `my/workspace-normalize-root`.
+3. Select or create the matching tab through Phase 1's exact root/property
+   lookup APIs, never by tab name.
+4. If Phase 4 creates a layout tab through this direct route, derive a friendly
+   initial name from the basename and show Dired at the root as its initial
+   primary edit buffer.
+5. With a prefix argument, Phase 4 atomically rebinds the current tab. It
+   resolves the root and prepares its Dired buffer first, then commits the new
+   root, stores it as `my/layout-edit-buffer`, and clears only layout-specific
+   companion, terminal, and agent state. If preparation or rendering fails,
+   preserve the old root, edit buffer, windows, and caches. Do not kill old
+   resources.
 
-In a new unbound tab, the first layout may initialize the root without a prompt
-from the selected ordinary edit buffer: use its project root when available,
-otherwise its `default-directory`. After a tab is bound, layouts never silently
-change the root. A file from another real project reports a mismatch and
-directs the user to `SPC p` or explicit rebind. Terminal `cd`, Gptel focus,
-Magit focus, and other special buffers never redirect the workspace.
+In a new unbound tab, the first Phase 4 layout may initialize the root without
+a prompt from the selected ordinary edit buffer: use its project root when
+available, otherwise its `default-directory`. After a tab is bound, layouts
+never silently change the root. A file from another real project reports a
+mismatch and directs the user to `SPC p` or explicit rebind. Terminal `cd`,
+Gptel focus, Magit focus, and other special buffers never redirect the
+workspace.
 
 ### Linked worktrees
 
@@ -271,7 +301,7 @@ that becomes necessary instead of overloading the mutable tab name.
 ## Layout catalog contract
 
 Define `my/window-layouts` near the current terminal/session configuration at
-`profiles/common/.config/emacs/init.el:452`. Each entry contains:
+`profiles/common/.config/emacs/init.el:1568-1582`. Each entry contains:
 
 - a stable layout name;
 - its direct leader key;
@@ -314,7 +344,16 @@ tab. A fixed `:session`, optional zmx `:command`, or Gptel `:buffer` makes an
 entry prompt-free. A literal fixed buffer or session is an explicit request to
 share that resource across workspaces; automatic resources remain root-scoped.
 
-Accept three zmx `:session` forms:
+The shown agent entry is a superseded zmx-only shape. In workflow Phase 4,
+replace it with a backend-aware entry whose required backend is
+`terminal-agent`. Prefer `codex-native` for a local root only when the optional
+package and local `codex` executable are available. A TRAMP root always uses
+`terminal-agent` without loading `codex-ide`; local absence or startup failure
+reports the cause and falls back without mutating task state. Only the
+terminal-agent backend uses the zmx session and command settings below. Native
+Codex never becomes a generic text-send target.
+
+For the terminal-agent backend, accept three zmx `:session` forms:
 
 - `nil` selects and caches an existing session;
 - a string names an intentionally shared session;
@@ -336,19 +375,26 @@ because the selector is not a recursive catalog entry.
 
 ### State
 
-Add current-tab property accessors and use them for:
+Use the Phase 1 generic current-tab property accessors
+`my/tab-current-property`, `my/tab-set-current-property`, and
+`my/tab-find-index-by-property`. They use public tab-bar accessors. Phase 1
+owns `my/workspace-root` and active `my/work-task-id`; setting a property to
+nil removes it.
 
-- `my/workspace-root`, the authoritative project or folder root;
+Phase 4 adds and uses the same accessors for:
+
 - `my/layout-edit-buffer`, the primary editing buffer;
 - `my/layout-companion-buffers`, an alist from layout name to cached buffer;
 - `my/layout-terminal-target`, the plain-terminal zmx descriptor;
-- `my/layout-agent-target`, the coding-agent zmx descriptor;
-- the existing `my/send-text-last-target` property.
+- `my/layout-agent-target`, the terminal-agent zmx descriptor when that backend
+  is selected;
+- a deliberate migration of the existing `my/send-text-last-target` property,
+  if its repeated manual tab scans are changed.
 
-This access is used more than three times and replaces repeated manual
-`tab-bar-tabs` scans and rewrites near
-`profiles/common/.config/emacs/init.el:460` and
-`profiles/common/.config/emacs/init.el:654`.
+Until that migration, `my/send-text-last-target` remains independent in
+`profiles/common/.config/emacs/my-send-text.el:30-40` and
+`profiles/common/.config/emacs/my-send-text.el:215-231`. Phase 4 must not
+duplicate the Phase 1 root/tab accessors.
 
 Mark rendered windows with a `my/layout-role` window parameter. An invocation
 from a companion recovers the saved edit buffer. A selected ordinary edit
@@ -376,7 +422,7 @@ reselection even when its cache remains live.
 7. Select the edit window and commit tab-local state only after success.
 
 Rename `my/send-text-right-split-action` at
-`profiles/common/.config/emacs/init.el:454` to
+`profiles/common/.config/emacs/my-send-text.el:24-28` to
 `my/right-split-action`, then update all existing terminal callers and tests.
 
 ## Companion provider contracts
@@ -407,12 +453,32 @@ disposable frontend is killed.
 
 Add `term-sessions-read-existing-session-entry` and
 `term-sessions-open-with-frontend` to the deferred `use-package :commands` at
-`profiles/common/.config/emacs/init.el:443` alongside `term-sessions-open`.
+`profiles/common/.config/emacs/init.el:1571-1572` alongside
+`term-sessions-open`.
 
 ### Coding agent
 
-`my/layout-agent-buffer` associates visibility and text delivery with one full
-zmx descriptor:
+Status: pending Phase 4 of `dev/plans/emacs-workflow-agentic-support.md`.
+This zmx-only provider contract is superseded there by a capability-based local
+choice and unconditional TRAMP terminal fallback. Terminal-agent is required.
+Local roots prefer `codex-native` only when the optional package and local
+`codex` executable are available; TRAMP never loads the package. Package
+absence or native startup failure reports the cause and falls back without
+changing Org task metadata, tab identity, session properties, or existing
+terminal targets. Retain the descriptor, reattachment, and send-target
+constraints below where they apply to terminal-agent. Do not report the
+replacement as implemented until that Phase 4 work completes.
+
+The separate upstream audit accepted optional local-only commit
+`5eba84dd58ad8609e8f7e8c4159d4aac90b4f303`. It found no documented or tested
+TRAMP support: the package launches `codex app-server` through `make-process`
+without `:file-handler t` and uses pipe stderr. Keep that immutable pin behind
+an explicit opt-in such as `my/provision-codex-ide`; default provisioning and
+startup must never fetch, install, require, or load it. See the
+[accepted upstream commit](https://github.com/dgillis/emacs-codex-ide/commit/5eba84dd58ad8609e8f7e8c4159d4aac90b4f303).
+
+For the terminal-agent backend, `my/layout-agent-buffer` associates visibility
+and text delivery with one full zmx descriptor:
 
 1. Reuse `my/layout-agent-target` when it is configured as a zmx identity.
 2. Otherwise select through public
@@ -432,21 +498,25 @@ normalize and compare it with the workspace root. Reject an obvious different
 worktree. A literal catalog `:session` is the explicit sharing exception and
 bypasses cwd equality while preserving the real descriptor.
 
-Do not infer an agent from the generic zmx send target. That target may be a
-shell, REPL, or test process. Later `SPC t r` target selection must not replace
-the saved agent association; applying `SPC A` restores the agent as the visible
-and active send target.
+Do not infer a terminal agent from the generic zmx send target. That target may
+be a shell, REPL, or test process. Later `SPC t r` target selection must not
+replace the saved terminal-agent association; applying terminal-agent `SPC A`
+restores it as the visible and active send target. Native Codex does not modify
+the generic send target.
 
 A fixed session may create a missing session only when the catalog also
 supplies the coding-agent command. Keep the default agent-neutral and do not
 guess from process command lines.
 
-The provisioner pins term-sessions to
+The current provisioner pins term-sessions to
 `0815dbea006128df1d61e9d29e5a8ada53b349c1` at
-`profiles/common/.config/emacs/install-packages.el:20`. Update the reviewed pin
-to `acc872676ad2476187984056e7896aa0ea2b2dfc`, which exposes the existing
-location-aware selector publicly. Replace the private selector call at
-`profiles/common/.config/emacs/init.el:558`. Normal startup remains offline.
+`profiles/common/.config/emacs/install-packages.el:20-23`. Phase 4 of
+`dev/plans/emacs-workflow-agentic-support.md` must update the reviewed pin to
+`acc872676ad2476187984056e7896aa0ea2b2dfc`, which exposes the existing
+location-aware selector publicly, and replace the private selector calls in
+`profiles/common/.config/emacs/my-send-text.el:124` and
+`profiles/common/.config/emacs/my-send-text.el:338`. Normal startup remains
+offline.
 
 ### Gptel
 
@@ -477,7 +547,7 @@ view but never use it as a fallback for a worktree. Worktrees produce distinct
 status buffers because their top levels and Git directories differ.
 
 Add `magit-status-setup-buffer` to the deferred Magit commands at
-`profiles/common/.config/emacs/init.el:105`. Resolve it inside
+`profiles/common/.config/emacs/init.el:572`. Resolve it inside
 `save-window-excursion`; the renderer owns placement.
 
 ## Alternatives rejected
@@ -496,8 +566,8 @@ Add `magit-status-setup-buffer` to the deferred Magit commands at
   the lower-frequency groups for discovery and muscle memory.
 - Put focus edit on `SPC z`: that key is reserved for the historical unzoomed
   writing action. Use free `SPC e`.
-- Unset ordinary Magit `SPC`: this would alter Insert and Emacs states. Add
-  state-local Evil bindings instead.
+- Unset ordinary Magit `SPC`: this would alter Insert and Emacs states. Retain
+  the existing state-local Evil bindings instead.
 - Magit mode hooks or a global overriding minor map: one shared major-mode map
   binding covers all derived Magit buffers at the proper precedence.
 - Global `display-buffer-alist` rules: scope display behavior to explicit
@@ -507,33 +577,47 @@ Add `magit-status-setup-buffer` to the deferred Magit commands at
 - Winner as the layout mechanism: keep it for history, but named layouts must
   be deterministic and independent of previous window operations.
 
-## Phase 1: Establish task workspaces and focus editing
+## Phase 1: Root and tab ownership moved to the workflow plan
 
-Status: pending
+Status: the shared foundation is implemented by Phase 1 of
+`dev/plans/emacs-workflow-agentic-support.md`; its remaining Org workflow work
+is in progress. All layout-specific work below remains pending Phase 4 of that
+plan.
 
-### Changes
+### Implemented shared contract
 
-1. Add current-tab property accessors near
-   `profiles/common/.config/emacs/init.el:452`.
-2. Implement normalized root resolution and direct `SPC p` selection, including
-   lookup by property, tab creation, and atomic prefix rebind.
-3. Track the root and primary edit buffer per tab and the edit role per window.
-4. Define the `focus` catalog entry and the focus path of `my/layout-apply`.
-5. Install `SPC p` and `SPC e` after workspace creation, selection, rebind, and
-   deterministic focus work together.
-6. Retarget `SPC w z` to the same catalog-backed focus action. Preserve Winner
-   and the rest of the manual window group.
-7. Add the state-local Magit leader entries required to invoke focus from a
-   Magit pane. Reuse exact existing entries if already present.
-8. Add focused tests for normalization, tab lookup, failure-preserving rebind,
-   edit-buffer validation, Magit active-map access, and repeated focus.
+Phase 1 owns and tests:
 
-### Success criteria
+1. `my/workspace-normalize-root` for local and TRAMP root identity.
+2. `my/tab-current-property`, `my/tab-set-current-property`, and
+   `my/tab-find-index-by-property` as the generic current-tab property boundary.
+3. Exact normalized-root lookup, selection, and creation through
+   `my/workspace-tab-index` and `my/workspace-select-or-create-tab`.
+4. `my/workspace-root` and the active Org identity in `my/work-task-id`.
 
-- Selecting `branch1/` and `branch2/` from their common parent creates two
-  independent task tabs without manual tags.
-- Root lookup survives tab renaming, reordering, and duplicate visible names.
-- Prefix `SPC p` atomically rebinds the tab and preserves old state on failure.
+The Phase 1 workflow tests own normalization, name-independent root lookup,
+and task rebind failure preservation. Layout work consumes those APIs and does
+not duplicate their implementation or test coverage.
+
+### Pending Phase 4 layout work
+
+1. Initialize the Dired primary buffer for the pending direct `SPC p` layout
+   route, and add prefix rebind behavior for that route.
+2. Add `my/layout-edit-buffer` state and `my/layout-role` window parameters.
+3. Define the `focus` catalog entry and the focus path of `my/layout-apply`.
+4. Install the pending `SPC p` and `SPC e` bindings after workspace creation,
+   selection, rebind, and deterministic focus work together.
+5. Retarget `SPC w z` to the catalog-backed focus action. Preserve Winner and
+   the rest of the manual window group.
+6. Preserve the already-implemented state-local Magit leaders and add focused
+   layout tests for active-map access and repeated focus.
+
+### Pending Phase 4 success criteria
+
+- Selecting `branch1/` and `branch2/` through the direct route creates or
+  selects their independent task tabs without manual tags.
+- The direct `SPC p` prefix action atomically rebinds the tab and preserves old
+  layout state on failure.
 - The parent and `.bare/` remain explicit choices and never replace a worktree.
 - `SPC e` and `SPC w z` always produce the same single-window edit view and are
   idempotent.
@@ -544,7 +628,7 @@ Status: pending
 
 ## Phase 2: Build the provider foundation
 
-Status: pending
+Status: pending Phase 4 of `dev/plans/emacs-workflow-agentic-support.md`
 
 ### Changes
 
@@ -555,8 +639,9 @@ Status: pending
    and frontend opener in deferred `use-package :commands`.
 3. Rename the shared right-split constant and update existing terminal callers
    and tests.
-4. Extend tab-local state with terminal target, agent target, companion cache,
-   and the existing send target.
+4. Extend tab-local state with terminal target, terminal-agent target, and
+   companion cache. Migrate the existing send target only through the shared
+   generic accessors and only when that change is deliberately implemented.
 5. Implement root-derived zmx physical names and full descriptor retention.
 
 ### Success criteria
@@ -573,7 +658,10 @@ Status: pending
 
 ## Phase 3: Add configurable companion layouts
 
-Status: pending
+Status: pending Phase 4 of `dev/plans/emacs-workflow-agentic-support.md`
+
+This core layout work does not depend on optional native Codex Phase 2. Its
+required coding-agent backend is terminal-agent.
 
 ### Changes
 
@@ -581,16 +669,23 @@ Status: pending
    `my/layout-select`.
 2. Implement the plain Ghostel and zmx terminal provider with separate project,
    folder, existing-session, and new-session paths.
-3. Implement the coding-agent provider with independent tab-local identity,
-   cwd validation, durable reattachment, and send-target synchronization.
+3. Reconcile the coding-agent provider with terminal-agent as the required
+   backend. Prefer `codex-native` for local roots only when the optional
+   package and local `codex` executable are available. Always use
+   terminal-agent for TRAMP without loading `codex-ide`. Preserve independent
+   tab-local identity, cwd validation, and durable zmx reattachment for the
+   terminal-agent backend. Only terminal-agent selection synchronizes the
+   generic send target.
 4. Implement root-bound, noninteractive Gptel conversation selection and
    tab-local reuse.
 5. Implement the root-derived Magit provider through
    `magit-status-setup-buffer`, including clear parent-folder failure and
    explicit bare-repository behavior.
 6. Add provider entries only after their buffer contracts work. Install
-   `SPC T`, `SPC A`, `SPC G`, and `SPC M` from the catalog and bind `SPC W`
-   separately. Generate all layout labels from the catalog.
+   `SPC T`, `SPC A`, `SPC G`, and `SPC M` from the catalog, bind `SPC W`
+   separately, and bind repository-owned `my/work-codex` at `SPC a a`
+   regardless of optional package availability. Generate all layout labels
+   from the catalog.
 7. Update terminal and layout tests for generalized display, full descriptors,
    provider caching, and public term-sessions functions.
 
@@ -605,9 +700,13 @@ Status: pending
   tab state.
 - Task state and cached buffers never leak between tabs.
 - `SPC T` reuses its selected live terminal and resolves it after buffer death.
-- `SPC A` shows the same zmx session used by `SPC t r`; killing its frontend
-  does not kill the durable session. Selecting another generic send target
-  does not overwrite the saved agent.
+- `SPC A` and `SPC a a` use optional native Codex for a local root only when
+  the capability is available and otherwise report the cause and use
+  terminal-agent. TRAMP always uses terminal-agent without loading
+  `codex-ide`. Fallback does not mutate task state, and native Codex never
+  overwrites `SPC t r`'s generic target. Killing a terminal-agent frontend does
+  not kill its durable zmx session, and selecting another generic send target
+  does not overwrite the saved terminal agent association.
 - Automatic terminal and agent names do not collide between worktrees or equal
   basenames in different repositories. A literal session is the only cwd
   validation bypass.
@@ -623,15 +722,17 @@ Status: pending
 
 ## Phase 4: Verify the independent layout system
 
-Status: pending
+Status: pending as verification for Phase 4 of
+`dev/plans/emacs-workflow-agentic-support.md`
 
-### Automated verification
+### Core no-package automated verification
 
 Add a behavior-focused suite at
 `profiles/common/.config/emacs/window-layouts-test.el`. Keep the test count low
 by grouping related assertions around these contracts:
 
-1. root resolution, name-independent tab lookup, and atomic rebind;
+1. layout consumption of the Phase 1 root/tab APIs without duplicating their
+   normalization, lookup, or task-rebind tests;
 2. direct/nested focus equivalence, repeated and switching layouts, tab-local
    state, and companion invocation;
 3. Magit normal and visual leader access plus preserved `S-SPC`, Insert, Emacs,
@@ -639,7 +740,10 @@ by grouping related assertions around these contracts:
 4. provider return and caching behavior using stubs instead of subprocesses;
 5. root-scoped zmx targets, including equal name and location entries with
    different `:cwd`;
-6. Gptel and Magit root context, cancellation, and failure preservation.
+6. Gptel and Magit root context, cancellation, and failure preservation;
+7. `my/work-codex` reachability, local terminal fallback, and unconditional
+   TRAMP terminal routing with `emacs-codex-ide` absent from `load-path` and
+   not installed.
 
 Update `profiles/common/.config/emacs/send-text-targets-test.el` only for the
 generalized split name, full descriptors, and public selector. Do not add tests
@@ -670,18 +774,21 @@ git diff --check
 ```
 
 Byte-compile `init.el` and both focused tests into a temporary directory so no
-generated files enter the profile.
+generated files enter the profile. Run the core suite with a fresh package
+directory and verify no capability probe, startup path, or layout action
+fetches, installs, requires, or loads `codex-ide`.
 
-### Manual verification
+### Core no-package manual verification
 
 1. Exercise every direct layout from the editor and from its companion. Repeat
    and switch layouts, then use Winner undo and redo.
 2. Confirm `SPC e` and `SPC w z` always return to the same primary edit buffer.
-3. Confirm one plain Ghostel project terminal, one local or remote zmx coding
-   agent, one Gptel conversation, and one Magit status buffer are reused without
-   duplicate windows.
-4. Kill only a zmx frontend, apply `SPC A`, and confirm attachment to the
-   still-running session.
+3. With `emacs-codex-ide` absent from `load-path` and not installed, confirm
+   one plain Ghostel project terminal, local and TRAMP terminal-agent sessions,
+   one Gptel conversation, and one Magit status buffer are reused without
+   duplicate windows. Confirm `SPC a a` remains bound.
+4. Kill only a terminal-agent zmx frontend, apply `SPC A`, and confirm
+   attachment to the still-running terminal session.
 5. Create a disposable bare clone with `branch1/` and `branch2/` worktrees.
    From the parent, select each with `SPC p` and confirm distinct edit buffers,
    terminals, zmx names, agents, conversations, Magit buffers, and send targets.
@@ -690,6 +797,22 @@ generated files enter the profile.
 7. From Magit status, diff, and log panes, invoke layout keys in normal and
    visual states. Confirm `S-SPC`, Insert and Emacs plain space, and Transient
    input remain native.
+
+### Optional local-native verification
+
+Run only when optional Phase 2 of
+`dev/plans/emacs-workflow-agentic-support.md` is exercised:
+
+1. Explicitly provision accepted commit
+   `5eba84dd58ad8609e8f7e8c4159d4aac90b4f303` and confirm local `SPC A` and
+   `SPC a a` prefer native Codex while TRAMP still opens terminal-agent without
+   loading the package.
+2. Induce package absence, local executable absence, and native startup
+   failure. Confirm each cause is reported and terminal-agent opens without
+   changing task or tab state.
+3. Confirm native Codex never becomes the generic text-send target. Run the
+   upstream suite and local native diff/resumption checks separately from core
+   layout acceptance.
 
 ### Final success criteria
 
@@ -701,7 +824,10 @@ generated files enter the profile.
 - Adding a layout is localized to the catalog and, only for distinct lifecycle
   semantics, one provider.
 - Layout application is deterministic, transactional, and resource-preserving.
-- Offline startup, upstream and focused ERT, byte compilation, `check-parens`,
-  and `git diff --check` pass.
+- Offline startup, focused core ERT, byte compilation, `check-parens`, and
+  `git diff --check` pass with `emacs-codex-ide` absent and not installed.
+- When optional Phase 2 is exercised, its upstream suite and local native
+  diff/resumption acceptance pass separately. No native TRAMP acceptance is
+  claimed at the accepted pin.
 - Phase statuses and measured results are recorded in this file during
   implementation.

@@ -48,7 +48,6 @@
      "7a7b1d475b42c1a0b61f3b1d1225dd249ffa1abb1b7f726aec59ac7ca3bf4dae"
      "37768a79b479684b0756dec7c0fc7652082910c37d8863c35b702db3f16000f8"
      default))
- '(org-agenda-files '("/Users/migmartin/org/journal.org"))
  '(tramp-completion-reread-directory-timeout nil)
  '(tramp-default-method "sshx")
  '(tramp-use-connection-share nil)
@@ -87,6 +86,7 @@
   (interactive)
   (dolist (file '("my-file-picker.el"
                   "my-org-datetree.el"
+                  "my-workflow.el"
                   "my-send-text.el"))
     (load (expand-file-name file my/config-directory) nil nil t))
   (load config-path nil nil t))
@@ -1356,8 +1356,8 @@ When UP is non-nil, swap with the preceding paragraph."
 	   "* %T %? :log:" :empty-lines 1)
 	  ("t" "Add Task" entry (file+datetree "~/org/journal.org")
 	   "* TODO %? \n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-	  ("T" "Add Work Task" entry (file+datetree "~/org/journal.org")
-	   "* TODO %? :work:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
+	  ("T" "Add Work Task" entry (function my/work-capture-target)
+	   "* TODO %?\n:PROPERTIES:\n:ID: %(org-id-new)\n:END:" :empty-lines 1)
 	  ("j" "Journal Entry" entry (file+datetree "~/org/journal.org")
 	   "* %t :journal:\n%?" :empty-lines 1)
 
@@ -1385,8 +1385,6 @@ When UP is non-nil, swap with the preceding paragraph."
 
   (setq org-src-preserve-indentation t)
   (add-hook 'org-mode-hook (lambda () (electric-indent-mode -1)))
-
-  (setq org-agenda-files '("~/org/life.org"))
 
   (setq org-log-into-drawer t)
   (setq org-tags-column 0)
@@ -1504,6 +1502,9 @@ When UP is non-nil, swap with the preceding paragraph."
 
 (require 'my-org-datetree
          (expand-file-name "my-org-datetree.el" my/config-directory))
+(require 'my-workflow
+         (expand-file-name "my-workflow.el" my/config-directory))
+(my/workflow-refresh-agenda)
 
 (defun my/refile-to-journal ()
   "Refile the current Org subtree into the journal datetree."
@@ -1848,7 +1849,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("o i" . org-roam-node-insert)
        ("o t" . org-set-tags-command)
        ("o r" . org-table-recalculate-buffer-tables)
-       ("o w" . markdown-table-wrap-pretty-toggle)
+       ("o w" . my/work-start)
+       ("o W" . markdown-table-wrap-pretty-toggle)
+       ("o l" . my/work-log)
+       ("o u" . my/work-draft-update)
        ("o RET" . org-babel-execute-src-block)
        ("h o" . customize)
        ("h h" . info)
@@ -1954,6 +1958,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "g a" "annotate hunk"
     "h" "help"
     "o" "org"
+    "o w" "start work"
+    "o W" "toggle Markdown table wrap"
+    "o l" "work log"
+    "o u" "draft work update"
     "r" "review"
     "r v" "view annotations"
     "s" "search"
