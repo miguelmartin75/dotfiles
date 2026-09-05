@@ -87,6 +87,7 @@
   (dolist (file '("my-file-picker.el"
                   "my-org-datetree.el"
                   "my-workflow.el"
+                  "my-agent-events.el"
                   "my-send-text.el"))
     (load (expand-file-name file my/config-directory) nil nil t))
   (load config-path nil nil t))
@@ -117,7 +118,10 @@
 (global-auto-revert-mode 1)
 
 (electric-indent-mode 1)
-(setq server-kill-new-buffers t)
+(require 'server)
+(setq server-kill-new-buffers t
+      server-use-tcp nil
+      server-name "main")
 
 (require 'tramp)
 
@@ -1505,6 +1509,12 @@ When UP is non-nil, swap with the preceding paragraph."
 (require 'my-workflow
          (expand-file-name "my-workflow.el" my/config-directory))
 (my/workflow-refresh-agenda)
+(require 'my-agent-events
+         (expand-file-name "my-agent-events.el" my/config-directory))
+(when (and (not noninteractive)
+           (not (daemonp))
+           (not (server-running-p server-name)))
+  (server-start))
 
 (defun my/refile-to-journal ()
   "Refile the current Org subtree into the journal datetree."

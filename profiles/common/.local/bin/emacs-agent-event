@@ -1,0 +1,469 @@
+#!/usr/bin/env python3
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import subprocess
+import sys
+import uuid
+from datetime import datetime, timezone
+from pathlib import PureWindowsPath
+
+MAX_EVENT_BYTES = 65_536
+MAX_INPUT_BYTES = 65_536
+MAX_IDENTIFIER_BYTES = 256
+MAX_PATH_BYTES = 4_096
+MAX_TITLE_BYTES = 256
+MAX_BODY_BYTES = 8_192
+MAX_CHANGED_PATHS = 128
+MAX_CHANGED_PATH_BYTES = 1_024
+LISP_EXPRESSION = "(let ((arguments server-eval-args-left)) (setq server-eval-args-left nil) (unless (= (length arguments) 1) (user-error \"Expected one agent event payload\")) (my/agent-events-ingest (car arguments)))"
+EVENT_KINDS = {"progress", "attention", "done", "error", "files-changed"}
+
+
+class EventError(Exception):
+    pass
+
+
+def parse_arguments() -> argparse.Namespace | None:
+    parser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
+    parser.add_argument("--provider")
+    parser.add_argument("--kind")
+    parser.add_argument("--session-id")
+    parser.add_argument("--event-id")
+    parser.add_argument("--hook-name")
+    parser.add_argument("--timestamp")
+    parser.add_argument("--cwd")
+    parser.add_argument("--title")
+    parser.add_argument("--body")
+    parser.add_argument("--changed-path", action="append")
+    parser.add_argument("--task-id")
+    parser.add_argument("--workspace-root")
+    parser.add_argument("--sequence")
+    parser.add_argument("--observed-mtime")
+    parser.add_argument("--observed-size")
+
+    result: argparse.Namespace | None = None
+    try:
+        arguments, unknown = parser.parse_known_args()
+    except argparse.ArgumentError:
+        arguments = None
+        unknown = ["invalid"]
+
+    if arguments is not None and not unknown and arguments.provider and arguments.kind:
+        result = arguments
+    return result
+
+
+def read_provider_event() -> dict[str, object]:
+    data = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
+    if len(data) > MAX_INPUT_BYTES:
+        raise EventError("provider input exceeds its limit")
+    if not data:
+        result: dict[str, object] = {}
+    else:
+        try:
+            decoded = json.loads(data)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise EventError("provider input is not JSON") from error
+        if not isinstance(decoded, dict):
+            raise EventError("provider input must be an object")
+        result = decoded
+    return result
+
+
+def utf8_length(value: str) -> int:
+    return len(value.encode("utf-8"))
+
+
+def truncate_utf8(value: str, maximum: int) -> str:
+    encoded = value.encode("utf-8")
+    if len(encoded) <= maximum:
+        result = value
+    else:
+        result = encoded[:maximum].decode("utf-8", errors="ignore")
+    return result
+
+
+def validate_text(value: object, maximum: int, name: str) -> str:
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise EventError(f"invalid {name}")
+    if utf8_length(value) > maximum:
+        raise EventError(f"{name} exceeds its limit")
+    return value
+
+
+def validate_identifier(value: object, maximum: int, name: str) -> str:
+    result = validate_text(value, maximum, name)
+    if "\r" in result or "\n" in result:
+        raise EventError(f"invalid {name}")
+    return result
+
+
+def validate_directory(value: object, maximum: int, name: str) -> str:
+    result = validate_identifier(value, maximum, name)
+    first_component = result.split("/", 2)[1] if result.startswith("/") else ""
+    if (
+        not os.path.isabs(result)
+        or result.startswith("~")
+        or first_component.endswith(":")
+        or ".." in result.split("/")
+    ):
+        raise EventError(f"invalid {name}")
+    return result
+
+
+def provider_value(
+    explicit_value: str | None,
+    provider_event: dict[str, object],
+    name: str,
+    fallback: str | None = None,
+) -> str | None:
+    result = explicit_value
+    if result is None:
+        candidate = provider_event.get(name)
+        if isinstance(candidate, str) and candidate:
+            result = candidate
+        else:
+            result = fallback
+    return result
+
+
+def provider_event_id(provider_event: dict[str, object]) -> str | None:
+    result: str | None = None
+    for name in ("event_id", "hook_event_id"):
+        candidate = provider_event.get(name)
+        if isinstance(candidate, str) and candidate:
+            result = candidate
+            break
+    return result
+
+
+def provider_discriminator(provider_event: dict[str, object]) -> str | None:
+    result: str | None = None
+    for name in ("tool_use_id", "turn_id"):
+        candidate = provider_event.get(name)
+        if isinstance(candidate, str) and candidate:
+            result = candidate
+            break
+    return result
+
+
+def provider_timestamp(
+    explicit_value: str | None,
+    provider_event: dict[str, object],
+) -> str | None:
+    result = explicit_value
+    if result is None:
+        for name in ("provider_timestamp", "timestamp", "created_at"):
+            candidate = provider_event.get(name)
+            if isinstance(candidate, str) and candidate:
+                result = candidate
+                break
+    return result
+
+
+def build_event_id(
+    explicit_value: str | None,
+    provider_event: dict[str, object],
+    provider: str,
+    session_id: str,
+    hook_name: str,
+    timestamp: str | None,
+) -> str:
+    result = explicit_value or provider_event_id(provider_event)
+    if result is None:
+        discriminator = provider_discriminator(provider_event)
+        if discriminator is not None or timestamp is not None:
+            canonical = json.dumps(
+                [provider, session_id, hook_name, discriminator or "", timestamp or ""],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            result = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        else:
+            result = str(uuid.uuid4())
+    return validate_identifier(result, MAX_IDENTIFIER_BYTES, "event ID")
+
+
+def validate_changed_path(value: object) -> str:
+    path = validate_identifier(value, MAX_CHANGED_PATH_BYTES, "changed path")
+    posix_components = path.split("/")
+    windows_path = PureWindowsPath(path)
+    if (
+        path.startswith("~")
+        or path.startswith("/")
+        or path.startswith("\\")
+        or "\\" in path
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or ".." in posix_components
+    ):
+        raise EventError("changed path is not a safe relative path")
+    return path
+
+
+def validate_integer(value: object, name: str) -> int | None:
+    result: int | None = None
+    if value is not None:
+        if isinstance(value, bool):
+            raise EventError(f"invalid {name}")
+        if isinstance(value, int):
+            result = value
+        elif isinstance(value, str) and value.isdecimal():
+            result = int(value)
+        else:
+            raise EventError(f"invalid {name}")
+        if result < 0 or result > 9_223_372_036_854_775_807:
+            raise EventError(f"invalid {name}")
+    return result
+
+
+def validate_number(value: object, name: str) -> int | float | None:
+    result: int | float | None = None
+    if value is not None:
+        if isinstance(value, bool):
+            raise EventError(f"invalid {name}")
+        if isinstance(value, (int, float)):
+            result = value
+        elif isinstance(value, str):
+            try:
+                result = float(value)
+            except ValueError as error:
+                raise EventError(f"invalid {name}") from error
+        else:
+            raise EventError(f"invalid {name}")
+        if not math.isfinite(result) or result < 0:
+            raise EventError(f"invalid {name}")
+    return result
+
+
+def provider_defaults(
+    provider: str,
+    kind: str,
+    hook_name: str,
+    provider_event: dict[str, object],
+) -> tuple[str, str]:
+    title = f"{provider} {kind}"
+    body = ""
+    provider_name = provider.capitalize()
+    if provider in {"codex", "claude"}:
+        if hook_name == "UserPromptSubmit":
+            title = f"{provider_name} is working"
+        elif hook_name == "PermissionRequest":
+            title = f"{provider_name} needs approval"
+            body = f"Review the pending approval in {provider_name}."
+        elif hook_name == "Stop":
+            title = f"{provider_name} finished"
+            message = provider_event.get("last_assistant_message")
+            if isinstance(message, str):
+                body = truncate_utf8(message, MAX_BODY_BYTES)
+        elif provider == "claude" and hook_name == "StopFailure":
+            title = "Claude reported an error"
+            message = provider_event.get("last_assistant_message")
+            if isinstance(message, str):
+                body = truncate_utf8(message, MAX_BODY_BYTES)
+        elif kind == "error":
+            title = f"{provider_name} reported an error"
+        elif kind == "files-changed":
+            title = f"{provider_name} reported changed files"
+    return title, body
+
+
+def build_event(
+    arguments: argparse.Namespace,
+    provider_event: dict[str, object],
+) -> str:
+    provider = validate_identifier(arguments.provider.lower(), 64, "provider")
+    kind = validate_identifier(arguments.kind, 64, "kind")
+    if kind not in EVENT_KINDS:
+        raise EventError("unknown event kind")
+
+    hook_name = provider_value(arguments.hook_name, provider_event, "hook_event_name", "")
+    if hook_name is None:
+        hook_name = ""
+    validate_identifier(hook_name or "unknown", MAX_IDENTIFIER_BYTES, "hook name")
+
+    session_id = provider_value(arguments.session_id, provider_event, "session_id", "unknown")
+    if session_id is None:
+        session_id = "unknown"
+    session_id = validate_identifier(session_id, MAX_IDENTIFIER_BYTES, "session ID")
+
+    timestamp_discriminator = provider_timestamp(arguments.timestamp, provider_event)
+    display_timestamp = timestamp_discriminator
+    if display_timestamp is None:
+        display_timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    display_timestamp = validate_identifier(display_timestamp, 128, "timestamp")
+
+    event_id = build_event_id(
+        arguments.event_id,
+        provider_event,
+        provider,
+        session_id,
+        hook_name,
+        timestamp_discriminator,
+    )
+    cwd = provider_value(arguments.cwd, provider_event, "cwd", os.getcwd())
+    if cwd is None:
+        cwd = os.getcwd()
+    cwd = validate_directory(cwd, MAX_PATH_BYTES, "cwd")
+
+    default_title, default_body = provider_defaults(
+        provider,
+        kind,
+        hook_name,
+        provider_event,
+    )
+    title = arguments.title if arguments.title is not None else default_title
+    body = arguments.body if arguments.body is not None else default_body
+    title = validate_text(title, MAX_TITLE_BYTES, "title")
+    if not isinstance(body, str) or "\x00" in body or utf8_length(body) > MAX_BODY_BYTES:
+        raise EventError("invalid body")
+
+    changed_paths = arguments.changed_path
+    if changed_paths is None:
+        candidate_paths = provider_event.get("changed_paths", [])
+        if isinstance(candidate_paths, list):
+            changed_paths = candidate_paths
+        else:
+            raise EventError("changed paths must be a list")
+    if len(changed_paths) > MAX_CHANGED_PATHS:
+        raise EventError("too many changed paths")
+    safe_changed_paths = [validate_changed_path(path) for path in changed_paths]
+
+    task_id = provider_value(
+        arguments.task_id,
+        {},
+        "task_id",
+        os.environ.get("EMACS_WORK_TASK_ID"),
+    )
+    workspace_root = provider_value(
+        arguments.workspace_root,
+        {},
+        "workspace_root",
+        os.environ.get("EMACS_WORKSPACE_ROOT"),
+    )
+    if task_id is not None:
+        task_id = validate_identifier(task_id, MAX_IDENTIFIER_BYTES, "task ID")
+    if workspace_root is not None:
+        workspace_root = validate_directory(
+            workspace_root,
+            MAX_PATH_BYTES,
+            "workspace root",
+        )
+
+    sequence_value = arguments.sequence
+    if sequence_value is None:
+        sequence_value = provider_event.get("sequence")
+    observed_mtime_value = arguments.observed_mtime
+    if observed_mtime_value is None:
+        observed_mtime_value = provider_event.get("observed_mtime")
+    observed_size_value = arguments.observed_size
+    if observed_size_value is None:
+        observed_size_value = provider_event.get("observed_size")
+    has_file_observations = (
+        arguments.sequence is not None
+        or arguments.observed_mtime is not None
+        or arguments.observed_size is not None
+        or "sequence" in provider_event
+        or "observed_mtime" in provider_event
+        or "observed_size" in provider_event
+    )
+    if kind != "files-changed" and has_file_observations:
+        raise EventError("file observations require a files-changed event")
+    sequence = validate_integer(sequence_value, "sequence")
+    observed_mtime = validate_number(observed_mtime_value, "observed modification time")
+    observed_size = validate_integer(observed_size_value, "observed size")
+
+    event: dict[str, object] = {
+        "schema_version": 1,
+        "provider": provider,
+        "session_id": session_id,
+        "event_id": event_id,
+        "kind": kind,
+        "timestamp": display_timestamp,
+        "cwd": cwd,
+        "title": title,
+        "body": body,
+        "changed_paths": safe_changed_paths,
+    }
+    if task_id is not None:
+        event["task_id"] = task_id
+    if workspace_root is not None:
+        event["workspace_root"] = workspace_root
+    if sequence is not None:
+        event["sequence"] = sequence
+    if observed_mtime is not None:
+        event["observed_mtime"] = observed_mtime
+    if observed_size is not None:
+        event["observed_size"] = observed_size
+
+    result = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+    if utf8_length(result) > MAX_EVENT_BYTES:
+        raise EventError("event exceeds its limit")
+    return result
+
+
+def deliver_event(serialized_event: str) -> None:
+    command = [
+        "emacsclient",
+        "--socket-name=main",
+        "--alternate-editor=false",
+        "--timeout=2",
+        "--quiet",
+        "--suppress-output",
+        "--eval",
+        LISP_EXPRESSION,
+        "--",
+        serialized_event,
+    ]
+    subprocess.run(
+        command,
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=3,
+    )
+
+
+def write_diagnostic(message: str) -> None:
+    sys.stderr.write(f"emacs-agent-event: {message}\n")
+
+
+def main() -> int:
+    arguments = parse_arguments()
+    is_codex_stop = (
+        arguments is not None
+        and arguments.provider.lower() == "codex"
+        and arguments.hook_name == "Stop"
+    )
+    try:
+        if arguments is None:
+            raise EventError("invalid arguments")
+        provider_event = read_provider_event()
+        if (
+            arguments.provider.lower() == "codex"
+            and provider_event.get("hook_event_name") == "Stop"
+        ):
+            is_codex_stop = True
+        serialized_event = build_event(arguments, provider_event)
+        deliver_event(serialized_event)
+    except EventError:
+        write_diagnostic("event rejected")
+    except FileNotFoundError:
+        write_diagnostic("emacsclient unavailable")
+    except subprocess.TimeoutExpired:
+        write_diagnostic("delivery timed out")
+    except (OSError, subprocess.CalledProcessError):
+        write_diagnostic("delivery failed")
+    finally:
+        if is_codex_stop:
+            sys.stdout.write('{"continue":true}\n')
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

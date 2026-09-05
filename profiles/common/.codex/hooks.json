@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/emacs-agent-event\" --provider codex --kind progress --hook-name UserPromptSubmit",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/emacs-agent-event\" --provider codex --kind attention --hook-name PermissionRequest",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/emacs-agent-event\" --provider codex --kind done --hook-name Stop",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -628,12 +628,16 @@ capture and tests; interactive use derives and prompts for the missing values."
   (interactive)
   (my/workflow-open-task (my/workflow-current-task)))
 
-(defun my/work-log (kind text)
-  "Append reviewed TEXT with explicit KIND to the active task's daily journal."
+(defun my/work-log (kind text &optional task)
+  "Append reviewed TEXT with explicit KIND for TASK or the active tab task.
+
+TASK is accepted only from a caller that has already verified its durable Org
+identity.  This lets a selected agent event prefill a reviewed log without
+switching tabs or mutating task state automatically."
   (interactive
    (list (intern (completing-read "Log kind: " my/workflow-log-kinds nil t))
          (read-string "Work log: ")))
-  (let ((task (my/workflow-current-task)))
+  (let ((task (or task (my/workflow-current-task))))
     (let ((journal-result (my/workflow-append-journal-entry task kind text)))
       (my/workflow-save-buffer (plist-get journal-result :buffer)))))
 

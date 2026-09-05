@@ -4,8 +4,8 @@
 
 - Plan: active, project section schema and Phase 1 shared contract confirmed
 - Implementation: in progress
-- Current phase: Phase 1, complete
-- Next milestone: Phase 3, named server and local agent events
+- Current phase: Phase 3, complete
+- Next milestone: Phase 4, deterministic layouts and agent backends
 - Core completion boundary: Phases 1, 3, 4, and 6 plus the mandatory core
   Phase 9 checks
 - Optional enhancements: Phases 2 and 5 add local native Codex and narrow MCP
@@ -1250,7 +1250,7 @@ of Phase 2.
 
 ## Phase 3: Establish the named server and local agent events
 
-Status: pending
+Status: complete
 
 This core phase is independent of optional Phase 2 and uses terminal-agent as
 its required Codex baseline.
@@ -1271,6 +1271,118 @@ its required Codex baseline.
    mismatches.
 6. Let a selected completion prefill `my/work-log` without automatic writes.
 7. Add an isolated server test with a temporary name and socket directory.
+
+### Phase 3 implementation decisions
+
+- `init.el` loads `server`, sets `server-kill-new-buffers` to `t`, disables TCP
+  with `server-use-tcp` set to `nil`, and sets `server-name` to `"main"`.
+  It loads `my-agent-events.el` immediately after `my-workflow.el`.  Only after
+  that data-only entry point is available, a direct interactive GUI or
+  `emacs -nw` session calls `server-start`, and only when `server-running-p`
+  reports that `main` is not already running.  The condition excludes
+  `noninteractive` and daemon processes, so batch loading never contacts or
+  starts a server socket and `emacs --daemon=main` remains responsible for its
+  own post-init server startup.
+- The current Phase 3 launch path has cwd-only routing.  The wrapper accepts
+  optional `EMACS_WORK_TASK_ID` and `EMACS_WORKSPACE_ROOT`, but the
+  `my/work-codex` and terminal-agent launch injection that supplies those
+  values arrives in Phase 4.  Until then manually launched local agents route
+  by cwd only when exactly one normalized-root tab is bound; unbound and
+  ambiguous events remain visible but cannot change task state or write a log.
+- The tracked Codex hook configuration requires explicit `/hooks` review before
+  it is trusted.  It maps `UserPromptSubmit` to `progress` without forwarding
+  prompt content, `PermissionRequest` to `attention` without returning any
+  decision, and `Stop` to `done` with only the wrapper-bounded
+  `last_assistant_message`.  Each command passes its matching hook name
+  explicitly so an unreadable `Stop` payload still receives the required
+  continuation response.  This follows the official
+  [Codex Hooks](https://learn.chatgpt.com/docs/hooks) event and hook-trust
+  model.  Do not add `SessionEnd`, and do not infer an `error` event from any
+  current Codex hook.
+- `files-changed` and explicit `error` events are supported by the wrapper and
+  the Emacs event API, but the current tracked Codex hooks do not synthesize
+  either one.
+- Claude configuration is merge-only.  Do not create or overwrite
+  `profiles/common/.claude/settings.json`, because user settings already exist.
+  Instead merge the following hook entries into the existing `hooks` object in
+  the applicable Claude settings file, preserving all existing hook arrays:
+
+  ```json
+  {
+    "hooks": {
+      "UserPromptSubmit": [{
+        "hooks": [{
+          "type": "command",
+          "command": "\"$HOME/.local/bin/emacs-agent-event\" --provider claude --kind progress --hook-name UserPromptSubmit",
+          "timeout": 3
+        }]
+      }],
+      "PermissionRequest": [{
+        "hooks": [{
+          "type": "command",
+          "command": "\"$HOME/.local/bin/emacs-agent-event\" --provider claude --kind attention --hook-name PermissionRequest",
+          "timeout": 3
+        }]
+      }],
+      "Stop": [{
+        "hooks": [{
+          "type": "command",
+          "command": "\"$HOME/.local/bin/emacs-agent-event\" --provider claude --kind done --hook-name Stop",
+          "timeout": 3
+        }]
+      }],
+      "StopFailure": [{
+        "hooks": [{
+          "type": "command",
+          "command": "\"$HOME/.local/bin/emacs-agent-event\" --provider claude --kind error --hook-name StopFailure",
+          "timeout": 3
+        }]
+      }]
+    }
+  }
+  ```
+
+  The snippet is notification-only: it returns no permission decision and
+  relies on the wrapper's fail-open exit behavior.  `UserPromptSubmit` omits
+  prompt content; `PermissionRequest` records attention only; `Stop` records
+  completion; and `StopFailure` records the explicit provider failure.  The
+  latter two use only the wrapper-bounded `last_assistant_message`.  See the
+  official
+  [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks) for
+  configuration merge behavior and event input/output contracts.
+- `emacs-codex-ide` remains an optional local-only Phase 2 enhancement.  Phase
+  3 depends only on the terminal-agent baseline and does not load, install, or
+  require the optional native package.
+
+### Phase 3 implementation results
+
+- Added the bounded local v1 event protocol, explicit task/root routing,
+  provider/session/event deduplication, persistent event buffer, mode-line
+  status, attention/error display, and reviewed done-event logging in
+  `profiles/common/.config/emacs/my-agent-events.el`.
+- Added the executable standard-library wrapper at
+  `profiles/common/.local/bin/emacs-agent-event` and the synchronous,
+  notification-only Codex hook configuration at
+  `profiles/common/.codex/hooks.json`. Provider payloads remain data-only,
+  permission requests return no decision, and delivery failures exit zero.
+- Configured the named local Unix-socket server and loaded the event entry
+  point before direct interactive server startup in
+  `profiles/common/.config/emacs/init.el`.
+- The combined review ran at 946 production additions and 723 test additions.
+  Main-session inspection resolved all four blocking findings: stale
+  cross-root tab/task routing, malformed Codex Stop continuation output,
+  file-only observation metadata enforcement, and full rendered-block event
+  selection. The review checkpoint was then reset.
+- Passed 10 wrapper tests, 7 agent-event ERT tests, 9 workflow regression
+  tests, 7 leader binding tests, and 1 datetree regression test. Isolated byte
+  compilation, Python byte compilation, JSON parsing, executable-bit checks,
+  `check-parens`, and `git diff --check` also passed.
+- Codex hook trust remains an explicit deployment action through `/hooks` and
+  is deferred to the final manual verification phase. No external trust state
+  was changed during repository implementation.
+- Confirmed that Phase 3 has no `emacs-codex-ide` dependency. Remote delivery,
+  TRAMP routing, and clean-only refresh remain owned by Phase 6, with
+  terminal-agent as the required remote backend.
 
 ### Success criteria
 
