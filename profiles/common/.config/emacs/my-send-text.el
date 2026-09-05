@@ -7,8 +7,8 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'my-workflow)
 (require 'subr-x)
-(require 'tab-bar)
 
 (declare-function ghostel-buffer-list "ghostel")
 (declare-function ghostel-create "ghostel" (name action))
@@ -18,26 +18,18 @@
 (declare-function evil-ghostel-insert "evil-ghostel")
 (declare-function term-sessions-open "term-sessions-frontends" (entry &optional command))
 (declare-function term-sessions-send "term-sessions-zmx" (name text))
-(declare-function term-sessions--read-session-entry "term-sessions-frontends"
-                  (&optional prompt require-existing))
+(declare-function term-sessions-read-existing-session-entry "term-sessions-frontends"
+                  (&optional prompt))
 
-(defconst my/send-text-right-split-action
+(defconst my/right-split-action
   '((display-buffer-in-direction)
     (direction . right)
     (window-width . 0.5))
-  "Display action for equal-width terminal splits on the right.")
+  "Display action for equal-width right-hand splits.")
 
 (defun my/send-text-save-last-target (target)
   "Save TARGET as the current tab's last successful text target."
-  (let ((tabs
-         (mapcar (lambda (tab)
-                   (if (eq (car tab) 'current-tab)
-                       (let ((properties (cdr tab)))
-                         (setf (alist-get 'my/send-text-last-target properties) target)
-                         (cons 'current-tab properties))
-                     tab))
-                 (tab-bar-tabs))))
-    (tab-bar-tabs-set tabs)))
+  (my/tab-set-current-property 'my/send-text-last-target target))
 
 (defun my/ghostel-target-live-p (target)
   "Return non-nil when TARGET retains its live Ghostel buffer and process pair."
@@ -119,22 +111,31 @@
         target)
     (pcase target-class
       ("zmx"
-       (require 'term-sessions-list)
        (let* ((default-directory source-directory)
-              (entry (term-sessions--read-session-entry "zmx session: " nil)))
+              (selection
+               (completing-read
+                "zmx target: "
+                '("existing session" "create new")
+                nil t))
+              (entry
+               (if (string= selection "existing session")
+                   (term-sessions-read-existing-session-entry "zmx session: ")
+                 (let ((name (read-string "New zmx session name: ")))
+                   (list :name name
+                         :directory source-directory
+                         :cwd (or (file-remote-p source-directory 'localname)
+                                  source-directory))))))
          (when (string-empty-p (plist-get entry :name))
            (user-error "zmx session name cannot be empty"))
-         (unless (plist-member entry :session)
-           (let ((display-buffer-overriding-action my/send-text-right-split-action))
+         (when (string= selection "create new")
+           (let ((display-buffer-overriding-action my/right-split-action))
              (term-sessions-open entry nil)
              (let ((buffer (current-buffer)))
                (with-current-buffer buffer
                  (ghostel-semi-char-mode)
                  (unless (eq evil-state 'insert)
                    (evil-ghostel-insert))))))
-         (setq target (list :type 'zmx
-                            :name (plist-get entry :name)
-                            :directory (plist-get entry :directory)))))
+         (setq target (plist-put (copy-sequence entry) :type 'zmx))))
       ("buffer"
        (require 'ghostel)
        (let ((ghostel-buffers (ghostel-buffer-list))
@@ -200,7 +201,7 @@
                      buffer)
                  (let ((default-directory source-directory))
                    (setq buffer
-                         (ghostel-create name my/send-text-right-split-action)))
+                         (ghostel-create name my/right-split-action)))
                  (setq target (list :type 'ghostel
                                     :buffer buffer
                                     :process (get-buffer-process buffer)))
@@ -214,10 +215,7 @@
 
 (defun my/send-text-send-to-last-target (text)
   "Replay the current tab's last successful target with TEXT, or choose one."
-  (let (target)
-    (dolist (tab (tab-bar-tabs))
-      (when (eq (car tab) 'current-tab)
-        (setq target (alist-get 'my/send-text-last-target (cdr tab)))))
+  (let ((target (my/tab-current-property 'my/send-text-last-target)))
     (if target
         (my/send-text-deliver target text t)
       (my/send-text-to-target text))))
@@ -319,7 +317,7 @@ suitable interpreter.  No results are written back to the Markdown file."
   (let* ((default-directory directory)
          (buffer
           (ghostel-create name
-                          my/send-text-right-split-action))
+                          my/right-split-action))
          (target (list :type 'ghostel
                        :buffer buffer
                        :process (get-buffer-process buffer))))
@@ -330,19 +328,23 @@ suitable interpreter.  No results are written back to the Markdown file."
 (defun my/open-or-create-zmx-session-in-split (&optional entry command)
   "Open or create zmx session ENTRY in a split and save it for this tab."
   (interactive
-   (let ((directory default-directory)
-         entry
-         command)
-     (require 'term-sessions-list)
-     (let ((default-directory directory))
-       (setq entry (term-sessions--read-session-entry "zmx session: " nil)))
-     (when (string-empty-p (plist-get entry :name))
-       (user-error "zmx session name cannot be empty"))
-     (when (and current-prefix-arg (not (plist-member entry :session)))
-       (setq command (read-string "Command for new session: ")))
-     (list entry command)))
+   (let ((directory default-directory))
+     (if current-prefix-arg
+         (let ((name (read-string "New zmx session name: ")))
+           (when (string-empty-p name)
+             (user-error "zmx session name cannot be empty"))
+           (let ((command (read-string "Command for new session (optional): ")))
+             (list (list :name name
+                         :directory directory
+                         :cwd (or (file-remote-p directory 'localname)
+                                  directory))
+                   (unless (string-empty-p command) command))))
+       (let ((default-directory directory))
+         (list (term-sessions-read-existing-session-entry "zmx session: ") nil)))))
   (let ((default-directory (plist-get entry :directory))
-        (display-buffer-overriding-action my/send-text-right-split-action))
+        (display-buffer-overriding-action my/right-split-action))
+    (when (string-empty-p (plist-get entry :name))
+      (user-error "zmx session name cannot be empty"))
     (term-sessions-open entry command)
     (let ((buffer (current-buffer)))
       (with-current-buffer buffer
@@ -350,9 +352,7 @@ suitable interpreter.  No results are written back to the Markdown file."
         (unless (eq evil-state 'insert)
           (evil-ghostel-insert))))
     (my/send-text-save-last-target
-     (list :type 'zmx
-           :name (plist-get entry :name)
-           :directory (plist-get entry :directory)))))
+     (plist-put (copy-sequence entry) :type 'zmx))))
 
 (defvar my/annotations nil
   "Queued source annotations awaiting explicit target selection.")

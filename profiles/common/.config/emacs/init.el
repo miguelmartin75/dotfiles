@@ -88,7 +88,8 @@
                   "my-org-datetree.el"
                   "my-workflow.el"
                   "my-agent-events.el"
-                  "my-send-text.el"))
+                  "my-send-text.el"
+                  "my-window-layouts.el"))
     (load (expand-file-name file my/config-directory) nil nil t))
   (load config-path nil nil t))
 
@@ -574,7 +575,7 @@
 ;; Development
 
 (use-package magit
-  :commands magit-status)
+  :commands (magit-status magit-status-setup-buffer))
 
 (defun my/diff-hl-preview-revert-hunk ()
   "Close the hunk preview and revert its hunk after confirmation."
@@ -1579,7 +1580,9 @@ When UP is non-nil, swap with the preceding paragraph."
   :defer t
   :init (setq term-sessions-preferred-frontend 'ghostel))
 (use-package term-sessions-frontends
-  :commands term-sessions-open)
+  :commands (term-sessions-open
+             term-sessions-read-existing-session-entry
+             term-sessions-open-with-frontend))
 (use-package term-sessions-list
   :commands term-sessions-list)
 (use-package term-sessions-zmx
@@ -1590,6 +1593,8 @@ When UP is non-nil, swap with the preceding paragraph."
 
 (require 'my-send-text
          (expand-file-name "my-send-text.el" my/config-directory))
+(require 'my-window-layouts
+         (expand-file-name "my-window-layouts.el" my/config-directory))
 
 (defvar my/project-commands nil
   "Project-local alist of task labels and shell commands.
@@ -1874,6 +1879,22 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("h l" . display-line-numbers-mode)))
   (keymap-set my/leader-map (car binding) (cdr binding)))
 
+(dolist (layout my/window-layouts)
+  (let ((name (car layout))
+        (key (plist-get (cdr layout) :key)))
+    (keymap-set my/leader-map key
+                (lambda ()
+                  (interactive)
+                  (my/layout-apply name current-prefix-arg)))))
+
+(keymap-set my/leader-map "p" #'my/workspace-select)
+(keymap-set my/leader-map "W" #'my/layout-select)
+(keymap-set my/leader-map "a a" #'my/work-codex)
+(keymap-set my/leader-map "w z"
+            (keymap-lookup
+             my/leader-map
+             (plist-get (cdr (assq 'focus my/window-layouts)) :key)))
+
 (defvar my/editor-window-map nil
   "Window prefix map for Evil Normal and Visual states.")
 
@@ -1980,6 +2001,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "t R" "choose target for region/buffer"
     "t g" "create Ghostel split target"
     "t z" "open/create zmx split target"
+    "p" "select workspace"
     "Z" "zen mode"
     "z" "zen mode no zoom"
     "v" "code mode"
@@ -1992,4 +2014,11 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "w J" "increase height"
     "w K" "decrease height"
     "w L" "increase width"
-    "w t" "tabs"))
+    "w t" "tabs"
+    "W" "select layout"
+    "a a" "open coding agent")
+  (dolist (layout my/window-layouts)
+    (which-key-add-keymap-based-replacements
+     my/leader-map
+     (plist-get (cdr layout) :key)
+     (plist-get (cdr layout) :label))))

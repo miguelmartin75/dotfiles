@@ -72,14 +72,15 @@ References:
 
 - Plan: complete design, retained as the implementation specification for
   workflow Phase 4
-- Implementation: Phase 1 of `dev/plans/emacs-workflow-agentic-support.md`
-  implements the shared root/tab foundation; focus rendering, direct layout
-  bindings, providers, and layout verification remain pending its Phase 4
+- Implementation: complete. The Phase 1 shared root/tab foundation, Phase 4
+  layout/provider implementation, public term-sessions migration, and direct
+  binding integration are implemented and pass automated validation. Manual
+  integration checks remain in workflow Phase 9.
 - Target: Emacs 31.1+
 - Primary configuration: `profiles/common/.config/emacs/init.el`
 - Package provisioner: `profiles/common/.config/emacs/install-packages.el`
 - Existing terminal tests: `profiles/common/.config/emacs/send-text-targets-test.el`
-- Planned layout tests: `profiles/common/.config/emacs/window-layouts-test.el`
+- Layout tests: `profiles/common/.config/emacs/window-layouts-test.el`
 
 ## Current behavior and root causes
 
@@ -94,10 +95,9 @@ References:
   `profiles/common/.config/emacs/my-send-text.el:24-40`,
   `profiles/common/.config/emacs/my-send-text.el:215-231`, and
   `profiles/common/.config/emacs/my-send-text.el:311-355`.
-- The current private term-sessions selector declaration and calls are in
-  `profiles/common/.config/emacs/my-send-text.el:21-22`,
-  `profiles/common/.config/emacs/my-send-text.el:124`, and
-  `profiles/common/.config/emacs/my-send-text.el:338`.
+- The public term-sessions selector declaration and calls are in
+  `profiles/common/.config/emacs/my-send-text.el`; startup keeps the package
+  deferred through the command declarations in `init.el`.
 - Tab-bar configuration is at `profiles/common/.config/emacs/init.el:274-277`.
 - The leader table begins at
   `profiles/common/.config/emacs/init.el:1744`; Winner is enabled at
@@ -106,8 +106,9 @@ References:
 
 ### Layout behavior
 
-- `SPC w z` calls raw `delete-other-windows`. Invoking it from a terminal,
-  Gptel, or Magit pane can retain the companion and discard the editing view.
+- `SPC w z` is now the exact catalog-backed focus binding used by `SPC e`, so
+  it restores the tracked edit buffer rather than keeping an incidental
+  companion pane.
 - Saved window states and registers capture concrete buffers and positions.
   They become stale when a terminal frontend dies and cannot select resources
   for another project.
@@ -195,21 +196,21 @@ added to Evil Insert or Emacs state, Ghostel character input, or Transient.
 | Key | Disposition | Command or map | Scope and exact behavior |
 | --- | --- | --- | --- |
 | `SPC` | Retained globally, ensured locally in Magit | `my/normal-leader-map` or `my/visual-leader-map` | Makes the same leader reachable from a Magit companion in normal and visual states only. |
-| `SPC p` | Pending Phase 4 | Workspace selection command | Prompts for a project or folder root, then uses the Phase 1 root/tab APIs. With a prefix argument, it will atomically rebind the current tab. |
-| `SPC e` | Pending Phase 4 | Catalog `focus` through `my/layout-apply` | Restores the tab's primary edit buffer as the only window. |
-| `SPC T` | Pending Phase 4 | Catalog `terminal` through `my/layout-apply` | Shows edit left and the selected plain Ghostel or zmx terminal right. Uppercase preserves the lowercase terminal group. |
-| `SPC A` | Pending Phase 4 | Catalog `agent` through `my/layout-apply` | Shows edit left and uses the same capability routing as `my/work-codex`: local native only when available, otherwise terminal-agent; TRAMP always uses terminal-agent. |
-| `SPC G` | Pending Phase 4 | Catalog `gptel` through `my/layout-apply` | Shows edit left and the selected Gptel conversation right. Uppercase preserves the lowercase Git group. |
-| `SPC M` | Pending Phase 4 | Catalog `magit` through `my/layout-apply` | Shows edit left and Magit status for `my/workspace-root` right. |
-| `SPC W` | Pending Phase 4 | `my/layout-select` | Opens native completion over catalog layouts. It is not a recursive catalog entry. |
-| `SPC w z` | Pending Phase 4 retargeting | Catalog `focus` through `my/layout-apply` | Will become an exact alias of `SPC e` instead of calling raw `delete-other-windows`. |
+| `SPC p` | Implemented, automated validation passed | Workspace selection command | Prompts for a project or folder root, then uses the Phase 1 root/tab APIs. With a prefix argument, it atomically rebinds the current tab. |
+| `SPC e` | Implemented, automated validation passed | Catalog `focus` through `my/layout-apply` | Restores the tab's primary edit buffer as the only window. |
+| `SPC T` | Implemented, automated validation passed | Catalog `terminal` through `my/layout-apply` | Shows edit left and the selected plain Ghostel or zmx terminal right. Uppercase preserves the lowercase terminal group. |
+| `SPC A` | Implemented, automated validation passed | Catalog `agent` through `my/layout-apply` | Shows edit left and uses the same capability routing as `my/work-codex`: local native only when available, otherwise terminal-agent; TRAMP always uses terminal-agent. |
+| `SPC G` | Implemented, automated validation passed | Catalog `gptel` through `my/layout-apply` | Shows edit left and the selected Gptel conversation right. Uppercase preserves the lowercase Git group. |
+| `SPC M` | Implemented, automated validation passed | Catalog `magit` through `my/layout-apply` | Shows edit left and Magit status for `my/workspace-root` right. |
+| `SPC W` | Implemented, automated validation passed | `my/layout-select` | Opens native completion over catalog layouts. It is not a recursive catalog entry. |
+| `SPC w z` | Implemented, automated validation passed | Catalog `focus` through `my/layout-apply` | Is an exact alias of `SPC e` instead of calling raw `delete-other-windows`. |
 | `SPC w u` | Intentionally retained | `winner-undo` | Preserves manual and explicit layout history undo. |
 | `SPC w r` | Intentionally retained | `winner-redo` | Preserves manual and explicit layout history redo. |
 | `SPC g g` | Intentionally retained | `magit-status` | Remains the general Git route. `SPC M` changes only the view. |
 | `SPC a c` | Intentionally retained | Normal: `gptel`; visual: `my/gptel-compose-region` | Remains conversation creation or visual-region composition. `SPC G` never consumes a selection. |
 | `SPC a s` | Intentionally retained | `gptel-send` | Keeps prompt sending separate from view selection. |
 | `SPC a r` | Intentionally retained | Visual: `gptel-rewrite`; no new normal binding | Keeps its current visual-only semantics. |
-| `SPC a a` | Pending core Phase 4 | `my/work-codex` | Always bound. TRAMP opens terminal-agent without loading `codex-ide`; a local root prefers optional native Codex only when available and otherwise reports and falls back without changing task state. |
+| `SPC a a` | Implemented, automated validation passed | `my/work-codex` | Always bound. TRAMP opens terminal-agent without loading `codex-ide`; a local root prefers optional native Codex only when available and otherwise reports and falls back without changing task state. |
 | `SPC t r` | Intentionally retained | `my/send-region-or-buffer-to-last-target` | Sends to the tab's last terminal target. Phase 4 terminal-agent selection may synchronize this target; native Codex never overwrites it. |
 | `SPC z` | Reserved and unchanged | Historical `my/write-mode-no-zoom` binding when present | Focus edit must not claim this key. This plan does not install or remove the writing binding. |
 | `S-SPC` in Magit | Intentionally retained | `magit-diff-show-or-scroll-up` | Preserves scrolling after plain `SPC` becomes the normal or visual leader. |
@@ -344,8 +345,8 @@ tab. A fixed `:session`, optional zmx `:command`, or Gptel `:buffer` makes an
 entry prompt-free. A literal fixed buffer or session is an explicit request to
 share that resource across workspaces; automatic resources remain root-scoped.
 
-The shown agent entry is a superseded zmx-only shape. In workflow Phase 4,
-replace it with a backend-aware entry whose required backend is
+The shown agent entry is a superseded zmx-only shape. The implemented Phase 4
+catalog uses a backend-aware entry whose required backend is
 `terminal-agent`. Prefer `codex-native` for a local root only when the optional
 package and local `codex` executable are available. A TRAMP root always uses
 `terminal-agent` without loading `codex-ide`; local absence or startup failure
@@ -451,23 +452,24 @@ the full descriptor separately as the tab's terminal target and generic text
 target. This lets `SPC t r` keep addressing the durable session after a
 disposable frontend is killed.
 
-Add `term-sessions-read-existing-session-entry` and
-`term-sessions-open-with-frontend` to the deferred `use-package :commands` at
-`profiles/common/.config/emacs/init.el:1571-1572` alongside
-`term-sessions-open`.
+The deferred `use-package :commands` at
+`profiles/common/.config/emacs/init.el:1571-1572` now includes
+`term-sessions-read-existing-session-entry` and
+`term-sessions-open-with-frontend` alongside `term-sessions-open`.
 
 ### Coding agent
 
-Status: pending Phase 4 of `dev/plans/emacs-workflow-agentic-support.md`.
-This zmx-only provider contract is superseded there by a capability-based local
+Status: complete. Automated validation passed; manual integration remains in
+workflow Phase 9.
+The prior zmx-only provider contract is superseded by a capability-based local
 choice and unconditional TRAMP terminal fallback. Terminal-agent is required.
 Local roots prefer `codex-native` only when the optional package and local
 `codex` executable are available; TRAMP never loads the package. Package
 absence or native startup failure reports the cause and falls back without
 changing Org task metadata, tab identity, session properties, or existing
 terminal targets. Retain the descriptor, reattachment, and send-target
-constraints below where they apply to terminal-agent. Do not report the
-replacement as implemented until that Phase 4 work completes.
+constraints below where they apply to terminal-agent. Workflow Phase 4 remains
+complete after main-session automated validation.
 
 The separate upstream audit accepted optional local-only commit
 `5eba84dd58ad8609e8f7e8c4159d4aac90b4f303`. It found no documented or tested
@@ -508,15 +510,12 @@ A fixed session may create a missing session only when the catalog also
 supplies the coding-agent command. Keep the default agent-neutral and do not
 guess from process command lines.
 
-The current provisioner pins term-sessions to
-`0815dbea006128df1d61e9d29e5a8ada53b349c1` at
-`profiles/common/.config/emacs/install-packages.el:20-23`. Phase 4 of
-`dev/plans/emacs-workflow-agentic-support.md` must update the reviewed pin to
-`acc872676ad2476187984056e7896aa0ea2b2dfc`, which exposes the existing
-location-aware selector publicly, and replace the private selector calls in
-`profiles/common/.config/emacs/my-send-text.el:124` and
-`profiles/common/.config/emacs/my-send-text.el:338`. Normal startup remains
-offline.
+The provisioner now pins term-sessions to the reviewed Phase 4 target
+`acc872676ad2476187984056e7896aa0ea2b2dfc` at
+`profiles/common/.config/emacs/install-packages.el:20-23`. That revision
+exposes the location-aware selector publicly; `my-send-text.el` uses it and
+`init.el` declares the selector and frontend opener as deferred commands.
+Normal startup remains offline.
 
 ### Gptel
 
@@ -546,9 +545,9 @@ visible layout. If `.bare/` was explicitly selected, allow its bare repository
 view but never use it as a fallback for a worktree. Worktrees produce distinct
 status buffers because their top levels and Git directories differ.
 
-Add `magit-status-setup-buffer` to the deferred Magit commands at
-`profiles/common/.config/emacs/init.el:572`. Resolve it inside
-`save-window-excursion`; the renderer owns placement.
+The deferred Magit commands at `profiles/common/.config/emacs/init.el:572` now
+include `magit-status-setup-buffer`. Resolve it inside `save-window-excursion`;
+the renderer owns placement.
 
 ## Alternatives rejected
 
@@ -580,9 +579,8 @@ Add `magit-status-setup-buffer` to the deferred Magit commands at
 ## Phase 1: Root and tab ownership moved to the workflow plan
 
 Status: the shared foundation is implemented by Phase 1 of
-`dev/plans/emacs-workflow-agentic-support.md`; its remaining Org workflow work
-is in progress. All layout-specific work below remains pending Phase 4 of that
-plan.
+`dev/plans/emacs-workflow-agentic-support.md`. The layout-specific work below
+is implemented and its Phase 4 automated verification passed.
 
 ### Implemented shared contract
 
@@ -599,20 +597,20 @@ The Phase 1 workflow tests own normalization, name-independent root lookup,
 and task rebind failure preservation. Layout work consumes those APIs and does
 not duplicate their implementation or test coverage.
 
-### Pending Phase 4 layout work
+### Implemented Phase 4 layout work
 
-1. Initialize the Dired primary buffer for the pending direct `SPC p` layout
-   route, and add prefix rebind behavior for that route.
-2. Add `my/layout-edit-buffer` state and `my/layout-role` window parameters.
-3. Define the `focus` catalog entry and the focus path of `my/layout-apply`.
-4. Install the pending `SPC p` and `SPC e` bindings after workspace creation,
-   selection, rebind, and deterministic focus work together.
-5. Retarget `SPC w z` to the catalog-backed focus action. Preserve Winner and
-   the rest of the manual window group.
-6. Preserve the already-implemented state-local Magit leaders and add focused
-   layout tests for active-map access and repeated focus.
+1. Initialized the Dired primary buffer for `SPC p` and added prefix rebind
+   behavior for that route.
+2. Added `my/layout-edit-buffer` state and `my/layout-role` window parameters.
+3. Defined the `focus` catalog entry and the focus path of `my/layout-apply`.
+4. Installed `SPC p` and `SPC e` with workspace creation, selection, rebind,
+   and deterministic focus behavior.
+5. Retargeted `SPC w z` to the catalog-backed focus action while preserving
+   Winner and the remaining manual window group.
+6. Preserved the state-local Magit leaders and added focused layout tests for
+   active-map access and repeated focus.
 
-### Pending Phase 4 success criteria
+### Phase 4 success criteria
 
 - Selecting `branch1/` and `branch2/` through the direct route creates or
   selects their independent task tabs without manual tags.
@@ -628,21 +626,21 @@ not duplicate their implementation or test coverage.
 
 ## Phase 2: Build the provider foundation
 
-Status: pending Phase 4 of `dev/plans/emacs-workflow-agentic-support.md`
+Status: complete. Focused and combined Phase 4 validation passed.
 
 ### Changes
 
-1. Update the term-sessions pin to
-   `acc872676ad2476187984056e7896aa0ea2b2dfc` and provision it explicitly.
-2. Replace the private selector with
-   `term-sessions-read-existing-session-entry` and declare the public selector
+1. Updated the term-sessions pin to
+   `acc872676ad2476187984056e7896aa0ea2b2dfc` and provisioned it explicitly.
+2. Replaced the private selector with
+   `term-sessions-read-existing-session-entry` and declared the public selector
    and frontend opener in deferred `use-package :commands`.
-3. Rename the shared right-split constant and update existing terminal callers
+3. Renamed the shared right-split constant and updated existing terminal callers
    and tests.
-4. Extend tab-local state with terminal target, terminal-agent target, and
-   companion cache. Migrate the existing send target only through the shared
-   generic accessors and only when that change is deliberately implemented.
-5. Implement root-derived zmx physical names and full descriptor retention.
+4. Extended tab-local state with terminal target, terminal-agent target, and
+   companion cache. Migrated the existing send target through the shared generic
+   accessors.
+5. Implemented root-derived zmx physical names and full descriptor retention.
 
 ### Success criteria
 
@@ -658,35 +656,36 @@ Status: pending Phase 4 of `dev/plans/emacs-workflow-agentic-support.md`
 
 ## Phase 3: Add configurable companion layouts
 
-Status: pending Phase 4 of `dev/plans/emacs-workflow-agentic-support.md`
+Status: complete. Automated validation passed; manual integration remains in
+workflow Phase 9.
 
 This core layout work does not depend on optional native Codex Phase 2. Its
 required coding-agent backend is terminal-agent.
 
 ### Changes
 
-1. Extend `my/layout-apply` with transactional two-pane rendering and add
+1. Extended `my/layout-apply` with transactional two-pane rendering and added
    `my/layout-select`.
-2. Implement the plain Ghostel and zmx terminal provider with separate project,
+2. Implemented the plain Ghostel and zmx terminal provider with separate project,
    folder, existing-session, and new-session paths.
-3. Reconcile the coding-agent provider with terminal-agent as the required
+3. Reconciled the coding-agent provider with terminal-agent as the required
    backend. Prefer `codex-native` for local roots only when the optional
    package and local `codex` executable are available. Always use
    terminal-agent for TRAMP without loading `codex-ide`. Preserve independent
    tab-local identity, cwd validation, and durable zmx reattachment for the
    terminal-agent backend. Only terminal-agent selection synchronizes the
    generic send target.
-4. Implement root-bound, noninteractive Gptel conversation selection and
+4. Implemented root-bound, noninteractive Gptel conversation selection and
    tab-local reuse.
-5. Implement the root-derived Magit provider through
+5. Implemented the root-derived Magit provider through
    `magit-status-setup-buffer`, including clear parent-folder failure and
    explicit bare-repository behavior.
-6. Add provider entries only after their buffer contracts work. Install
-   `SPC T`, `SPC A`, `SPC G`, and `SPC M` from the catalog, bind `SPC W`
-   separately, and bind repository-owned `my/work-codex` at `SPC a a`
-   regardless of optional package availability. Generate all layout labels
+6. Added provider entries after their buffer contracts work. Installed
+   `SPC T`, `SPC A`, `SPC G`, and `SPC M` from the catalog, bound `SPC W`
+   separately, and bound repository-owned `my/work-codex` at `SPC a a`
+   regardless of optional package availability. Generated all layout labels
    from the catalog.
-7. Update terminal and layout tests for generalized display, full descriptors,
+7. Updated terminal and layout tests for generalized display, full descriptors,
    provider caching, and public term-sessions functions.
 
 ### Success criteria
@@ -722,13 +721,14 @@ required coding-agent backend is terminal-agent.
 
 ## Phase 4: Verify the independent layout system
 
-Status: pending as verification for Phase 4 of
-`dev/plans/emacs-workflow-agentic-support.md`
+Status: automated verification complete for Phase 4 of
+`dev/plans/emacs-workflow-agentic-support.md`; manual integration remains in
+workflow Phase 9.
 
 ### Core no-package automated verification
 
-Add a behavior-focused suite at
-`profiles/common/.config/emacs/window-layouts-test.el`. Keep the test count low
+The behavior-focused suite at
+`profiles/common/.config/emacs/window-layouts-test.el` keeps the test count low
 by grouping related assertions around these contracts:
 
 1. layout consumption of the Phase 1 root/tab APIs without duplicating their
@@ -777,6 +777,20 @@ Byte-compile `init.el` and both focused tests into a temporary directory so no
 generated files enter the profile. Run the core suite with a fresh package
 directory and verify no capability probe, startup path, or layout action
 fetches, installs, requires, or loads `codex-ide`.
+
+### Automated verification results
+
+- The size-gated combined review ran at 716 production additions and 835 test
+  additions. Its five blocking findings were fixed before acceptance.
+- Passed 13 layout ERT tests, 5 send-target tests, 8 leader binding tests, 9
+  workflow regression tests, 7 agent-event regression tests, and all 123
+  term-sessions upstream tests under `TZ=UTC`.
+- Isolated byte compilation, `check-parens`, startup loading, hook JSON
+  parsing, and `git diff --check` passed. Generated bytecode stayed outside the
+  repository.
+- The tested TRAMP branch reaches terminal-agent before native capability,
+  executable, task, or package evaluation. No core startup or layout path
+  requires, fetches, or loads `emacs-codex-ide`.
 
 ### Core no-package manual verification
 

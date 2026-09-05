@@ -20,7 +20,7 @@
           (term-sessions
            ;; Durable zmx sessions and Emacs/Org interfaces.
            (:url "https://github.com/ArthurHeymans/emacs-term-sessions.git")
-           "0815dbea006128df1d61e9d29e5a8ada53b349c1")
+           "acc872676ad2476187984056e7896aa0ea2b2dfc")
           (diff-hl
            ;; Source-buffer Git hunk state and actions.
            (:url "https://github.com/dgutov/diff-hl.git")

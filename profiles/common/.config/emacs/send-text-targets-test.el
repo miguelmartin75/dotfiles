@@ -8,22 +8,32 @@
 (require 'my-send-text)
 
 (defmacro my/send-text-test-with-tabs (tabs &rest body)
-  "Run BODY with TABS behind the public tab-bar accessors."
+  "Run BODY with TABS behind the Phase 1 public tab accessors."
   (declare (indent 1) (debug (form body)))
   `(let ((,tabs ,tabs))
-     (cl-letf (((symbol-function 'tab-bar-tabs)
-                (lambda () (copy-tree ,tabs)))
-               ((symbol-function 'tab-bar-tabs-set)
-                (lambda (updated) (setq ,tabs updated))))
+     (cl-letf (((symbol-function 'my/tab-current-property)
+                (lambda (property)
+                  (let (result)
+                    (dolist (tab ,tabs)
+                      (when (eq (car tab) 'current-tab)
+                        (setq result (alist-get property (cdr tab)))))
+                    result)))
+               ((symbol-function 'my/tab-set-current-property)
+                (lambda (property value)
+                  (dolist (tab ,tabs)
+                    (when (eq (car tab) 'current-tab)
+                      (let ((properties
+                             (assq-delete-all property (copy-sequence (cdr tab)))))
+                        (when value
+                          (push (cons property value) properties))
+                        (setcdr tab properties))))
+                  value)))
        ,@body)))
 
 (defun my/send-text-test-current-target (tabs)
   "Return the saved target in the current entry of TABS."
-  (let (result)
-    (dolist (tab tabs)
-      (when (eq (car tab) 'current-tab)
-        (setq result (alist-get 'my/send-text-last-target (cdr tab)))))
-    result))
+  (ignore tabs)
+  (my/tab-current-property 'my/send-text-last-target))
 
 (ert-deftest my/send-text-source-annotations-and-bindings ()
   (let* ((buffers (list (generate-new-buffer " *send-text-file*" )
@@ -266,14 +276,18 @@
                       ((symbol-function 'completing-read)
                        (lambda (prompt collection _predicate require-match &rest _)
                          (should require-match)
-                         (if (equal prompt "Target: ")
-                             (progn
-                               (should (equal collection '("zmx" "buffer" "ghostty")))
-                               "zmx")
-                           (error "Unexpected prompt: %S" prompt))))
-                      ((symbol-function 'term-sessions--read-session-entry)
-                       (lambda (prompt require-existing)
-                         (push (list 'selector prompt require-existing default-directory)
+                         (pcase prompt
+                           ("Target: "
+                            (should (equal collection '("zmx" "buffer" "ghostty")))
+                            "zmx")
+                           ("zmx target: "
+                            (should (equal collection
+                                           '("existing session" "create new")))
+                            "existing session")
+                           (_ (error "Unexpected prompt: %S" prompt)))))
+                      ((symbol-function 'term-sessions-read-existing-session-entry)
+                       (lambda (prompt)
+                         (push (list 'selector prompt default-directory)
                                selector-events)
                          (if (eq (caar tabs) 'current-tab)
                              '(:name "first-session"
@@ -294,31 +308,40 @@
                          (push (list default-directory name text) calls))))
               (my/send-text-to-target "first text")
               (should (equal (my/send-text-test-current-target tabs)
-                             '(:type zmx :name "first-session" :directory "/tmp/first/")))
+                             '(:name "first-session"
+                               :directory "/tmp/first/"
+                               :session (:name "first-session")
+                               :cwd "/tmp/first/project/"
+                               :where "local"
+                               :type zmx)))
               (should (equal (car calls)
                              '("/tmp/first/" "first-session" "first text\r")))
               (setcar (car tabs) 'tab)
               (setcar (cadr tabs) 'current-tab)
               (my/send-text-to-target "second text")
               (should (equal (my/send-text-test-current-target tabs)
-                             '(:type zmx
-                               :name "second-session"
-                               :directory "/ssh:example:/tmp/")))
+                             '(:name "second-session"
+                               :directory "/ssh:example:/tmp/"
+                               :session (:name "second-session")
+                               :cwd "/ssh:example:/tmp/project/"
+                               :where "example"
+                               :type zmx)))
               (should (equal (mapcar (lambda (event)
                                        (if (eq (car event) 'selector)
                                            (butlast event)
                                          event))
                                      (nreverse selector-events))
-                             '((require term-sessions-list)
-                               (selector "zmx session: " nil)
-                               (require term-sessions-list)
-                               (selector "zmx session: " nil))))
+                             '((selector "zmx session: ")
+                               (selector "zmx session: "))))
               (setf (alist-get 'name (cadr tabs)) "renamed-second")
               (setq tabs (list (cadr tabs) (car tabs)))
               (should (equal (my/send-text-test-current-target tabs)
-                             '(:type zmx
-                               :name "second-session"
-                               :directory "/ssh:example:/tmp/")))
+                             '(:name "second-session"
+                               :directory "/ssh:example:/tmp/"
+                               :session (:name "second-session")
+                               :cwd "/ssh:example:/tmp/project/"
+                               :where "example"
+                               :type zmx)))
               (let ((closed (car tabs))
                     picker-text)
                 (setcar closed 'tab)
@@ -343,132 +366,114 @@
                            (lambda (_name _text) (user-error "zmx unavailable"))))
                   (should-error (my/send-text-send-to-last-target "retry") :type 'user-error))
                 (should (equal (my/send-text-test-current-target tabs) target))
-                (cl-letf (((symbol-function 'term-sessions--read-session-entry)
+                (cl-letf (((symbol-function 'term-sessions-read-existing-session-entry)
                            (lambda (&rest _) (user-error "selection failed"))))
                   (should-error (my/send-text-to-target "new target") :type 'user-error))
                 (should (equal (my/send-text-test-current-target tabs) target)))))
           (setq tabs (list '(current-tab (name . "creation"))))
-          (let ((directory "/tmp/zmx-source/")
-                (prior '(:type zmx :name "prior" :directory "/tmp/prior/"))
-                events
-                selection-directory)
+          (let ((prior '(:type zmx :name "prior" :directory "/tmp/prior/")))
             (my/send-text-save-last-target prior)
-            (cl-letf (((symbol-function 'require)
-                       (lambda (feature &rest _)
-                         (if (eq feature 'term-sessions-list)
-                             feature
-                           (error "Unexpected feature: %S" feature))))
-                      ((symbol-function 'completing-read)
-                       (lambda (prompt collection _predicate require-match &rest _)
-                         (should require-match)
-                         (if (equal prompt "Target: ")
-                             (progn
-                               (should (equal collection '("zmx" "buffer" "ghostty")))
-                               (setq default-directory "/tmp/changed-after-picker/")
-                               "zmx")
-                           (error "Unexpected prompt: %S" prompt))))
-                      ((symbol-function 'term-sessions--read-session-entry)
-                       (lambda (prompt require-existing)
-                         (setq selection-directory default-directory)
-                         (should (equal prompt "zmx session: "))
-                         (should-not require-existing)
-                         '(:name "created-session" :directory "/tmp/zmx-source/")))
-                      ((symbol-function 'term-sessions-open)
-                       (lambda (entry command)
-                         (push (list 'open entry command default-directory
-                                     display-buffer-overriding-action)
-                               events)
-                         (set-buffer selected)
-                         "incidental return"))
-                      ((symbol-function 'ghostel-semi-char-mode)
-                       (lambda () (push (list 'semi (current-buffer)) events)))
-                      ((symbol-function 'evil-ghostel-insert)
-                       (lambda () (push (list 'insert (current-buffer)) events)))
-                      ((symbol-function 'term-sessions-send)
-                       (lambda (name text)
-                         (push (list 'send name text default-directory) events))))
-              (with-current-buffer selected
-                (setq-local evil-state 'normal))
-              (let ((default-directory directory))
-                (my/send-text-to-target "created text"))
-            (should (equal selection-directory directory))
-            (should (equal (nreverse events)
-                           (list
-                            (list 'open
-                                  '(:name "created-session" :directory "/tmp/zmx-source/")
-                                  nil
-                                  "/tmp/zmx-source/"
-                                  my/send-text-right-split-action)
-                            (list 'semi selected)
-                            (list 'insert selected)
-                            (list 'send "created-session" "created text\r"
-                                  "/tmp/zmx-source/"))))
-            (should (equal (my/send-text-test-current-target tabs)
-                           '(:type zmx :name "created-session" :directory "/tmp/zmx-source/")))
-            (setq events nil)
-            (with-current-buffer selected
-              (setq-local evil-state 'insert))
-            (let ((default-directory directory))
-              (my/send-text-to-target "already insert text"))
-            (should (equal (nreverse events)
-                           (list
-                            (list 'open
-                                  '(:name "created-session" :directory "/tmp/zmx-source/")
-                                  nil
-                                  "/tmp/zmx-source/"
-                                  my/send-text-right-split-action)
-                            (list 'semi selected)
-                            (list 'send "created-session" "already insert text\r"
-                                  "/tmp/zmx-source/")))))
-            (dolist (failure '(open normalize deliver))
+            (dolist (case '(("/tmp/zmx-source/" "created-local"
+                             "/tmp/zmx-source/" normal)
+                            ("/ssh:example:/tmp/project/" "created-remote"
+                             "/tmp/project/" insert)))
+              (let ((directory (nth 0 case))
+                    (name (nth 1 case))
+                    (cwd (nth 2 case))
+                    (state (nth 3 case))
+                    events)
+                (cl-letf (((symbol-function 'completing-read)
+                           (lambda (prompt collection _predicate require-match &rest _)
+                             (should require-match)
+                             (pcase prompt
+                               ("Target: "
+                                (should (equal collection
+                                               '("zmx" "buffer" "ghostty")))
+                                (setq default-directory "/tmp/changed-after-picker/")
+                                "zmx")
+                               ("zmx target: "
+                                (should (equal collection
+                                               '("existing session" "create new")))
+                                "create new")
+                               (_ (error "Unexpected prompt: %S" prompt)))))
+                          ((symbol-function 'read-string)
+                           (lambda (prompt &rest _)
+                             (should (equal prompt "New zmx session name: "))
+                             (should (equal default-directory directory))
+                             name))
+                          ((symbol-function 'term-sessions-read-existing-session-entry)
+                           (lambda (&rest _)
+                             (error "Creation must not invoke existing selection")))
+                          ((symbol-function 'term-sessions-open)
+                           (lambda (entry command)
+                             (push (list 'open entry command default-directory
+                                         display-buffer-overriding-action)
+                                   events)
+                             (set-buffer selected)))
+                          ((symbol-function 'ghostel-semi-char-mode)
+                           (lambda () (push (list 'semi (current-buffer)) events)))
+                          ((symbol-function 'evil-ghostel-insert)
+                           (lambda () (push (list 'insert (current-buffer)) events)))
+                          ((symbol-function 'term-sessions-send)
+                           (lambda (session text)
+                             (push (list 'send session text default-directory) events))))
+                  (with-current-buffer selected
+                    (setq-local evil-state state))
+                  (let ((default-directory directory))
+                    (my/send-text-to-target "created text")))
+                (let ((entry (list :name name :directory directory :cwd cwd)))
+                  (should
+                   (equal (nreverse events)
+                          (append
+                           (list (list 'open entry nil directory my/right-split-action)
+                                 (list 'semi selected))
+                           (when (eq state 'normal)
+                             (list (list 'insert selected)))
+                           (list (list 'send name "created text\r" directory)))))
+                  (should (equal (my/send-text-test-current-target tabs)
+                                 (append entry '(:type zmx)))))))
+            (let ((directory "/tmp/zmx-source/"))
               (my/send-text-save-last-target prior)
-              (cl-letf (((symbol-function 'require)
-                         (lambda (feature &rest _)
-                           (if (eq feature 'term-sessions-list)
-                               feature
-                             (error "Unexpected feature: %S" feature))))
-                        ((symbol-function 'completing-read)
-                         (lambda (prompt _collection _predicate require-match &rest _)
+              (cl-letf (((symbol-function 'completing-read)
+                         (lambda (prompt collection _predicate require-match &rest _)
                            (should require-match)
-                           (if (equal prompt "Target: ")
-                               "zmx"
-                             (error "Unexpected prompt: %S" prompt))))
-                        ((symbol-function 'term-sessions--read-session-entry)
+                           (pcase prompt
+                             ("Target: " "zmx")
+                             ("zmx target: "
+                              (should (equal collection
+                                             '("existing session" "create new")))
+                              "existing session")
+                             (_ (error "Unexpected prompt: %S" prompt)))))
+                        ((symbol-function 'term-sessions-read-existing-session-entry)
                          (lambda (&rest _)
-                           '(:name "failed-session" :directory "/tmp/zmx-source/")))
+                           '(:name "failed-session"
+                             :directory "/tmp/zmx-source/"
+                             :session (:name "failed-session")
+                             :cwd "/tmp/zmx-source/"
+                             :where "local")))
                         ((symbol-function 'term-sessions-open)
                          (lambda (&rest _)
-                           (if (eq failure 'open)
-                               (user-error "zmx creation failed")
-                             (set-buffer selected)
-                             "incidental return")))
-                        ((symbol-function 'ghostel-semi-char-mode)
-                         (lambda ()
-                           (when (eq failure 'normalize)
-                             (user-error "zmx normalization failed"))))
-                        ((symbol-function 'evil-ghostel-insert) (lambda ()))
+                           (error "Existing session must not open a frontend")))
                         ((symbol-function 'term-sessions-send)
                          (lambda (&rest _)
-                           (when (eq failure 'deliver)
-                             (user-error "zmx delivery failed")))))
-                (should-error (my/send-text-to-target "failed text") :type 'user-error))
+                           (user-error "zmx delivery failed"))))
+                (let ((default-directory directory))
+                  (should-error (my/send-text-to-target "failed text")
+                                :type 'user-error)))
               (should (equal (my/send-text-test-current-target tabs) prior)))
             (let (empty-events)
               (my/send-text-save-last-target prior)
-              (cl-letf (((symbol-function 'require)
-                         (lambda (feature &rest _)
-                           (if (eq feature 'term-sessions-list)
-                               feature
-                             (error "Unexpected feature: %S" feature))))
-                        ((symbol-function 'completing-read)
+              (cl-letf (((symbol-function 'completing-read)
                          (lambda (prompt _collection _predicate require-match &rest _)
                            (should require-match)
-                           (if (equal prompt "Target: ")
-                               "zmx"
-                             (error "Unexpected prompt: %S" prompt))))
-                        ((symbol-function 'term-sessions--read-session-entry)
-                         (lambda (&rest _)
-                           '(:name "" :directory "/tmp/zmx-source/")))
+                           (pcase prompt
+                             ("Target: " "zmx")
+                             ("zmx target: " "create new")
+                             (_ (error "Unexpected prompt: %S" prompt)))))
+                        ((symbol-function 'read-string)
+                         (lambda (&rest _) ""))
+                        ((symbol-function 'term-sessions-read-existing-session-entry)
+                         (lambda (&rest _) (push 'select empty-events)))
                         ((symbol-function 'term-sessions-open)
                          (lambda (&rest _) (push 'open empty-events)))
                         ((symbol-function 'ghostel-semi-char-mode)
@@ -479,8 +484,9 @@
                          (lambda (&rest _) (push 'send empty-events)))
                         ((symbol-function 'my/send-text-save-last-target)
                          (lambda (&rest _) (push 'save empty-events))))
-                (should-error (my/send-text-to-target "empty selection")
-                              :type 'user-error))
+                (let ((default-directory "/tmp/zmx-source/"))
+                  (should-error (my/send-text-to-target "empty selection")
+                                :type 'user-error)))
               (should-not empty-events)
               (should (equal (my/send-text-test-current-target tabs) prior)))))
       (when (buffer-live-p selected)
@@ -761,7 +767,7 @@
               (let ((default-directory directory))
                 (my/send-text-to-target "created text"))
             (should (equal create-directory directory))
-            (should (equal create-action my/send-text-right-split-action))
+            (should (equal create-action my/right-split-action))
             (should (equal (nreverse events)
                            (list (list 'create "created-ghostty")
                                  (list 'paste "created text" created)
@@ -861,32 +867,25 @@
                 (existing-entry '(:name "existing-session"
                                   :directory "/ssh:example:/tmp/"
                                   :session (:name "existing-session")
+                                  :cwd "/tmp/project/"
                                   :where "example"))
-                (created-entry (list :name "created-session" :directory directory))
                 entries
                 events
-                prompts
                 selection-directories)
-            (setq entries (list existing-entry created-entry))
+            (setq entries (list existing-entry))
             (with-current-buffer existing
               (setq-local evil-state 'normal))
             (with-current-buffer created
               (setq-local evil-state 'insert))
             (unwind-protect
-                (cl-letf (((symbol-function 'require)
-                           (lambda (feature &rest _)
-                             (if (eq feature 'term-sessions-list)
-                                 feature
-                               (error "Unexpected feature: %S" feature))))
-                          ((symbol-function 'term-sessions--read-session-entry)
-                           (lambda (prompt require-existing)
-                             (push (list prompt require-existing) events)
+                (cl-letf (((symbol-function 'term-sessions-read-existing-session-entry)
+                           (lambda (prompt)
+                             (push (list prompt) events)
                              (push default-directory selection-directories)
                              (pop entries)))
                           ((symbol-function 'read-string)
-                           (lambda (prompt &rest _)
-                             (push prompt prompts)
-                             "command"))
+                           (lambda (&rest _)
+                             (error "Existing session selection should not prompt for creation")))
                           ((symbol-function 'term-sessions-open)
                            (lambda (entry command)
                              (push (list 'open entry command default-directory
@@ -901,35 +900,92 @@
                           ((symbol-function 'evil-ghostel-insert)
                            (lambda () (push (list 'insert (current-buffer)) events))))
                   (with-current-buffer source
-                    (let ((default-directory directory)
-                          (current-prefix-arg t))
+                    (let ((default-directory directory))
                       (call-interactively #'my/open-or-create-zmx-session-in-split)))
                   (should (equal (my/send-text-test-current-target tabs)
-                                 '(:type zmx
-                                   :name "existing-session"
-                                   :directory "/ssh:example:/tmp/")))
-                  (with-current-buffer source
-                    (let ((default-directory directory)
-                          (current-prefix-arg t))
-                      (call-interactively #'my/open-or-create-zmx-session-in-split)))
+                                 '(:name "existing-session"
+                                   :directory "/ssh:example:/tmp/"
+                                   :session (:name "existing-session")
+                                   :cwd "/tmp/project/"
+                                   :where "example"
+                                   :type zmx)))
                   (should (equal (nreverse selection-directories)
-                                 (list directory directory)))
-                  (should (equal prompts '("Command for new session: ")))
+                                 (list directory)))
                   (should (equal (nreverse events)
                                  (list
-                                  '("zmx session: " nil)
+                                  '("zmx session: ")
                                   (list 'open existing-entry nil "/ssh:example:/tmp/"
-                                        my/send-text-right-split-action)
+                                        my/right-split-action)
                                   (list 'semi existing)
-                                  (list 'insert existing)
-                                  '("zmx session: " nil)
-                                  (list 'open created-entry "command" directory
-                                        my/send-text-right-split-action)
-                                  (list 'semi created))))
-                  (should (equal (my/send-text-test-current-target tabs)
-                                 (list :type 'zmx
-                                       :name "created-session"
-                                       :directory directory)))
+                                  (list 'insert existing))))
+                  (let ((created-entry (list :name "created-session"
+                                             :directory directory
+                                             :cwd directory)))
+                    (with-current-buffer source
+                      (let ((default-directory directory))
+                        (my/open-or-create-zmx-session-in-split created-entry "command")))
+                    (should (equal (my/send-text-test-current-target tabs)
+                                   (list :name "created-session"
+                                         :directory directory
+                                         :cwd directory
+                                         :type 'zmx))))
+                  (let (opened)
+                    (cl-letf (((symbol-function 'read-string)
+                               (lambda (prompt &rest _)
+                                 (pcase prompt
+                                   ("New zmx session name: " "created-local")
+                                   ("Command for new session (optional): " "local command")
+                                   (_ (error "Unexpected prompt: %S" prompt)))))
+                              ((symbol-function 'term-sessions-open)
+                               (lambda (entry command)
+                                 (setq opened (list entry command default-directory
+                                                    display-buffer-overriding-action))
+                                 (set-buffer created))))
+                      (with-current-buffer source
+                        (let ((default-directory directory)
+                              (current-prefix-arg t))
+                          (call-interactively #'my/open-or-create-zmx-session-in-split))))
+                    (should (equal opened
+                                   (list (list :name "created-local"
+                                               :directory directory
+                                               :cwd directory)
+                                         "local command"
+                                         directory
+                                         my/right-split-action)))
+                    (should (equal (my/send-text-test-current-target tabs)
+                                   (list :name "created-local"
+                                         :directory directory
+                                         :cwd directory
+                                         :type 'zmx))))
+                  (let ((remote-directory "/ssh:example:/tmp/project/")
+                        opened)
+                    (cl-letf (((symbol-function 'read-string)
+                               (lambda (prompt &rest _)
+                                 (pcase prompt
+                                   ("New zmx session name: " "created-remote")
+                                   ("Command for new session (optional): " "")
+                                   (_ (error "Unexpected prompt: %S" prompt)))))
+                              ((symbol-function 'term-sessions-open)
+                               (lambda (entry command)
+                                 (setq opened (list entry command default-directory
+                                                    display-buffer-overriding-action))
+                                 (set-buffer created))))
+                      (with-current-buffer source
+                        (let ((default-directory remote-directory)
+                              (current-prefix-arg t))
+                          (call-interactively #'my/open-or-create-zmx-session-in-split))))
+                    (should (equal opened
+                                   (list (list :name "created-remote"
+                                               :directory remote-directory
+                                               :cwd "/tmp/project/")
+                                         nil
+                                         remote-directory
+                                         my/right-split-action)))
+                    (should (equal (my/send-text-test-current-target tabs)
+                                   (list :name "created-remote"
+                                         :directory remote-directory
+                                         :cwd "/tmp/project/"
+                                         :type 'zmx))))
                   (let ((prior (my/send-text-test-current-target tabs)))
                     (cl-letf (((symbol-function 'term-sessions-open)
                                (lambda (&rest _)
@@ -940,24 +996,11 @@
                        :type 'user-error))
                     (should (equal (my/send-text-test-current-target tabs) prior)))
                   (let ((prior (my/send-text-test-current-target tabs))
-                        empty-events)
-                    (my/send-text-save-last-target prior)
-                    (cl-letf
-                        (((symbol-function 'term-sessions--read-session-entry)
-                          (lambda (&rest _)
-                            (list :name "" :directory directory)))
-                         ((symbol-function 'read-string)
-                          (lambda (&rest _) (push 'prompt empty-events)))
-                         ((symbol-function 'term-sessions-open)
-                          (lambda (&rest _) (push 'open empty-events)))
-                         ((symbol-function 'ghostel-semi-char-mode)
-                          (lambda () (push 'semi empty-events)))
-                         ((symbol-function 'evil-ghostel-insert)
-                          (lambda () (push 'insert empty-events)))
-                         ((symbol-function 'term-sessions-send)
-                          (lambda (&rest _) (push 'send empty-events)))
-                         ((symbol-function 'my/send-text-save-last-target)
-                          (lambda (&rest _) (push 'save empty-events))))
+                        events)
+                    (cl-letf (((symbol-function 'read-string)
+                               (lambda (_prompt &rest _) ""))
+                              ((symbol-function 'term-sessions-open)
+                               (lambda (&rest _) (push 'open events))))
                       (with-current-buffer source
                         (let ((default-directory directory)
                               (current-prefix-arg t))
@@ -965,7 +1008,19 @@
                            (call-interactively
                             #'my/open-or-create-zmx-session-in-split)
                            :type 'user-error))))
-                    (should-not empty-events)
+                    (should-not events)
+                    (should (equal (my/send-text-test-current-target tabs) prior)))
+                  (let ((prior (my/send-text-test-current-target tabs))
+                        cancelled)
+                    (cl-letf (((symbol-function 'term-sessions-read-existing-session-entry)
+                               (lambda (&rest _) (signal 'quit nil))))
+                      (with-current-buffer source
+                        (let ((default-directory directory))
+                          (condition-case nil
+                              (call-interactively #'my/open-or-create-zmx-session-in-split)
+                            (quit (setq cancelled t)))
+                          (setq quit-flag nil))))
+                    (should cancelled)
                     (should (equal (my/send-text-test-current-target tabs) prior))))
               (dolist (buffer (list source existing created))
                 (when (buffer-live-p buffer)

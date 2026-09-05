@@ -4,8 +4,8 @@
 
 - Plan: active, project section schema and Phase 1 shared contract confirmed
 - Implementation: in progress
-- Current phase: Phase 3, complete
-- Next milestone: Phase 4, deterministic layouts and agent backends
+- Current phase: Phase 4, complete
+- Next milestone: Phase 6, remote event relay and TRAMP acceptance
 - Core completion boundary: Phases 1, 3, 4, and 6 plus the mandatory core
   Phase 9 checks
 - Optional enhancements: Phases 2 and 5 add local native Codex and narrow MCP
@@ -1404,7 +1404,7 @@ its required Codex baseline.
 
 ## Phase 4: Complete layouts and agent backends
 
-Status: pending
+Status: complete
 
 ### Changes
 
@@ -1424,6 +1424,37 @@ Status: pending
 5. Preserve Gptel, terminal, Magit providers, transactional rendering,
    root-scoped session names, and the public term-sessions migration.
 6. Update the old plan's status, superseded text, and actual term-sessions pin.
+
+### Phase 4 implementation results
+
+- Added the catalog-backed focus, terminal, agent, Gptel, and Magit layouts,
+  transactional rendering, workspace selection, and tab-local runtime state in
+  `profiles/common/.config/emacs/my-window-layouts.el`.
+- Kept terminal-agent as the complete backend. Local native Codex is available
+  only through explicit launcher registration, and the TRAMP branch selects
+  terminal-agent before any native launcher, executable, task, or package
+  probe. No core path requires, fetches, or loads `emacs-codex-ide`.
+- Scoped automatic agent sessions to both normalized root and verified task
+  identity. Rebinding a task cannot expose a prior agent, native buffer, or
+  Gptel conversation, and a same-name session cached for another task is
+  rejected instead of silently reusing stale environment variables.
+- Migrated send targets to the Phase 1 tab accessors and public term-sessions
+  selector. Direct sending supports explicit existing-session selection and
+  owned local or TRAMP-aware new-session descriptors, preserving the prior
+  target until delivery succeeds.
+- Updated the term-sessions pin to
+  `acc872676ad2476187984056e7896aa0ea2b2dfc`, integrated catalog-derived
+  bindings, and updated the retained layout plan with the implemented state.
+- The combined review ran at 716 production additions and 835 test additions.
+  Main-session inspection resolved all five blocking findings: task-rebind
+  cache identity, roleless special-buffer selection, stale and dead zmx
+  frontend handling, direct zmx creation, and literal session identity. The
+  review checkpoint was then reset.
+- Passed 13 layout ERT tests, 5 send-target tests, 8 leader binding tests, 9
+  workflow regression tests, 7 agent-event regression tests, and all 123
+  term-sessions upstream tests under `TZ=UTC`. Isolated byte compilation,
+  `check-parens`, startup loading, hook JSON parsing, and `git diff --check`
+  also passed.
 
 ### Success criteria
 
