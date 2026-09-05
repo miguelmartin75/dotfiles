@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import uuid
 from pathlib import Path
@@ -56,6 +58,7 @@ class EmacsAgentEventTest(unittest.TestCase):
     ) -> subprocess.CompletedProcess[str]:
         self.capture_path.unlink(missing_ok=True)
         environment = os.environ.copy()
+        environment.pop("EMACS_AGENT_EVENT_SOCKET", None)
         environment.update(
             {
                 "PATH": str(self.temporary_path),
@@ -88,6 +91,212 @@ class EmacsAgentEventTest(unittest.TestCase):
         arguments = json.loads(self.capture_path.read_text())
         event = json.loads(arguments[-1])
         return arguments, event
+
+    def test_explicit_socket_sends_an_exact_boundary_frame_without_emacsclient(self) -> None:
+        socket_path = self.temporary_path / "agent-event.sock"
+        event_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        event_server.bind(str(socket_path))
+        event_server.listen(1)
+        received_frames: list[bytes] = []
+        server_errors: list[OSError] = []
+
+        def receive_event() -> None:
+            try:
+                connection, _ = event_server.accept()
+                with connection:
+                    frame = bytearray()
+                    while data := connection.recv(4_096):
+                        frame.extend(data)
+                    received_frames.append(bytes(frame))
+            except OSError as error:
+                server_errors.append(error)
+            finally:
+                event_server.close()
+
+        server_thread = threading.Thread(target=receive_event)
+        server_thread.start()
+        hostile_text = "(progn (delete-file \"important\")) --secret"
+        provider_event = {
+            "session_id": "session-1",
+            "event_id": "event-1",
+            "hook_event_name": "ManualFilesChanged",
+            "timestamp": "2026-09-04T00:00:00Z",
+            "cwd": "/workspace",
+            "changed_paths": ["a" * 1_024] * 56,
+            "prompt": hostile_text,
+            "tool_input": {"command": hostile_text},
+        }
+        body = "b" * 7_795
+        result = self.call_wrapper(
+            "files-changed",
+            provider_event,
+            ["--body", body],
+            {"EMACS_AGENT_EVENT_SOCKET": str(socket_path)},
+        )
+        server_thread.join(timeout=5)
+
+        expected_event = {
+            "schema_version": 1,
+            "provider": "codex",
+            "session_id": "session-1",
+            "event_id": "event-1",
+            "kind": "files-changed",
+            "timestamp": "2026-09-04T00:00:00Z",
+            "cwd": "/workspace",
+            "title": "Codex reported changed files",
+            "body": body,
+            "changed_paths": ["a" * 1_024] * 56,
+        }
+        expected_frame = (
+            json.dumps(expected_event, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            + b"\n"
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertFalse(server_thread.is_alive())
+        self.assertEqual(server_errors, [])
+        self.assertEqual(received_frames, [expected_frame])
+        self.assertEqual(len(received_frames[0]), 65_537)
+        self.assertNotIn(hostile_text.encode("utf-8"), received_frames[0])
+        self.assertFalse(self.capture_path.exists())
+
+    def test_invalid_and_missing_explicit_sockets_fail_open_without_local_delivery(self) -> None:
+        provider_event = {
+            "session_id": "session-1",
+            "event_id": "event-1",
+            "hook_event_name": "Stop",
+        }
+        invalid_paths = [
+            "relative.sock",
+            "/tmp//agent-event.sock",
+            "/tmp/./agent-event.sock",
+            "/tmp/../agent-event.sock",
+            "/tmp/~agent-event.sock",
+            "/ssh:remote:/agent-event.sock",
+            "/C:/agent-event.sock",
+            "/tmp/agent-event.sock\nsecond-line",
+        ]
+        for socket_path in invalid_paths:
+            with self.subTest(socket_path=socket_path):
+                result = self.call_wrapper(
+                    "done",
+                    provider_event,
+                    ["--hook-name", "Stop"],
+                    {"EMACS_AGENT_EVENT_SOCKET": socket_path},
+                )
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(json.loads(result.stdout), {"continue": True})
+                self.assertIn("event rejected", result.stderr)
+                self.assertFalse(self.capture_path.exists())
+
+        missing_path = self.temporary_path / "missing.sock"
+        missing = self.call_wrapper(
+            "done",
+            provider_event,
+            ["--hook-name", "Stop"],
+            {"EMACS_AGENT_EVENT_SOCKET": str(missing_path)},
+        )
+        self.assertEqual(missing.returncode, 0)
+        self.assertEqual(json.loads(missing.stdout), {"continue": True})
+        self.assertIn("delivery failed", missing.stderr)
+        self.assertFalse(self.capture_path.exists())
+
+    def test_explicit_socket_path_uses_the_100_byte_af_unix_bound(self) -> None:
+        provider_event = {
+            "session_id": "session-1",
+            "event_id": "event-1",
+            "hook_event_name": "Stop",
+        }
+        exact_boundary_path = "/" + "a" * 99
+        exact_boundary = self.call_wrapper(
+            "done",
+            provider_event,
+            ["--hook-name", "Stop"],
+            {"EMACS_AGENT_EVENT_SOCKET": exact_boundary_path},
+        )
+        self.assertEqual(len(exact_boundary_path.encode("utf-8")), 100)
+        self.assertEqual(exact_boundary.returncode, 0)
+        self.assertEqual(json.loads(exact_boundary.stdout), {"continue": True})
+        self.assertIn("delivery failed", exact_boundary.stderr)
+        self.assertFalse(self.capture_path.exists())
+
+        over_boundary_path = "/" + "a" * 100
+        over_boundary = self.call_wrapper(
+            "done",
+            provider_event,
+            ["--hook-name", "Stop"],
+            {"EMACS_AGENT_EVENT_SOCKET": over_boundary_path},
+        )
+        self.assertEqual(len(over_boundary_path.encode("utf-8")), 101)
+        self.assertEqual(over_boundary.returncode, 0)
+        self.assertEqual(json.loads(over_boundary.stdout), {"continue": True})
+        self.assertIn("event rejected", over_boundary.stderr)
+        self.assertFalse(self.capture_path.exists())
+
+    def test_stalled_explicit_socket_times_out_without_local_delivery(self) -> None:
+        socket_path = self.temporary_path / "stalled-event.sock"
+        event_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        event_server.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1)
+        event_server.bind(str(socket_path))
+        event_server.listen(1)
+        release_server = threading.Event()
+        server_errors: list[OSError] = []
+
+        def stall_event_receiver() -> None:
+            try:
+                connection, _ = event_server.accept()
+                with connection:
+                    connection.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1)
+                    release_server.wait(timeout=5)
+            except OSError as error:
+                server_errors.append(error)
+            finally:
+                event_server.close()
+
+        server_thread = threading.Thread(target=stall_event_receiver)
+        server_thread.start()
+        provider_event = {
+            "session_id": "session-1",
+            "event_id": "event-1",
+            "hook_event_name": "ManualFilesChanged",
+            "timestamp": "2026-09-04T00:00:00Z",
+            "cwd": "/workspace",
+            "changed_paths": ["a" * 1_024] * 56,
+        }
+        result = self.call_wrapper(
+            "files-changed",
+            provider_event,
+            ["--body", "b" * 7_795],
+            {"EMACS_AGENT_EVENT_SOCKET": str(socket_path)},
+        )
+        release_server.set()
+        server_thread.join(timeout=5)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("delivery timed out", result.stderr)
+        self.assertFalse(server_thread.is_alive())
+        self.assertEqual(server_errors, [])
+        self.assertFalse(self.capture_path.exists())
+
+    def test_empty_socket_and_remote_context_keep_local_emacsclient_transport(self) -> None:
+        result = self.call_wrapper(
+            "progress",
+            {
+                "session_id": "session-1",
+                "hook_event_name": "UserPromptSubmit",
+                "turn_id": "turn-1",
+                "cwd": "/remote/workspace",
+            },
+            extra_environment={
+                "EMACS_AGENT_EVENT_SOCKET": "",
+                "HOSTNAME": "remote.example.test",
+                "SSH_CONNECTION": "192.0.2.1 22 192.0.2.2 22",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0)
+        arguments, _ = self.captured_event()
+        self.assertEqual(arguments[0], "--socket-name=main")
 
     def test_codex_mappings_discard_prompt_and_tool_input(self) -> None:
         hostile_text = "(progn (delete-file \"important\")) --secret"
@@ -209,6 +418,18 @@ class EmacsAgentEventTest(unittest.TestCase):
         self.assertFalse(self.capture_path.exists())
         self.assertIn("event rejected", traversal_path.stderr)
 
+        invalid_paths = ["", ".", "dir/.", "dir/..", "dir//file", "dir/"]
+        for changed_path in invalid_paths:
+            with self.subTest(changed_path=changed_path):
+                invalid_path = self.call_wrapper(
+                    "files-changed",
+                    {"session_id": "session-1", "hook_event_name": "Stop"},
+                    ["--changed-path", changed_path],
+                )
+                self.assertEqual(invalid_path.returncode, 0)
+                self.assertFalse(self.capture_path.exists())
+                self.assertIn("event rejected", invalid_path.stderr)
+
         oversized_event = self.call_wrapper(
             "files-changed",
             {
@@ -304,6 +525,35 @@ class EmacsAgentEventTest(unittest.TestCase):
                 self.assertEqual(rejected.returncode, 0)
                 self.assertFalse(self.capture_path.exists())
                 self.assertIn("event rejected", rejected.stderr)
+
+    def test_sequences_require_a_real_provider_session_id(self) -> None:
+        missing_session = self.call_wrapper(
+            "files-changed",
+            {"hook_event_name": "ManualFilesChanged", "sequence": 1},
+        )
+        self.assertEqual(missing_session.returncode, 0)
+        self.assertFalse(self.capture_path.exists())
+        self.assertIn("event rejected", missing_session.stderr)
+
+        unknown_session = self.call_wrapper(
+            "files-changed",
+            {
+                "session_id": "unknown",
+                "hook_event_name": "ManualFilesChanged",
+                "sequence": 1,
+            },
+        )
+        self.assertEqual(unknown_session.returncode, 0)
+        self.assertFalse(self.capture_path.exists())
+        self.assertIn("event rejected", unknown_session.stderr)
+
+        unsequenced_fallback = self.call_wrapper(
+            "progress",
+            {"hook_event_name": "UserPromptSubmit", "turn_id": "turn-1"},
+        )
+        self.assertEqual(unsequenced_fallback.returncode, 0)
+        _, event = self.captured_event()
+        self.assertEqual(event["session_id"], "unknown")
 
     def test_emacsclient_argv_is_constant_and_ignores_alternate_editor(self) -> None:
         result = self.call_wrapper(

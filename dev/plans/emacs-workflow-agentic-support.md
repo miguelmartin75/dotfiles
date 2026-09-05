@@ -4,8 +4,8 @@
 
 - Plan: active, project section schema and Phase 1 shared contract confirmed
 - Implementation: in progress
-- Current phase: Phase 4, complete
-- Next milestone: Phase 6, remote event relay and TRAMP acceptance
+- Current phase: Phase 9, mandatory core verification in progress
+- Next milestone: Phase 9, complete mandatory core verification and handoff
 - Core completion boundary: Phases 1, 3, 4, and 6 plus the mandatory core
   Phase 9 checks
 - Optional enhancements: Phases 2 and 5 add local native Codex and narrow MCP
@@ -917,10 +917,12 @@ Lifecycle and ownership rules:
 - Track the dedicated listener and SSH process objects. Teardown removes only
   the socket path created by that listener and only after another ownership and
   type check.
-- Use a race-free stable-path restart: stop and reap the old SSH forward,
+- Use a race-resistant stable-path restart: stop and reap the old SSH forward,
   validate and remove its remote socket, then start the replacement and require
   forward success. Accept the brief notification downtime; agent execution
   continues and falls back to the terminal workflow if replacement fails.
+  Owner, type, device, and inode checks narrow pathname replacement races, but
+  cannot eliminate races against another process running as the same UID.
 - Do not use automatic `StreamLocalBindUnlink` because it bypasses the explicit
   owner/type validation and can unlink an unexpected endpoint.
 
@@ -1500,7 +1502,7 @@ boundary. No core phase depends on it.
 
 ## Phase 6: Add the remote event relay and TRAMP acceptance
 
-Status: pending
+Status: complete
 
 This core phase depends on Phases 1 and 3. It does not depend on optional
 Phases 2 or 5, and terminal-agent is its required agent baseline.
@@ -1523,6 +1525,79 @@ Phases 2 or 5, and terminal-agent is its required agent baseline.
 7. Keep native Codex disabled for TRAMP at the accepted package pin. Evaluate
    `agent-shell-tramp` only if unified remote buffers become more important
    than direct Codex fidelity.
+
+### Phase 6 configuration and operation
+
+Configure every trusted remote root explicitly. The TRAMP root must already be
+normalized, the SSH destination and options are independent reviewed values,
+and the remote socket must be a direct child of a private remote directory:
+
+```elisp
+(setq my/agent-events-relays
+      '((:name "gpu-work"
+         :workspace-root "/sshx:USER@HOST:/srv/PROJECT/"
+         :ssh-destination "USER@HOST"
+         :ssh-options ("-o" "IdentityFile=/PATH/TO/KEY"
+                       "-o" "IdentitiesOnly=yes")
+         :remote-socket "/home/USER/.cache/emacs-agent-events/events.sock")))
+```
+
+Only reviewed non-forwarding SSH options are accepted. Start, inspect,
+replace, and stop relays explicitly with
+`M-x my/agent-events-relay-start`,
+`M-x my/agent-events-relay-status`,
+`M-x my/agent-events-relay-restart`, and
+`M-x my/agent-events-relay-stop`. Use
+`M-x my/agent-events-relay-stop-all` to tear down every relay. Emacs also runs
+the stop-all command from `kill-emacs-hook`. Status inspection never connects
+or repairs a relay, and no relay starts automatically.
+
+After a relay is active, the terminal-agent layout adds only that relay's
+configured remote socket as `EMACS_AGENT_EVENT_SOCKET` to the matching remote
+session. A manually launched remote hook may export the same value explicitly.
+The wrapper then uses the Unix socket transport only and never falls back to
+remote `emacsclient`. An inactive or lost relay leaves the remote
+terminal-agent/Ghostel/zmx workflow usable without notifications.
+
+### Phase 6 implementation results
+
+- Added an event-only AF_UNIX listener that accepts exactly one LF-terminated
+  JSON frame of at most 65,536 bytes per connection. It applies one 2 second
+  total connection deadline, caps concurrent clients at 8 and deferred frames
+  at 64, and discards queued work from inactive relay generations.
+- Bound each relay to one trusted normalized TRAMP root and derived method,
+  user, host, hop, prefix, and remote local root. Client cwd and changed paths
+  can select only that configured source. Event deduplication is source scoped,
+  and per-path sequence filtering requires a real provider session ID.
+- Implemented clean-only refresh for already visited remote buffers from
+  current TRAMP file attributes. Modified buffers become attention events,
+  unvisited buffers stay unopened, and provider-observed mtime and size are
+  retained only as comparison diagnostics rather than refresh authority.
+- Added an explicit dedicated SSH reverse-forward process with fixed required
+  options, an allowlist for user-supplied SSH options, hard maintenance,
+  shutdown, readiness, and client deadlines, and generation-aware teardown.
+  Local and remote cleanup verifies private ownership, socket type, and the
+  recorded device/inode identity before removing a path. Stable-path restart
+  is race-resistant, not race-free, because same-UID pathname races cannot be
+  eliminated.
+- Added public relay start, stop, restart, status, and stop-all commands plus
+  kill-time cleanup. Relays never auto-connect. The wrapper selects remote
+  transport only from an explicit `EMACS_AGENT_EVENT_SOCKET` and never falls
+  back to `emacsclient` after selecting it.
+- Updated terminal-agent layout construction to inject the remote socket only
+  for the one active relay matching the normalized TRAMP root. Remote
+  terminal-agent remains the complete baseline and continues to work when the
+  relay is inactive or lost.
+- Confirmed again that `emacs-codex-ide` is an optional local-only enhancement.
+  Phase 6, TRAMP, remote events, and remote terminal-agent operation neither
+  need nor load it.
+- Main-session verification passed 17 of 17 agent-event ERT tests, 16 of 16
+  wrapper tests, and 14 of 14 window-layout ERT tests. `check-parens` and
+  isolated byte compilation also passed, as did `git diff --check`. The
+  complete Phase 9 matrix has not yet been claimed.
+- Real SSH-host and TRAMP-host acceptance, including tunnel interruption and
+  clean, modified, stale, and out-of-order remote file events, is deferred to
+  the Phase 9 mandatory manual matrix.
 
 ### Success criteria
 
@@ -1612,7 +1687,7 @@ This phase depends on Phase 7 but no core phase depends on it.
 
 ## Phase 9: End-to-end verification and handoff
 
-Status: pending
+Status: in progress, mandatory core verification
 
 ### Mandatory core no-package automated verification
 

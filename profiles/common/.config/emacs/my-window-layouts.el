@@ -203,18 +203,33 @@ retain the root-scoped name so intentional worktree isolation still applies."
                 ((stringp command) (list command))
                 ((and (listp command) command) command)
                 (t nil)))
-         (task (my/layout-workflow-task-for-root root)))
+         (task (my/layout-workflow-task-for-root root))
+         (remote-root-p (and (file-remote-p root)
+                             (equal root (file-name-as-directory root))))
+         (workspace-root (my/layout-zmx-cwd root))
+         (relay-socket (when (and remote-root-p
+                                  (fboundp 'my/agent-events-relay-socket-for-root))
+                         (my/agent-events-relay-socket-for-root root)))
+         (environment
+          (append
+           (when task
+             (list (concat "EMACS_WORK_TASK_ID=" (plist-get task :id))
+                   (concat "EMACS_WORKSPACE_ROOT="
+                           (if remote-root-p
+                               (if (equal workspace-root "/")
+                                   "/"
+                                 (directory-file-name workspace-root))
+                             workspace-root))))
+           (when (and (stringp relay-socket)
+                      (not (string-empty-p relay-socket)))
+             (list (concat "EMACS_AGENT_EVENT_SOCKET=" relay-socket))))))
     (unless argv
       (user-error "Configured terminal-agent session needs an explicit command"))
     (unless (seq-every-p #'stringp argv)
       (user-error "Terminal-agent command must be an argv list of strings"))
     (mapconcat
      #'shell-quote-argument
-     (append (when task
-               (list "env"
-                     (concat "EMACS_WORK_TASK_ID=" (plist-get task :id))
-                     (concat "EMACS_WORKSPACE_ROOT=" (my/layout-zmx-cwd root))))
-             argv)
+     (append (when environment (cons "env" environment)) argv)
      " ")))
 
 (defun my/layout-cached-companion (layout)

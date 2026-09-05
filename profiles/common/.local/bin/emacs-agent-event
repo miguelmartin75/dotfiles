@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import socket
 import subprocess
 import sys
 import uuid
@@ -15,6 +16,7 @@ MAX_EVENT_BYTES = 65_536
 MAX_INPUT_BYTES = 65_536
 MAX_IDENTIFIER_BYTES = 256
 MAX_PATH_BYTES = 4_096
+MAX_UNIX_SOCKET_PATH_BYTES = 100
 MAX_TITLE_BYTES = 256
 MAX_BODY_BYTES = 8_192
 MAX_CHANGED_PATHS = 128
@@ -115,6 +117,29 @@ def validate_directory(value: object, maximum: int, name: str) -> str:
     return result
 
 
+def validate_socket_path(value: object) -> str:
+    result = validate_identifier(value, MAX_UNIX_SOCKET_PATH_BYTES, "event socket")
+    components = result.split("/")
+    first_component = components[1] if len(components) > 1 else ""
+    windows_path = PureWindowsPath(result)
+    has_drive_component = any(
+        len(component) >= 2 and component[0].isalpha() and component[1] == ":"
+        for component in components[1:]
+    )
+    if (
+        not result.startswith("/")
+        or "~" in result
+        or "\\" in result
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or ":" in first_component
+        or has_drive_component
+        or any(component in {"", ".", ".."} for component in components[1:])
+    ):
+        raise EventError("invalid event socket")
+    return result
+
+
 def provider_value(
     explicit_value: str | None,
     provider_event: dict[str, object],
@@ -193,13 +218,13 @@ def validate_changed_path(value: object) -> str:
     posix_components = path.split("/")
     windows_path = PureWindowsPath(path)
     if (
-        path.startswith("~")
-        or path.startswith("/")
-        or path.startswith("\\")
+        path.startswith("/")
         or "\\" in path
+        or "~" in path
         or windows_path.is_absolute()
         or windows_path.drive
-        or ".." in posix_components
+        or path.endswith("/")
+        or any(component in {"", ".", ".."} for component in posix_components)
     ):
         raise EventError("changed path is not a safe relative path")
     return path
@@ -374,6 +399,8 @@ def build_event(
     if kind != "files-changed" and has_file_observations:
         raise EventError("file observations require a files-changed event")
     sequence = validate_integer(sequence_value, "sequence")
+    if sequence is not None and session_id == "unknown":
+        raise EventError("sequence requires a provider session ID")
     observed_mtime = validate_number(observed_mtime_value, "observed modification time")
     observed_size = validate_integer(observed_size_value, "observed size")
 
@@ -407,26 +434,38 @@ def build_event(
 
 
 def deliver_event(serialized_event: str) -> None:
-    command = [
-        "emacsclient",
-        "--socket-name=main",
-        "--alternate-editor=false",
-        "--timeout=2",
-        "--quiet",
-        "--suppress-output",
-        "--eval",
-        LISP_EXPRESSION,
-        "--",
-        serialized_event,
-    ]
-    subprocess.run(
-        command,
-        check=True,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        timeout=3,
-    )
+    socket_path = os.environ.get("EMACS_AGENT_EVENT_SOCKET")
+    if socket_path:
+        socket_path = validate_socket_path(socket_path)
+        event_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            event_socket.settimeout(2)
+            event_socket.connect(socket_path)
+            event_socket.sendall(serialized_event.encode("utf-8") + b"\n")
+            event_socket.shutdown(socket.SHUT_WR)
+        finally:
+            event_socket.close()
+    else:
+        command = [
+            "emacsclient",
+            "--socket-name=main",
+            "--alternate-editor=false",
+            "--timeout=2",
+            "--quiet",
+            "--suppress-output",
+            "--eval",
+            LISP_EXPRESSION,
+            "--",
+            serialized_event,
+        ]
+        subprocess.run(
+            command,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
 
 
 def write_diagnostic(message: str) -> None:
@@ -454,8 +493,11 @@ def main() -> int:
     except EventError:
         write_diagnostic("event rejected")
     except FileNotFoundError:
-        write_diagnostic("emacsclient unavailable")
-    except subprocess.TimeoutExpired:
+        if os.environ.get("EMACS_AGENT_EVENT_SOCKET"):
+            write_diagnostic("delivery failed")
+        else:
+            write_diagnostic("emacsclient unavailable")
+    except (socket.timeout, subprocess.TimeoutExpired):
         write_diagnostic("delivery timed out")
     except (OSError, subprocess.CalledProcessError):
         write_diagnostic("delivery failed")

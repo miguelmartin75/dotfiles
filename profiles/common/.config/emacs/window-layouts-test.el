@@ -581,11 +581,17 @@
 (ert-deftest my/layout-agent-command-quotes-only-root-verified-environment ()
   (my/layout-test-with-tabs
     (let ((task nil)
+          (relay-socket "/run/user/1000/emacs-agent-event.sock")
+          relay-roots
           (entry '(:command ("codex" "--model" "name with spaces"))))
       (cl-letf (((symbol-function 'my/workflow-current-task)
                  (lambda ()
                    (or task
-                       (user-error "The current tab has no active work task")))))
+                       (user-error "The current tab has no active work task"))))
+                ((symbol-function 'my/agent-events-relay-socket-for-root)
+                 (lambda (root)
+                   (push root relay-roots)
+                   relay-socket)))
         (setq task (list :id "task id" :root "/tmp/work space/"))
         (should
          (equal
@@ -595,21 +601,40 @@
                        "EMACS_WORKSPACE_ROOT=/tmp/work space/"
                        "codex" "--model" "name with spaces")
                      " ")))
+        (should-not relay-roots)
         (setq task (list :id "task id" :root "/ssh:host:/srv/work/"))
         (should
          (equal
           (my/layout-agent-command entry "/ssh:host:/srv/work/")
           (mapconcat #'shell-quote-argument
                      '("env" "EMACS_WORK_TASK_ID=task id"
-                       "EMACS_WORKSPACE_ROOT=/srv/work/"
+                       "EMACS_WORKSPACE_ROOT=/srv/work"
+                       "EMACS_AGENT_EVENT_SOCKET=/run/user/1000/emacs-agent-event.sock"
                        "codex" "--model" "name with spaces")
                      " ")))
         (setq task nil)
         (should
          (equal
-          (my/layout-agent-command entry "/tmp/work space/")
+          (my/layout-agent-command entry "/ssh:host:/srv/work/")
+          (mapconcat #'shell-quote-argument
+                     '("env" "EMACS_AGENT_EVENT_SOCKET=/run/user/1000/emacs-agent-event.sock"
+                       "codex" "--model" "name with spaces")
+                     " ")))
+        (setq relay-socket nil)
+        (should
+         (equal
+          (my/layout-agent-command entry "/ssh:host:/srv/work/")
           (mapconcat #'shell-quote-argument
                      '("codex" "--model" "name with spaces")
+                     " ")))
+        (setq task (list :id "root task" :root "/ssh:host:/"))
+        (should
+         (equal
+          (my/layout-agent-command entry "/ssh:host:/")
+          (mapconcat #'shell-quote-argument
+                     '("env" "EMACS_WORK_TASK_ID=root task"
+                       "EMACS_WORKSPACE_ROOT=/"
+                       "codex" "--model" "name with spaces")
                      " ")))
         (setq task (list :id "stale task" :root "/tmp/other-workspace/"))
         (should
@@ -617,7 +642,26 @@
           (my/layout-agent-command entry "/tmp/work space/")
           (mapconcat #'shell-quote-argument
                      '("codex" "--model" "name with spaces")
-                     " ")))))))
+                     " ")))
+        (should (equal (nreverse relay-roots)
+                       '("/ssh:host:/srv/work/" "/ssh:host:/srv/work/"
+                         "/ssh:host:/srv/work/" "/ssh:host:/")))))))
+
+(ert-deftest my/layout-agent-command-remote-fallback-without-relay-lookup ()
+  (my/layout-test-with-tabs
+    (let ((entry '(:command ("codex")))
+          (normal-fboundp (symbol-function 'fboundp)))
+      (cl-letf (((symbol-function 'my/workflow-current-task)
+                 (lambda ()
+                   (user-error "The current tab has no active work task")))
+                ((symbol-function 'fboundp)
+                 (lambda (symbol)
+                   (if (eq symbol 'my/agent-events-relay-socket-for-root)
+                       nil
+                     (funcall normal-fboundp symbol)))))
+        (should
+         (equal (my/layout-agent-command entry "/ssh:host:/srv/work/")
+                (shell-quote-argument "codex")))))))
 
 (ert-deftest my/layout-gptel-and-magit-use-root-context-and-preserve-failure-view ()
   (my/layout-test-with-tabs
