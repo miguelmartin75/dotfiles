@@ -423,6 +423,8 @@
 ;; completion
 (defvar consult-async-split-style)
 
+(setq consult-async-split-style nil)
+
 (use-package consult
   :commands (consult-buffer
              consult-fd
@@ -430,7 +432,6 @@
              consult-isearch-history
              consult-line
              consult-line-multi
-             consult-preview-at-point-mode
              consult-recent-file
              consult-ripgrep
              consult-xref
@@ -466,12 +467,11 @@
       completions-max-height 14
       minibuffer-visible-completions nil)
 
-(setq-default minibuffer-completion-auto-choose t)
+(setq-default minibuffer-completion-auto-choose nil)
 
 (add-hook 'completion-list-mode-hook
           (lambda ()
             (setq-local window-min-height completions-max-height)))
-(add-hook 'completion-list-mode-hook #'consult-preview-at-point-mode)
 
 (keymap-set completion-in-region-mode-map "TAB"
             #'minibuffer-next-completion)
@@ -497,6 +497,7 @@
             #'minibuffer-next-completion)
 (keymap-set minibuffer-local-filename-completion-map "C-p"
             #'minibuffer-previous-completion)
+(keymap-set minibuffer-local-map "S-<return>" #'exit-minibuffer)
 
 (defun my/file-completion-at-point ()
   "Return file completion data for a path-like name at point."
@@ -541,8 +542,7 @@
   (let ((text (if (use-region-p)
                   (buffer-substring-no-properties
                    (region-beginning) (region-end))
-                (thing-at-point 'symbol t)))
-        (consult-async-split-style nil))
+                (thing-at-point 'symbol t))))
     (unless text
       (user-error "No region or symbol at point"))
     (deactivate-mark)
