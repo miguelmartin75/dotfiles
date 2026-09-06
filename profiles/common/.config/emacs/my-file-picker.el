@@ -1,5 +1,6 @@
 ;;; my-file-picker.el --- Toggle hierarchical and recursive file pickers -*- lexical-binding: t; -*-
 
+(require 'cl-lib)
 (require 'files)
 (require 'project)
 (require 'subr-x)
@@ -7,11 +8,15 @@
 
 (declare-function consult-fd "consult" (&optional dir initial))
 (declare-function consult-find "consult" (&optional dir initial))
+(declare-function counsel-fzf "counsel" (&optional initial-input initial-directory fzf-prompt))
+(declare-function counsel-fzf-action "counsel" (candidate))
+(declare-function evil-set-jump "evil-jumps" (&optional pos))
 
 (defvar consult-async-split-style)
 (defvar consult-async-split-styles-alist)
 (defvar consult-fd-args)
 (defvar consult-find-args)
+(defvar counsel-fzf-cmd)
 
 (defvar my/file-picker-transaction nil
   "Dynamically bound cell containing the selected file for one picker stack.")
@@ -32,6 +37,9 @@
   '("fd" "--full-path" "--color=never" "--hidden" "--no-ignore"
     "--follow" "--type" "f" "--exclude" ".git"))
 
+(defconst my/file-picker-local-fzf-command
+  (concat (string-join my/file-picker-local-fd-args " ") " | fzf -f \"%s\""))
+
 (defconst my/file-picker-remote-fd-args
   '("fd" "--full-path" "--color=never" "--hidden" "--no-ignore"
     "--type" "f" "--exclude" ".git"))
@@ -39,6 +47,12 @@
 (defconst my/file-picker-remote-find-args
   '("find" "." "-type" "d" "-name" ".git" "-prune" "-name" ""
     "-o" "-type" "f"))
+
+(defun my/file-picker-record-jump-after-visit (source-marker visited-buffer)
+  "Record SOURCE-MARKER after VISITED-BUFFER successfully changes buffers."
+  (when (and (buffer-live-p visited-buffer)
+             (not (eq (marker-buffer source-marker) visited-buffer)))
+    (evil-set-jump source-marker)))
 
 (defun my/file-picker-setup (kind root)
   "Configure the current minibuffer for KIND below ROOT."
@@ -185,25 +199,43 @@
 (defun my/find-file (&optional root initial)
   "Open a file hierarchically below ROOT with optional INITIAL leaf text."
   (interactive)
-  (let ((my/file-picker-transaction (list nil)))
-    (condition-case error-data
-        (find-file (my/file-picker-hierarchical-session
-                    (or root default-directory) initial))
-      (quit
-       (unless (car my/file-picker-transaction)
-         (signal (car error-data) (cdr error-data)))))))
+  (let ((my/file-picker-transaction (list nil))
+        (source-marker (point-marker))
+        result)
+    (unwind-protect
+        (progn
+          (condition-case error-data
+              (setq result
+                    (find-file (my/file-picker-hierarchical-session
+                                (or root default-directory) initial)))
+            (quit
+             (if (car my/file-picker-transaction)
+                 (setq result
+                       (get-file-buffer (car my/file-picker-transaction)))
+               (signal (car error-data) (cdr error-data)))))
+          (my/file-picker-record-jump-after-visit source-marker result)
+          result)
+      (set-marker source-marker nil))))
 
 (defun my/find-file-recursive (root &optional initial)
   "Recursively select and open a file below ROOT with optional INITIAL query."
-  (let ((my/file-picker-transaction (list nil)))
-    (condition-case error-data
-        (let ((buffer (my/file-picker-recursive-session root initial)))
-          (setcar my/file-picker-transaction (buffer-file-name buffer))
-          buffer)
-      (quit
-       (if (car my/file-picker-transaction)
-           (get-file-buffer (car my/file-picker-transaction))
-         (signal (car error-data) (cdr error-data)))))))
+  (let ((my/file-picker-transaction (list nil))
+        (source-marker (point-marker))
+        result)
+    (unwind-protect
+        (progn
+          (condition-case error-data
+              (let ((buffer (my/file-picker-recursive-session root initial)))
+                (setcar my/file-picker-transaction (buffer-file-name buffer))
+                (setq result buffer))
+            (quit
+             (if (car my/file-picker-transaction)
+                 (setq result
+                       (get-file-buffer (car my/file-picker-transaction)))
+               (signal (car error-data) (cdr error-data)))))
+          (my/file-picker-record-jump-after-visit source-marker result)
+          result)
+      (set-marker source-marker nil))))
 
 (defun my/find-file-recursive-root ()
   "Recursively search all files below the project or default directory."
@@ -212,20 +244,53 @@
     (my/find-file-recursive
      (if project (project-root project) default-directory))))
 
+(defun my/find-file-fzf-root ()
+  "Select a local project file with fzf or use Consult for remote roots."
+  (interactive)
+  (let* ((project (project-current))
+         (root (if project (project-root project) default-directory)))
+    (if (file-remote-p root)
+        (my/find-file-recursive root)
+      (unless (fboundp 'counsel-fzf-action)
+        (require 'counsel))
+      (unless (executable-find "fzf")
+        (user-error "Required program \"fzf\" not found in your path"))
+      (let ((source-marker (point-marker))
+            (counsel-fzf-cmd my/file-picker-local-fzf-command)
+            (action (symbol-function 'counsel-fzf-action)))
+        (unwind-protect
+            (cl-letf (((symbol-function 'counsel-fzf-action)
+                       (lambda (candidate)
+                         (let ((result (funcall action candidate)))
+                           (my/file-picker-record-jump-after-visit
+                            source-marker result)
+                           result))))
+              (counsel-fzf nil root))
+          (set-marker source-marker nil))))))
+
 (defun my/find-file-project ()
   "Select and open a project file with project picker toggle context."
   (interactive)
-  (let* ((project (project-current t))
-         (root (project-root project))
-         (project-read-file-name-function #'project--read-file-absolute)
-         (my/file-picker-transaction (list nil)))
-    (condition-case error-data
-        (minibuffer-with-setup-hook
-            (lambda () (my/file-picker-setup 'project root))
-          (project-find-file))
-      (quit
-       (unless (car my/file-picker-transaction)
-         (signal (car error-data) (cdr error-data)))))))
+  (let ((source-marker (point-marker)))
+    (unwind-protect
+        (let* ((project (project-current t))
+               (root (project-root project))
+               (project-read-file-name-function #'project--read-file-absolute)
+               (my/file-picker-transaction (list nil))
+               result)
+          (condition-case error-data
+              (setq result
+                    (minibuffer-with-setup-hook
+                        (lambda () (my/file-picker-setup 'project root))
+                      (project-find-file)))
+            (quit
+             (if (car my/file-picker-transaction)
+                 (setq result
+                       (get-file-buffer (car my/file-picker-transaction)))
+               (signal (car error-data) (cdr error-data)))))
+          (my/file-picker-record-jump-after-visit source-marker result)
+          result)
+      (set-marker source-marker nil))))
 
 (defun my/find-file-recursive-current-directory ()
   "Recursively search all files below the current file's directory."

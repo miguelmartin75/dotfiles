@@ -54,6 +54,7 @@
                (seq-remove
                 #'package-installed-p
                 '(consult                ; live search, previews, and Xref display
+                  counsel                ; local fzf-ranked C-p file picker
                   dape                   ; explicit DAP launch and attach
                   embark                 ; contextual candidate actions and export
                   embark-consult         ; specialized Consult candidate exports
@@ -67,6 +68,7 @@
                   exec-path-from-shell   ; GUI shell PATH import
                   gptel                  ; explicit AI conversations and edits
                   gscholar-bibtex        ; bibliography discovery
+                  ivy                    ; Counsel minibuffer framework, invoked locally only
                   load-env-vars          ; personal secrets/environment files
                   magit                  ; Git status and review workflow
                   markdown-mode          ; Markdown fallback and prose editing

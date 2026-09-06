@@ -2,15 +2,15 @@
 
 ## Status
 
-- Overall: in progress, 1/6 phases complete
-- Current phase: Phase 2
+- Overall: in progress, 2/6 phases complete
+- Current phase: Phase 3
 - Commit policy: one new Git commit after each accepted phase
 
 Phase status:
 
 - Phase 1: complete
-- Phase 2: in progress
-- Phase 3: pending
+- Phase 2: complete
+- Phase 3: in progress
 - Phase 4: pending
 - Phase 5: pending
 - Phase 6: pending
@@ -141,6 +141,18 @@ focused ERT 2/2, `check-parens`, and `git diff --check`.
 - Remote C-p keeps the existing safe Consult and TRAMP behavior.
 - C-x C-f, C-p, project-file selection, and picker toggles add an Evil jump
   only after a file is accepted; C-o returns to the exact source location.
+
+### Implementation Status
+
+Completed 2026-09-06. Local `C-p` invokes Counsel fzf with the retained
+all-files `fd` universe, while remote roots retain the existing Consult path.
+The picker records the caller marker only for successful cross-buffer visits,
+including nested picker transactions. Focused coverage verifies local and
+remote routing, command construction, canceled and same-buffer fzf actions,
+and accepted hierarchical, recursive, and project visits. A real Evil jump
+integration test verifies C-o returns to the exact source point and a canceled
+visit leaves an isolated jump ring empty. Validation: `my-file-picker-test.el`
+12/12, `check-parens`, and `git diff --check`.
 
 ## Phase 3: Restore Markdown Nested-List Editing
 

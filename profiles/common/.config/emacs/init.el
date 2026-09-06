@@ -442,6 +442,9 @@
         xref-show-definitions-function #'consult-xref
         consult-buffer-sources '(consult--source-buffer)))
 
+(use-package counsel
+  :commands counsel-fzf)
+
 (use-package embark
   :commands embark-act
   :bind ("C-c ." . embark-act))
@@ -1959,7 +1962,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (evil-define-key 'visual magit-mode-map (kbd "SPC") my/visual-leader-map)
 
 (evil-define-key '(normal visual) 'global
-  (kbd "C-p") #'my/find-file-recursive-root)
+  (kbd "C-p") #'my/find-file-fzf-root)
 (evil-define-key 'visual 'global
   (kbd "C-c C-c") #'my/send-region-or-buffer)
 (evil-define-key 'visual 'global
