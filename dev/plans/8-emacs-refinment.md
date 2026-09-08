@@ -2,8 +2,8 @@
 
 ## Status
 
-- Overall: in progress, 3/6 phases complete
-- Current phase: Phase 4
+- Overall: in progress, 4/6 phases complete
+- Current phase: Phase 5
 - Commit policy: one new Git commit after each accepted phase
 
 Phase status:
@@ -11,7 +11,7 @@ Phase status:
 - Phase 1: complete
 - Phase 2: complete
 - Phase 3: complete
-- Phase 4: pending
+- Phase 4: complete
 - Phase 5: pending
 - Phase 6: pending
 
@@ -212,6 +212,18 @@ normal and visual Evil jump bindings, tables, and fenced code. Validation:
 - Shell-mode, Babel, and DAPE remain intentionally line-oriented; no global
   terminal replacement occurs.
 - `SPC f y` copies a visited file's absolute path.
+
+### Implementation Status
+
+Completed 2026-09-08. Cmd+J now reuses a live Ghostel target keyed by the raw
+`default-directory`, creates stale or missing targets in the existing
+right-side split, selects the terminal, and records it as the current send
+target without touching tab-local layout state. Cmd+A applies the existing
+task-scoped agent layout and selects its rendered agent companion. Both keys
+are explicit in global, Ghostel semi-char, and Ghostel char maps, and
+`SPC f y` invokes the existing absolute path copier. Validation:
+`send-text-targets-test.el` 6/6, `window-layouts-test.el` 15/15,
+`leader-bindings-test.el` 9/9, `check-parens`, and `git diff --check`.
 
 ## Phase 5: Align Writing Typography and Prose Colors
 

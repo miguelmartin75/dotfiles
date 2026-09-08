@@ -728,6 +728,18 @@ Dired before it changes root or clears layout-only runtime state."
   (interactive "P")
   (my/layout-apply 'agent force))
 
+(defun my/work-codex-and-select-agent (&optional force)
+  "Open the coding-agent layout and select its rendered companion.
+
+FORCE has the same reselection semantics as `my/work-codex'."
+  (interactive "P")
+  (my/work-codex force)
+  (let* ((companion (my/layout-cached-companion 'agent))
+         (window (and companion (get-buffer-window companion))))
+    (unless window
+      (user-error "Coding-agent companion is not visible"))
+    (select-window window)))
+
 (provide 'my-window-layouts)
 
 ;;; my-window-layouts.el ends here

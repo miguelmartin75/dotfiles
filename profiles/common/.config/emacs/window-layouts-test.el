@@ -423,6 +423,49 @@
                   (kill-buffer buffer)))
               (list native terminal))))))
 
+(ert-deftest my/work-codex-and-select-agent-renders-reuses-and-selects-task-companion ()
+  (my/layout-test-with-tabs
+    (my/layout-test-with-window
+      (let* ((root "/tmp/layout-select-agent/")
+             (edit (my/layout-test-buffer " *select-agent-edit*" root))
+             (agent (my/layout-test-buffer " *select-agent-companion*" root))
+             (task (list :id "select-agent-task" :root root))
+             (my/window-layouts
+              '((agent :key "A" :label "Agent"
+                       :buffer-function my/layout-agent-buffer
+                       :session my/layout-agent-session-name
+                       :command ("codex"))))
+             opened-targets)
+        (unwind-protect
+            (cl-letf (((symbol-function 'my/workflow-current-task)
+                       (lambda () task))
+                      ((symbol-function 'term-sessions-open)
+                       (lambda (target _command)
+                         (push target opened-targets)
+                         agent)))
+              (switch-to-buffer edit)
+              (my/tab-set-current-property 'my/workspace-root root)
+              (my/tab-set-current-property 'my/layout-edit-buffer edit)
+              (my/work-codex-and-select-agent)
+              (should (eq (window-buffer (selected-window)) agent))
+              (should (eq (my/layout-cached-companion 'agent) agent))
+              (should (equal (my/tab-current-property 'my/layout-agent-task-id)
+                             "select-agent-task"))
+              (should (eq (my/tab-current-property 'my/layout-agent-backend)
+                          'terminal-agent))
+              (should (equal (plist-get (car opened-targets) :name)
+                             (my/layout-agent-session-name 'agent root)))
+              (my/work-codex-and-select-agent)
+              (should (eq (window-buffer (selected-window)) agent))
+              (should (= (length opened-targets) 1))
+              (my/work-codex-and-select-agent t)
+              (should (eq (window-buffer (selected-window)) agent))
+              (should (= (length opened-targets) 2)))
+          (mapc (lambda (buffer)
+                  (when (buffer-live-p buffer)
+                    (kill-buffer buffer)))
+                (list edit agent)))))))
+
 (ert-deftest my/layout-ghostel-terminal-targets-reuse-and-synchronize-send-target ()
   (my/layout-test-with-tabs
     (my/layout-test-with-window

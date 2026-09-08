@@ -35,6 +35,87 @@
   (ignore tabs)
   (my/tab-current-property 'my/send-text-last-target))
 
+(ert-deftest my/open-cwd-terminal-reuses-exact-live-targets ()
+  (let ((tabs (list '(current-tab (name . "cwd-terminals"))))
+        (directory-a "/tmp/cwd-terminal-a/")
+        (directory-b "/tmp/cwd-terminal-a/./")
+        (source-a (generate-new-buffer " *cwd-terminal-source-a*"))
+        (source-b (generate-new-buffer " *cwd-terminal-source-b*"))
+        (terminal-a (generate-new-buffer " *cwd-terminal-a*"))
+        (terminal-b (generate-new-buffer " *cwd-terminal-b*"))
+        (replacement-a (generate-new-buffer " *cwd-terminal-replacement-a*"))
+        (my/cwd-terminal-targets nil)
+        (process-a 'cwd-terminal-a-process)
+        (process-b 'cwd-terminal-b-process)
+        (replacement-process 'cwd-terminal-replacement-a-process)
+        associations
+        live-processes
+        ghostel-buffers
+        creations)
+    (unwind-protect
+        (my/send-text-test-with-tabs tabs
+          (setq associations (list (cons terminal-a process-a)
+                                   (cons terminal-b process-b)
+                                   (cons replacement-a replacement-process))
+                live-processes (list process-a process-b replacement-process))
+          (let ((real-require (symbol-function 'require))
+                (creation-buffers (list terminal-a terminal-b replacement-a)))
+            (cl-letf (((symbol-function 'require)
+                       (lambda (feature &optional filename noerror)
+                         (if (eq feature 'ghostel)
+                             feature
+                           (funcall real-require feature filename noerror))))
+                      ((symbol-function 'ghostel-buffer-list)
+                       (lambda () ghostel-buffers))
+                      ((symbol-function 'get-buffer-process)
+                       (lambda (buffer)
+                         (alist-get buffer associations nil nil #'eq)))
+                      ((symbol-function 'process-live-p)
+                       (lambda (process)
+                         (memq process live-processes)))
+                      ((symbol-function 'ghostel-create)
+                       (lambda (name action)
+                         (let ((buffer (pop creation-buffers)))
+                           (push (list name action default-directory buffer) creations)
+                           (push buffer ghostel-buffers)
+                           buffer))))
+              (with-current-buffer source-a
+                (let ((default-directory directory-a))
+                  (my/open-cwd-terminal)))
+              (with-current-buffer source-a
+                (let ((default-directory directory-a))
+                  (my/open-cwd-terminal)))
+              (with-current-buffer source-b
+                (let ((default-directory directory-b))
+                  (my/open-cwd-terminal)))
+              (with-current-buffer source-b
+                (let ((default-directory directory-b))
+                  (my/open-cwd-terminal)))
+              (setq live-processes (delq process-a live-processes))
+              (with-current-buffer source-a
+                (let ((default-directory directory-a))
+                  (my/open-cwd-terminal)))
+              (should (equal (nreverse creations)
+                             (list (list nil my/right-split-action directory-a terminal-a)
+                                   (list nil my/right-split-action directory-b terminal-b)
+                                   (list nil my/right-split-action directory-a replacement-a))))
+              (should (equal (alist-get directory-a my/cwd-terminal-targets nil nil #'equal)
+                             (list :type 'ghostel
+                                   :buffer replacement-a
+                                   :process (get-buffer-process replacement-a))))
+              (should (equal (alist-get directory-b my/cwd-terminal-targets nil nil #'equal)
+                             (list :type 'ghostel
+                                   :buffer terminal-b
+                                   :process (get-buffer-process terminal-b))))
+              (should (eq (window-buffer (selected-window)) replacement-a))
+              (should (equal (my/send-text-test-current-target tabs)
+                             (list :type 'ghostel
+                                   :buffer replacement-a
+                                   :process (get-buffer-process replacement-a)))))))
+      (dolist (buffer (list source-a source-b terminal-a terminal-b replacement-a))
+        (when (buffer-live-p buffer)
+          (kill-buffer buffer))))))
+
 (ert-deftest my/send-text-source-annotations-and-bindings ()
   (let* ((buffers (list (generate-new-buffer " *send-text-file*" )
                         (generate-new-buffer " *send-text-scratch*")

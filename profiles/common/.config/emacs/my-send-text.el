@@ -40,6 +40,28 @@
          (eq process (get-buffer-process buffer))
          (process-live-p process))))
 
+(defvar my/cwd-terminal-targets nil
+  "Ghostel target descriptors cached by exact raw `default-directory' values.")
+
+(defun my/open-cwd-terminal ()
+  "Display the live Ghostel terminal for the exact current directory."
+  (interactive)
+  (require 'ghostel)
+  (let* ((directory default-directory)
+         (target (alist-get directory my/cwd-terminal-targets nil nil #'equal)))
+    (unless (my/ghostel-target-live-p target)
+      (let ((default-directory directory)
+            (buffer (ghostel-create nil my/right-split-action)))
+        (setq target (list :type 'ghostel
+                           :buffer buffer
+                           :process (get-buffer-process buffer)))
+        (unless (my/ghostel-target-live-p target)
+          (user-error "Created Ghostel buffer cannot accept input"))
+        (setf (alist-get directory my/cwd-terminal-targets nil nil #'equal)
+              target)))
+    (pop-to-buffer (plist-get target :buffer))
+    (my/send-text-save-last-target target)))
+
 (defun my/send-text-deliver (target text replay)
   "Deliver TEXT to TARGET, clearing stale object targets during REPLAY."
   (pcase (plist-get target :type)

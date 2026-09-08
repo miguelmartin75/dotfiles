@@ -162,6 +162,31 @@
   (should (eq (lookup-key evil-visual-state-map (kbd "C-c C-r"))
               #'my/send-region-or-buffer-to-last-target)))
 
+(ert-deftest my/leader-bindings-terminal-entry-points-and-file-path-copy ()
+  (with-temp-buffer
+    (fundamental-mode)
+    (should (eq (key-binding (kbd "s-j")) #'my/open-cwd-terminal))
+    (should (eq (key-binding (kbd "s-a"))
+                #'my/work-codex-and-select-agent)))
+  (dolist (map (list ghostel-semi-char-mode-map ghostel-char-mode-map))
+    (should (eq (keymap-lookup map "s-j") #'my/open-cwd-terminal))
+    (should (eq (keymap-lookup map "s-a")
+                #'my/work-codex-and-select-agent)))
+  (let ((file (make-temp-file "leader-path-copy-"))
+        (kill-ring nil)
+        (kill-ring-yank-pointer nil))
+    (unwind-protect
+        (let ((buffer (find-file-noselect file)))
+          (unwind-protect
+              (with-current-buffer buffer
+                (evil-normal-state)
+                (let ((command (key-binding (kbd "SPC f y"))))
+                  (should (eq command #'copy-current-file-path))
+                  (call-interactively command)
+                  (should (equal (current-kill 0) file))))
+            (kill-buffer buffer)))
+      (delete-file file))))
+
 (ert-deftest my/leader-bindings-workflow-commands ()
   (with-temp-buffer
     (dolist (state '(evil-normal-state evil-visual-state))
