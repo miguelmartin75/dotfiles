@@ -2,7 +2,7 @@
 
 ## Status
 
-- Overall: complete, 6/6 phases and 1/1 follow-ups complete
+- Overall: complete, 6/6 phases and 2/2 follow-ups complete
 - Current milestone: none
 - Commit policy: one new Git commit after each accepted phase or follow-up
 
@@ -52,9 +52,10 @@ the requested scope, and render readable scaled and colored prose.
    the requested fzf ranking. Declare Ivy and Counsel in the provisioner, but
    invoke Ivy only inside that command. Remote C-p continues to use the
    existing Consult file picker.
-3. Preserve the current all-files discovery policy for local C-p: `fd` lists
-   regular files, includes hidden and ignored paths, follows links, and omits
-   `.git`. Keep `SPC f F` bound to the existing Consult all-files picker.
+3. Preserve the configurable all-files discovery policy for local C-p: `fd`
+   lists regular files, can include hidden and ignored paths, optionally
+   follows links, and omits `.git`. Keep `SPC f F` bound to the existing
+   Consult all-files picker.
 4. Keep normal and visual Markdown `TAB` and `C-i` as Evil forward jump. Add
    list indentation only in Markdown insert state. Preserve native table and
    code-block keymaps through their higher-priority context maps.
@@ -348,3 +349,57 @@ the public project name or normalized directory basename in
 `*ghostel: NAME*`. Validation: send-target ERT 6/6, integration smoke ERT 6/6,
 leader-binding ERT 9/9, config batch load, `check-parens`, and
 `git diff --check`. Final combined review completed with no findings.
+
+## Follow-up: Persistent fzf Settings and Collect
+
+- ID: `fzf-transient-settings`
+- Owner: `8-emacs-refinment`
+- Status: complete
+
+### Context
+
+The fixed local fzf command always includes ignored files and follows links.
+In repositories containing large ignored trees or recursive project symlinks,
+the repeated Counsel pipeline can become too slow to use. The picker also lacks
+a discoverable way to change and retain its search scope or collect narrowed
+results into a persistent quickfix-style buffer.
+
+### Changes
+
+1. Make C-p run fzf immediately with the saved Transient arguments, falling
+   back to project root, hidden and ignored files, and no symlink following.
+2. Bind graphical C-S-p and portable `SPC f p` to a Transient menu for root,
+   hidden-file, ignored-file, and symlink-following settings. RET saves the
+   selected arguments and runs the picker; cancellation leaves saved settings
+   unchanged, and Transient's standard reset restores code defaults.
+3. Build the local `fd | fzf` command only from the menu's recognized fixed
+   arguments. Keep the existing remote Consult route and Evil jump recording.
+4. Bind C-q only in the active Counsel fzf minibuffer to `embark-collect`.
+   Classify collected fzf candidates as root-relative files and make RET in the
+   resulting Collect buffer visit the selected file. Do not replace global
+   `quoted-insert` or bind collect in the settings menu before candidates exist.
+5. Extend focused and integration ERT coverage without desktop automation.
+
+### Success Criteria
+
+- C-p immediately uses the last saved settings across Emacs sessions.
+- The default local search cannot enter recursive symlink trees.
+- C-S-p and `SPC f p` expose and persist the four supported settings.
+- C-g leaves the prior saved settings intact and standard Transient reset
+  restores the code defaults.
+- C-q in an active fzf picker creates a file-aware Embark Collect snapshot;
+  RET visits paths relative to the selected picker root.
+- Remote C-p, Evil jump recording, native completion C-p, and ordinary C-q
+  behavior remain unchanged.
+
+### Implementation Status
+
+Implementation and validation completed 2026-09-08. C-p reads the current,
+saved, or default Transient arguments and runs immediately; C-S-p and
+`SPC f p` open the persistent settings menu. The safe code default does not
+follow symlinks. Counsel fzf owns a C-q-only minibuffer map, and its Embark
+collector produces root-relative file targets whose default action visits the
+file. Validation: file-picker ERT 13/13, integration smoke ERT 6/6,
+leader-binding ERT 9/9, appearance ERT 13/13, real default pipeline, config
+batch load, `check-parens`, and `git diff --check`. Final combined review
+completed with no findings.

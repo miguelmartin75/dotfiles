@@ -26,14 +26,24 @@
   (let ((directory (file-name-as-directory
                     (make-temp-file "my-gui-smoke-search-" t)))
         (buffer (generate-new-buffer " *gui-smoke-search*"))
+        (transient-values nil)
         fzf-prompt fzf-directory fzf-initial fzf-command
+        menu-calls
         grep-prompt grep-initial)
     (unwind-protect
         (save-window-excursion
           (with-current-buffer buffer
             (setq default-directory directory)
             (evil-normal-state)
-            (should (eq (key-binding (kbd "C-p")) #'my/find-file-fzf-root))
+            (dolist (state '(evil-normal-state evil-visual-state))
+              (funcall state)
+              (should (eq (key-binding (kbd "C-p"))
+                          #'my/find-file-fzf-root))
+              (should (eq (key-binding (kbd "C-S-p"))
+                          #'my/file-picker-fzf-menu))
+              (should (eq (key-binding (kbd "SPC f p"))
+                          #'my/file-picker-fzf-menu)))
+            (evil-normal-state)
             (should (eq (key-binding (kbd "SPC s g")) #'consult-ripgrep))
             (let ((real-executable-find (symbol-function 'executable-find))
                   (counsel--fzf-dir nil))
@@ -53,7 +63,16 @@
             (should (string-match-p "fzf" fzf-prompt))
             (should (equal fzf-directory directory))
             (should-not fzf-initial)
-            (should (equal fzf-command my/file-picker-local-fzf-command))
+            (should (equal fzf-command
+                           (my/file-picker-fzf-command
+                            my/file-picker-fzf-default-args)))
+            (cl-letf (((symbol-function 'my/file-picker-fzf-menu)
+                       (lambda ()
+                         (interactive)
+                         (setq menu-calls (1+ (or menu-calls 0))))))
+              (call-interactively (key-binding (kbd "C-S-p")))
+              (call-interactively (key-binding (kbd "SPC f p"))))
+            (should (= menu-calls 2))
             (cl-letf (((symbol-function 'consult--read)
                        (lambda (_collection &rest arguments)
                          (setq grep-prompt (plist-get arguments :prompt)

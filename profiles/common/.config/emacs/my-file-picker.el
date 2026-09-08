@@ -5,18 +5,27 @@
 (require 'project)
 (require 'subr-x)
 (require 'tramp)
+(require 'transient)
 
 (declare-function consult-fd "consult" (&optional dir initial))
 (declare-function consult-find "consult" (&optional dir initial))
 (declare-function counsel-fzf "counsel" (&optional initial-input initial-directory fzf-prompt))
 (declare-function counsel-fzf-action "counsel" (candidate))
+(declare-function embark-collect "embark" ())
 (declare-function evil-set-jump "evil-jumps" (&optional pos))
+(declare-function ivy-state-caller "ivy" (state))
 
 (defvar consult-async-split-style)
 (defvar consult-async-split-styles-alist)
 (defvar consult-fd-args)
 (defvar consult-find-args)
 (defvar counsel-fzf-cmd)
+(defvar counsel--fzf-dir nil)
+(defvar embark-candidate-collectors)
+(defvar embark-default-action-overrides)
+(defvar ivy-hooks-alist)
+(defvar ivy-last)
+(defvar ivy--old-cands)
 
 (defvar my/file-picker-transaction nil
   "Dynamically bound cell containing the selected file for one picker stack.")
@@ -33,12 +42,21 @@
     map)
   "Keymap added locally to active file picker minibuffers.")
 
+(defvar my/file-picker-fzf-local-map
+  (let ((map (make-sparse-keymap)))
+    (keymap-set map "C-q" #'embark-collect)
+    map)
+  "Keymap added locally to active Counsel fzf minibuffers.")
+
 (defconst my/file-picker-local-fd-args
   '("fd" "--full-path" "--color=never" "--hidden" "--no-ignore"
     "--follow" "--type" "f" "--exclude" ".git"))
 
-(defconst my/file-picker-local-fzf-command
-  (concat (string-join my/file-picker-local-fd-args " ") " | fzf -f \"%s\""))
+(defconst my/file-picker-fzf-fd-args
+  '("fd" "--full-path" "--color=never" "--type" "f" "--exclude" ".git"))
+
+(defconst my/file-picker-fzf-default-args
+  '("--root=project" "--hidden" "--no-ignore"))
 
 (defconst my/file-picker-remote-fd-args
   '("fd" "--full-path" "--color=never" "--hidden" "--no-ignore"
@@ -60,6 +78,32 @@
               my/file-picker-root root)
   (use-local-map
    (make-composed-keymap my/file-picker-minibuffer-map (current-local-map))))
+
+(defun my/file-picker-fzf-setup ()
+  "Configure the active Counsel fzf minibuffer for file collection."
+  (setq-local default-directory counsel--fzf-dir)
+  (use-local-map
+   (make-composed-keymap my/file-picker-fzf-local-map (current-local-map))))
+
+(defun my/file-picker-fzf-candidates ()
+  "Return file candidates during an active Counsel fzf Ivy session."
+  (when (and (minibufferp)
+             (memq 'ivy--queue-exhibit post-command-hook)
+             (boundp 'ivy-last)
+             (fboundp 'ivy-state-caller)
+             (eq (ivy-state-caller ivy-last) 'counsel-fzf))
+    (cons 'file ivy--old-cands)))
+
+(with-eval-after-load 'ivy
+  (add-to-list 'ivy-hooks-alist
+               '(counsel-fzf . my/file-picker-fzf-setup)))
+
+(with-eval-after-load 'embark
+  (add-hook 'embark-candidate-collectors
+            #'my/file-picker-fzf-candidates
+            -100)
+  (add-to-list 'embark-default-action-overrides
+               '((file . my/find-file-fzf-root) . find-file)))
 
 (defun my/file-picker-literal-query (query)
   "Return QUERY as literal filename text, or nil when it has Consult syntax."
@@ -244,11 +288,23 @@
     (my/find-file-recursive
      (if project (project-root project) default-directory))))
 
+(defun my/file-picker-fzf-command (args)
+  "Build the local fd and fzf command from recognized Transient ARGS."
+  (let ((fd-args (copy-sequence my/file-picker-fzf-fd-args)))
+    (dolist (arg '("--hidden" "--no-ignore" "--follow"))
+      (when (member arg args)
+        (setq fd-args (append fd-args (list arg)))))
+    (concat (string-join fd-args " ") " | fzf -f \"%s\"")))
+
 (defun my/find-file-fzf-root ()
   "Select a local project file with fzf or use Consult for remote roots."
   (interactive)
-  (let* ((project (project-current))
-         (root (if project (project-root project) default-directory)))
+  (let* ((args (transient-args 'my/file-picker-fzf-menu))
+         (root (if (string-equal (transient-arg-value "--root=" args)
+                                 "directory")
+                 default-directory
+                 (let ((project (project-current)))
+                   (if project (project-root project) default-directory)))))
     (if (file-remote-p root)
         (my/find-file-recursive root)
       (unless (fboundp 'counsel-fzf-action)
@@ -256,7 +312,8 @@
       (unless (executable-find "fzf")
         (user-error "Required program \"fzf\" not found in your path"))
       (let ((source-marker (point-marker))
-            (counsel-fzf-cmd my/file-picker-local-fzf-command)
+            (default-directory root)
+            (counsel-fzf-cmd (my/file-picker-fzf-command args))
             (action (symbol-function 'counsel-fzf-action)))
         (unwind-protect
             (cl-letf (((symbol-function 'counsel-fzf-action)
@@ -267,6 +324,21 @@
                            result))))
               (counsel-fzf nil root))
           (set-marker source-marker nil))))))
+
+(transient-define-prefix my/file-picker-fzf-menu ()
+  "Configure the local fzf file picker."
+  :value my/file-picker-fzf-default-args
+  :remember-value '(export save)
+  [["Scope"
+    ("r" "Root" "--root="
+     :choices '("project" "directory")
+     :always-read t)]
+   ["Files"
+    ("h" "Include hidden files" "--hidden")
+    ("i" "Include ignored files" "--no-ignore")
+    ("f" "Follow symlinks" "--follow")]
+   ["Actions"
+    ("RET" "Find file" my/find-file-fzf-root)]])
 
 (defun my/find-file-project ()
   "Select and open a project file with project picker toggle context."

@@ -387,16 +387,20 @@
             (should-not (member "./linked/through-link" files))))
       (delete-directory root t))))
 
-(ert-deftest my/file-picker-fzf-routes-local-roots-and-keeps-remote-consult ()
-  (let ((local-root "/tmp/fzf-root/")
+(ert-deftest my/file-picker-fzf-transient-args-control-root-and-command ()
+  (let ((project-root "/tmp/fzf-project/")
+        (directory-root "/tmp/fzf-directory/")
         (remote-root "/sshx:user@host:/repo/")
-        local-call
+        (default-directory "/tmp/fzf-directory/")
+        (transient-values nil)
+        project
+        local-calls
         remote-call)
     (cl-letf (((symbol-function 'project-current)
-               (lambda (&optional _maybe-prompt _directory) 'project))
+               (lambda (&optional _maybe-prompt _directory) project))
               ((symbol-function 'project-root)
-               (lambda (project)
-                 (if (eq project 'remote) remote-root local-root)))
+               (lambda (value)
+                 (if (eq value 'remote) remote-root project-root)))
               ((symbol-function 'file-remote-p)
                (lambda (file &optional _identification _connected)
                  (and (string-prefix-p "/sshx:" file) "/sshx:user@host:")))
@@ -404,24 +408,110 @@
                (lambda (_command &optional _remote) "/opt/homebrew/bin/fzf"))
               ((symbol-function 'counsel-fzf)
                (lambda (initial directory &optional prompt)
-                 (setq local-call
-                       (list initial directory prompt counsel-fzf-cmd))))
+                 (push (list initial directory prompt default-directory
+                             counsel-fzf-cmd)
+                       local-calls)))
               ((symbol-function 'counsel-fzf-action)
                (lambda (&rest _ignored) nil))
               ((symbol-function 'my/find-file-recursive)
                (lambda (root)
                  (setq remote-call root))))
+      (setq project 'project)
+      (should (equal (sort (copy-sequence
+                            (transient-args 'my/file-picker-fzf-menu))
+                           #'string<)
+                     (sort (copy-sequence my/file-picker-fzf-default-args)
+                           #'string<)))
       (my/find-file-fzf-root)
-      (should (equal local-call
-                     (list nil local-root nil
-                           my/file-picker-local-fzf-command)))
-      (should (equal my/file-picker-local-fzf-command
-                     (concat (string-join my/file-picker-local-fd-args " ")
-                             " | fzf -f \"%s\"")))
-      (cl-letf (((symbol-function 'project-current)
-                 (lambda (&optional _maybe-prompt _directory) 'remote)))
-        (my/find-file-fzf-root))
+      (should (equal (car local-calls)
+                     (list nil project-root nil project-root
+                           (my/file-picker-fzf-command
+                            my/file-picker-fzf-default-args))))
+      (should-not (string-match-p "--follow" (car (last (car local-calls)))))
+      (setf (alist-get 'my/file-picker-fzf-menu transient-values)
+            '("--root=directory" "--follow"))
+      (should (equal (sort (copy-sequence
+                            (transient-args 'my/file-picker-fzf-menu))
+                           #'string<)
+                     '("--follow" "--root=directory")))
+      (my/find-file-fzf-root)
+      (should (equal (car local-calls)
+                     (list nil directory-root nil directory-root
+                           (my/file-picker-fzf-command
+                            '("--root=directory" "--follow")))))
+      (let ((suffixes (transient-suffixes 'my/file-picker-fzf-menu)))
+        (dolist (suffix suffixes)
+          (when (cl-typep suffix 'transient-argument)
+            (pcase (oref suffix argument)
+              ("--root=" (oset suffix value "project"))
+              ("--hidden" (oset suffix value "--hidden"))
+              ("--no-ignore" (oset suffix value "--no-ignore"))
+              ("--follow" (oset suffix value "--follow")))))
+        (let ((transient-current-command 'my/file-picker-fzf-menu)
+              (transient-current-suffixes suffixes))
+          (should (equal (sort (copy-sequence
+                                (transient-args 'my/file-picker-fzf-menu))
+                               #'string<)
+                         '("--follow" "--hidden" "--no-ignore"
+                           "--root=project")))
+          (my/find-file-fzf-root)))
+      (should (equal (car local-calls)
+                     (list nil project-root nil project-root
+                           (my/file-picker-fzf-command
+                            '("--root=project" "--hidden" "--no-ignore"
+                              "--follow")))))
+      (should-not (string-match-p
+                   "--unexpected"
+                   (my/file-picker-fzf-command
+                    '("--root=project" "--unexpected"))))
+      (setq project 'remote)
+      (setf (alist-get 'my/file-picker-fzf-menu transient-values)
+            '("--root=project"))
+      (my/find-file-fzf-root)
       (should (string-equal remote-call remote-root)))))
+
+(ert-deftest my/file-picker-fzf-collects-files-with-a-local-c-q-map ()
+  (require 'package)
+  (package-initialize)
+  (require 'ivy)
+  (require 'embark)
+  (let ((root "/tmp/fzf-collect-root/")
+        (global-c-q (keymap-lookup (current-global-map) "C-q")))
+    (should (eq (alist-get 'counsel-fzf ivy-hooks-alist)
+                #'my/file-picker-fzf-setup))
+    (should (eq (car embark-candidate-collectors)
+                #'my/file-picker-fzf-candidates))
+    (with-temp-buffer
+      (let ((counsel--fzf-dir root))
+        (my/file-picker-fzf-setup))
+      (should (string-equal default-directory root))
+      (should (eq (keymap-lookup (current-local-map) "C-q")
+                  #'embark-collect))
+      (should (eq (keymap-lookup (current-global-map) "C-q") global-c-q))
+      (let ((ivy-last (make-ivy-state :caller 'counsel-fzf))
+            (ivy--old-cands '("src/one.el" "README.md"))
+            (embark-candidate-collectors
+             '(my/file-picker-fzf-candidates))
+            (post-command-hook '(ivy--queue-exhibit)))
+        (cl-letf (((symbol-function 'minibufferp) (lambda (&rest _ignored) t)))
+          (should (equal (my/file-picker-fzf-candidates)
+                         '(file "src/one.el" "README.md")))
+          (should (equal (plist-get (embark--maybe-transform-candidates)
+                                    :candidates)
+                         (list (expand-file-name "src/one.el" root)
+                               (expand-file-name "README.md" root)))))))
+      (let ((ivy-last (make-ivy-state :caller 'counsel-fzf))
+            (ivy--old-cands '("stale.el"))
+            (post-command-hook nil))
+        (cl-letf (((symbol-function 'minibufferp) (lambda (&rest _ignored) t)))
+          (should-not (my/file-picker-fzf-candidates))))
+      (let ((ivy-last (make-ivy-state :caller 'other-command))
+            (ivy--old-cands '("src/one.el"))
+            (post-command-hook '(ivy--queue-exhibit)))
+        (cl-letf (((symbol-function 'minibufferp) (lambda (&rest _ignored) t)))
+          (should-not (my/file-picker-fzf-candidates))))
+    (let ((embark--command 'my/find-file-fzf-root))
+      (should (eq (embark--default-action 'file) #'find-file)))))
 
 (ert-deftest my/file-picker-fzf-records-only-accepted-cross-buffer-visits ()
   (let ((source (generate-new-buffer " *my-file-picker-source*"))
