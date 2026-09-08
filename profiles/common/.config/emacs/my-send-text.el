@@ -8,6 +8,7 @@
 
 (require 'cl-lib)
 (require 'my-workflow)
+(require 'project)
 (require 'subr-x)
 
 (declare-function ghostel-buffer-list "ghostel")
@@ -44,22 +45,47 @@
   "Ghostel target descriptors cached by exact raw `default-directory' values.")
 
 (defun my/open-cwd-terminal ()
-  "Display the live Ghostel terminal for the exact current directory."
+  "Toggle the live Ghostel terminal for the exact current directory."
   (interactive)
   (require 'ghostel)
-  (let* ((directory default-directory)
-         (target (alist-get directory my/cwd-terminal-targets nil nil #'equal)))
-    (unless (my/ghostel-target-live-p target)
-      (let ((default-directory directory)
-            (buffer (ghostel-create nil my/right-split-action)))
-        (setq target (list :type 'ghostel
-                           :buffer buffer
-                           :process (get-buffer-process buffer)))
-        (unless (my/ghostel-target-live-p target)
-          (user-error "Created Ghostel buffer cannot accept input"))
-        (setf (alist-get directory my/cwd-terminal-targets nil nil #'equal)
-              target)))
-    (pop-to-buffer (plist-get target :buffer))
+  (let* ((entry
+          (cl-find-if
+           (lambda (candidate)
+             (eq (plist-get (cdr candidate) :buffer) (current-buffer)))
+           my/cwd-terminal-targets))
+         (directory (if entry (car entry) default-directory))
+         (target (if entry
+                     (cdr entry)
+                   (alist-get directory my/cwd-terminal-targets nil nil #'equal)))
+         (live (my/ghostel-target-live-p target))
+         (window (and live
+                      (get-buffer-window (plist-get target :buffer)
+                                         (selected-frame)))))
+    (if window
+        (quit-window nil window)
+      (unless live
+        (let* ((project (project-current nil directory))
+               (directory-name
+                (file-name-nondirectory
+                 (directory-file-name (expand-file-name directory))))
+               (name (if project
+                         (project-name project)
+                       (if (string-empty-p directory-name)
+                           (abbreviate-file-name
+                            (directory-file-name (expand-file-name directory)))
+                         directory-name)))
+               (default-directory directory)
+               (buffer
+                (ghostel-create (format "*ghostel: %s*" name)
+                                my/right-split-action)))
+          (setq target (list :type 'ghostel
+                             :buffer buffer
+                             :process (get-buffer-process buffer)))
+          (unless (my/ghostel-target-live-p target)
+            (user-error "Created Ghostel buffer cannot accept input"))
+          (setf (alist-get directory my/cwd-terminal-targets nil nil #'equal)
+                target)))
+      (pop-to-buffer (plist-get target :buffer)))
     (my/send-text-save-last-target target)))
 
 (defun my/send-text-deliver (target text replay)

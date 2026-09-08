@@ -35,7 +35,7 @@
   (ignore tabs)
   (my/tab-current-property 'my/send-text-last-target))
 
-(ert-deftest my/open-cwd-terminal-reuses-exact-live-targets ()
+(ert-deftest my/open-cwd-terminal-toggles-names-and-reuses-exact-live-targets ()
   (let ((tabs (list '(current-tab (name . "cwd-terminals"))))
         (directory-a "/tmp/cwd-terminal-a/")
         (directory-b "/tmp/cwd-terminal-a/./")
@@ -58,6 +58,10 @@
                                    (cons terminal-b process-b)
                                    (cons replacement-a replacement-process))
                 live-processes (list process-a process-b replacement-process))
+          (with-current-buffer source-a
+            (setq default-directory directory-a))
+          (with-current-buffer source-b
+            (setq default-directory directory-b))
           (let ((real-require (symbol-function 'require))
                 (creation-buffers (list terminal-a terminal-b replacement-a)))
             (cl-letf (((symbol-function 'require)
@@ -73,32 +77,64 @@
                       ((symbol-function 'process-live-p)
                        (lambda (process)
                          (memq process live-processes)))
+                      ((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt directory)
+                         (and (equal directory directory-a) 'project-a)))
+                      ((symbol-function 'project-name)
+                       (lambda (project)
+                         (should (eq project 'project-a))
+                         "project-a"))
                       ((symbol-function 'ghostel-create)
                        (lambda (name action)
-                         (let ((buffer (pop creation-buffers)))
-                           (push (list name action default-directory buffer) creations)
+                         (let ((buffer (pop creation-buffers))
+                               (directory default-directory))
+                           (push (list name action directory buffer) creations)
                            (push buffer ghostel-buffers)
+                           (with-current-buffer buffer
+                             (setq default-directory directory))
                            buffer))))
-              (with-current-buffer source-a
-                (let ((default-directory directory-a))
-                  (my/open-cwd-terminal)))
-              (with-current-buffer source-a
-                (let ((default-directory directory-a))
-                  (my/open-cwd-terminal)))
-              (with-current-buffer source-b
-                (let ((default-directory directory-b))
-                  (my/open-cwd-terminal)))
-              (with-current-buffer source-b
-                (let ((default-directory directory-b))
-                  (my/open-cwd-terminal)))
-              (setq live-processes (delq process-a live-processes))
-              (with-current-buffer source-a
-                (let ((default-directory directory-a))
-                  (my/open-cwd-terminal)))
+              (save-window-excursion
+                (delete-other-windows)
+                (switch-to-buffer source-a)
+                (my/open-cwd-terminal)
+                (should (eq (current-buffer) terminal-a))
+                (select-window (get-buffer-window source-a (selected-frame)))
+                (should (eq (current-buffer) source-a))
+                (should (get-buffer-window terminal-a (selected-frame)))
+                (my/open-cwd-terminal)
+                (should (eq (current-buffer) source-a))
+                (should-not (get-buffer-window terminal-a (selected-frame)))
+                (should (= (length creations) 1))
+                (should (my/ghostel-target-live-p
+                         (my/send-text-test-current-target tabs)))
+
+                (my/open-cwd-terminal)
+                (should (eq (current-buffer) terminal-a))
+                (with-current-buffer terminal-a
+                  (setq default-directory "/tmp/cwd-terminal-changed/"))
+                (my/open-cwd-terminal)
+                (should (eq (current-buffer) source-a))
+                (should (= (length creations) 1))
+
+                (switch-to-buffer source-b)
+                (my/open-cwd-terminal)
+                (should (eq (current-buffer) terminal-b))
+                (my/open-cwd-terminal)
+                (should (eq (current-buffer) source-b))
+
+                (setq live-processes (delq process-a live-processes))
+                (switch-to-buffer source-a)
+                (my/open-cwd-terminal)
+                (should (eq (current-buffer) replacement-a)))
               (should (equal (nreverse creations)
-                             (list (list nil my/right-split-action directory-a terminal-a)
-                                   (list nil my/right-split-action directory-b terminal-b)
-                                   (list nil my/right-split-action directory-a replacement-a))))
+                             (list
+                              (list "*ghostel: project-a*"
+                                    my/right-split-action directory-a terminal-a)
+                              (list "*ghostel: cwd-terminal-a*"
+                                    my/right-split-action directory-b terminal-b)
+                              (list "*ghostel: project-a*"
+                                    my/right-split-action directory-a
+                                    replacement-a))))
               (should (equal (alist-get directory-a my/cwd-terminal-targets nil nil #'equal)
                              (list :type 'ghostel
                                    :buffer replacement-a
@@ -107,7 +143,6 @@
                              (list :type 'ghostel
                                    :buffer terminal-b
                                    :process (get-buffer-process terminal-b))))
-              (should (eq (window-buffer (selected-window)) replacement-a))
               (should (equal (my/send-text-test-current-target tabs)
                              (list :type 'ghostel
                                    :buffer replacement-a

@@ -2,9 +2,9 @@
 
 ## Status
 
-- Overall: complete, 6/6 phases complete
-- Current phase: none
-- Commit policy: one new Git commit after each accepted phase
+- Overall: complete, 6/6 phases and 1/1 follow-ups complete
+- Current milestone: none
+- Commit policy: one new Git commit after each accepted phase or follow-up
 
 Phase status:
 
@@ -300,3 +300,51 @@ post-activation font-size synchronization gap in writing mode; the shared
 mode-line refresh path and lifecycle assertions now cover increase, decrease,
 and reset commands. Config batch load, `check-parens`, and `git diff --check`
 also pass.
+
+## Follow-up: Cmd+J Terminal Toggle and Naming
+
+- ID: `cmd-j-terminal-toggle`
+- Owner: `8-emacs-refinment`
+- Status: complete
+
+### Context
+
+Cmd+J currently always selects its exact-CWD Ghostel target. Repeating the key
+cannot hide an already displayed terminal, and newly created buffers keep the
+generic Ghostel name instead of identifying the current project or directory.
+
+### Changes
+
+1. Treat a live target displayed in the selected frame as visible: Cmd+J hides
+   its window with the standard window quit lifecycle. Otherwise Cmd+J shows
+   and selects the cached target, creating it only when the cached target is
+   stale or absent.
+2. Keep exact raw `default-directory` values as cache keys, resolve the current
+   cached terminal by buffer before its possibly changed shell directory, and
+   retain hidden terminals as valid send targets.
+3. Name a new terminal `*ghostel: NAME*`, where NAME is the containing public
+   project name when one exists and otherwise the current directory basename.
+4. Extend focused and integration ERT coverage for show, hide, reuse, exact-CWD
+   separation, project naming, and directory fallback naming.
+
+### Success Criteria
+
+- Repeated Cmd+J alternates between showing and hiding the same live terminal.
+- Hiding returns focus to the prior nonterminal window and does not kill the
+  terminal or clear its send target.
+- Hiding still works after the terminal shell changes directory.
+- A hidden live terminal is reused rather than recreated on the next Cmd+J.
+- Newly created buffers identify the current project or fallback directory.
+- Exact raw CWD cache identity and existing global and Ghostel key bindings
+  remain unchanged.
+
+### Implementation Status
+
+Completed 2026-09-08. Cmd+J resolves the current cached terminal by buffer so
+it still hides after a shell directory change. Otherwise it uses the exact raw
+`default-directory` cache entry: a visible live target is hidden with
+`quit-window`, while a hidden live target is shown and reused. New targets use
+the public project name or normalized directory basename in
+`*ghostel: NAME*`. Validation: send-target ERT 6/6, integration smoke ERT 6/6,
+leader-binding ERT 9/9, config batch load, `check-parens`, and
+`git diff --check`. Final combined review completed with no findings.
