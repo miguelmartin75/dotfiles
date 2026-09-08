@@ -702,21 +702,57 @@
    (markdown-ts-mode . markdown-table-wrap-pretty-mode)))
 
 (defun my/markdown-return ()
-  "Delete an empty Markdown item or preserve native return behavior."
+  "Promote a nested empty Markdown item or preserve native return behavior."
   (interactive)
   (let ((bounds (markdown-cur-list-item-bounds)))
     (if (and bounds
              (not (markdown-code-block-at-point-p))
              (= (- (nth 1 bounds) (nth 0 bounds))
                 (+ (nth 3 bounds) (length (nth 5 bounds)))))
-        (delete-region (line-beginning-position) (line-beginning-position 2))
+        (if (> (length (markdown-calculate-list-levels)) 1)
+            (markdown-promote)
+          (delete-region (line-beginning-position) (line-beginning-position 2)))
       (call-interactively #'markdown-enter-key))))
 
+(defun my/markdown-insert-tab ()
+  "Indent a Markdown list item or run the ordinary indentation command."
+  (interactive)
+  (cond
+   ((eq major-mode 'markdown-ts-mode)
+    (let ((node (treesit-node-at (point) 'markdown)))
+      (if (and node (treesit-parent-until node "\\`list_item\\'" t))
+          (markdown-ts-demote)
+        (indent-for-tab-command))))
+   ((and (derived-mode-p 'markdown-mode)
+         (markdown-list-item-at-point-p))
+    (markdown-demote))
+   (t
+    (indent-for-tab-command))))
+
+(defun my/markdown-insert-backtab ()
+  "Promote a Markdown list item or run the ordinary indentation command."
+  (interactive)
+  (cond
+   ((eq major-mode 'markdown-ts-mode)
+    (let ((node (treesit-node-at (point) 'markdown)))
+      (if (and node (treesit-parent-until node "\\`list_item\\'" t))
+          (markdown-ts-promote)
+        (indent-for-tab-command))))
+   ((and (derived-mode-p 'markdown-mode)
+         (markdown-list-item-at-point-p))
+    (markdown-promote))
+   (t
+    (indent-for-tab-command))))
+
 (with-eval-after-load 'markdown-mode
-  (keymap-set markdown-mode-map "RET" #'my/markdown-return))
+  (keymap-set markdown-mode-map "RET" #'my/markdown-return)
+  (keymap-set markdown-mode-map "TAB" #'my/markdown-insert-tab)
+  (keymap-set markdown-mode-map "<tab>" #'my/markdown-insert-tab)
+  (keymap-set markdown-mode-map "S-TAB" #'my/markdown-insert-backtab)
+  (keymap-set markdown-mode-map "<backtab>" #'my/markdown-insert-backtab))
 
 (defun my/markdown-ts-return ()
-  "Terminate an empty Markdown item or insert a matching sibling."
+  "Promote a nested empty item or insert a matching Markdown sibling."
   (interactive)
   (if (save-excursion
         (beginning-of-line)
@@ -727,6 +763,10 @@
               (back-to-indentation)
               (treesit-node-at (point) 'markdown)))
            (item (and node (treesit-parent-until node "\\`list_item\\'" t)))
+           (nested-item
+            (and item
+                 (treesit-parent-until (treesit-node-parent item)
+                                       "\\`list_item\\'" t)))
            (empty-item
             (save-excursion
               (beginning-of-line)
@@ -734,6 +774,9 @@
                "[ \t]*\\(?:[-+*]\\|[0-9]+[.)]\\)[ \t]*\\(?:\\[[ xX]\\][ \t]*\\)?$")))
            (list-context
             (or item
+                (and empty-item
+                     (< (current-indentation) 4)
+                     (= (line-end-position) (point-max)))
                 (let ((error (and node
                                   (treesit-parent-until node "\\`ERROR\\'" t))))
                   (and (= (line-end-position) (point-max))
@@ -762,7 +805,9 @@
                   (forward-line 1))
                 (> (current-indentation) indentation)))))
       (if (and empty-item list-context (not has-child))
-          (delete-region (line-beginning-position) (line-beginning-position 2))
+          (if nested-item
+              (markdown-ts-promote)
+            (delete-region (line-beginning-position) (line-beginning-position 2)))
         (markdown-ts-insert-list-item)
         (when (and task-item
                    (save-excursion
@@ -774,7 +819,19 @@
           (insert "[ ] "))))))
 
 (with-eval-after-load 'markdown-ts-mode
-  (keymap-set markdown-ts-mode-map "RET" #'my/markdown-ts-return))
+  (keymap-set markdown-ts-mode-map "RET" #'my/markdown-ts-return)
+  (keymap-set markdown-ts-mode-map "TAB" #'my/markdown-insert-tab)
+  (keymap-set markdown-ts-mode-map "<tab>" #'my/markdown-insert-tab)
+  (keymap-set markdown-ts-mode-map "S-TAB" #'my/markdown-insert-backtab)
+  (keymap-set markdown-ts-mode-map "<backtab>" #'my/markdown-insert-backtab)
+  (keymap-set markdown-ts-code-block-in-context-mode-map
+              "<tab>" #'indent-for-tab-command)
+  (keymap-set markdown-ts-code-block-in-context-mode-map
+              "<backtab>" #'indent-for-tab-command)
+  (keymap-set markdown-ts-in-table-mode-map
+              "TAB" #'markdown-ts-table-next-cell)
+  (keymap-set markdown-ts-in-table-mode-map
+              "S-TAB" #'markdown-ts-table-previous-cell))
 
 (defun my/markdown-structural-command (table-command ts-command fallback-command)
   "Run the Markdown structural command appropriate for the current mode."
