@@ -2,8 +2,8 @@
 
 ## Status
 
-- Overall: in progress, 4/6 phases complete
-- Current phase: Phase 5
+- Overall: in progress, 5/6 phases complete
+- Current phase: Phase 6
 - Commit policy: one new Git commit after each accepted phase
 
 Phase status:
@@ -12,7 +12,7 @@ Phase status:
 - Phase 2: complete
 - Phase 3: complete
 - Phase 4: complete
-- Phase 5: pending
+- Phase 5: complete
 - Phase 6: pending
 
 ## Goal
@@ -248,6 +248,18 @@ are explicit in global, Ghostel semi-char, and Ghostel char maps, and
   Tree-sitter and fallback rendering.
 - Existing code, link, list, table, and inline-code face contracts remain
   unchanged.
+
+### Implementation Status
+
+Completed 2026-09-08. Gutter faces inherit the default text metrics, and the
+current line inherits the base gutter face. Writing mode owns a buffer-local
+mode-line height remap that follows its text scale, replaces itself on repeated
+activation, and is removed by both reset paths without affecting other
+buffers. Classic and Tree-sitter Markdown plus Org and Outline share a
+restrained level palette while existing delimiter and non-heading faces stay
+unchanged. Validation: `appearance-test.el` 13/13,
+`leader-bindings-test.el` 9/9, config batch load, `check-parens`, and
+`git diff --check`.
 
 ## Phase 6: Integrated Verification and Closeout
 

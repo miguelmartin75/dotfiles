@@ -325,11 +325,19 @@
    (text-scale-adjust 0)
 )
 
+(defvar-local my/write-mode-line-scale-cookie nil
+  "Mode-line face remapping cookie set by `my/write-mode'.")
 
 (defun my/write-mode() (interactive)
    (setq olivetti-body-width 60)
    (olivetti-mode 1)
    (text-scale-set 3.0)
+   (when my/write-mode-line-scale-cookie
+     (face-remap-remove-relative my/write-mode-line-scale-cookie))
+   (setq my/write-mode-line-scale-cookie
+         (face-remap-add-relative
+          'mode-line
+          :height (expt text-scale-mode-step text-scale-mode-amount)))
    (display-line-numbers-mode 0)
 )
 
@@ -337,12 +345,18 @@
    (setq olivetti-body-width 120)
    (olivetti-mode 1)
    (text-scale-set 0.0)
+   (when my/write-mode-line-scale-cookie
+     (face-remap-remove-relative my/write-mode-line-scale-cookie))
+   (setq my/write-mode-line-scale-cookie nil)
    (display-line-numbers-mode 0)
 )
 
 (defun my/default-mode() (interactive)
    (olivetti-mode 0)
    (text-scale-set 0.0)
+   (when my/write-mode-line-scale-cookie
+     (face-remap-remove-relative my/write-mode-line-scale-cookie))
+   (setq my/write-mode-line-scale-cookie nil)
    (display-line-numbers-mode 1)
 )
 (defun my/center-window() (interactive) (olivetti-mode 1))
