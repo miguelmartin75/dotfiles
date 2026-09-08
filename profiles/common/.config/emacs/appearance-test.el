@@ -3,6 +3,7 @@
 (require 'ert)
 (require 'face-remap)
 (require 'markdown-ts-mode)
+(require 'seq)
 
 (load (expand-file-name "init.el" (file-name-directory (or load-file-name buffer-file-name)))
       nil nil nil t)
@@ -394,6 +395,20 @@
               (my/write-mode)
               (should (equal (assq 'mode-line face-remapping-alist)
                              `(mode-line (:height ,scale) mode-line))))
+            (dolist (change '((my/increase-font-size . 3.5)
+                              (my/decrease-font-size . 3.0)
+                              (my/reset-font-size . 0.0)))
+              (funcall (car change))
+              (should (= text-scale-mode-amount (cdr change)))
+              (let ((scale (expt text-scale-mode-step text-scale-mode-amount)))
+                (should (equal (assq 'mode-line face-remapping-alist)
+                               `(mode-line (:height ,scale) mode-line)))
+                (should (= (length
+                            (seq-filter
+                             (lambda (remapping)
+                               (eq (car remapping) 'mode-line))
+                             face-remapping-alist))
+                           1))))
             (my/write-mode-no-zoom)
             (should-not my/write-mode-line-scale-cookie)
             (should-not (assq 'mode-line face-remapping-alist))
@@ -402,6 +417,9 @@
             (should-not my/write-mode-line-scale-cookie)
             (should-not (assq 'mode-line face-remapping-alist)))
           (with-current-buffer other-buffer
+            (my/increase-font-size)
+            (my/decrease-font-size)
+            (my/reset-font-size)
             (should-not (local-variable-p 'my/write-mode-line-scale-cookie))
             (should-not (assq 'mode-line face-remapping-alist))))
       (kill-buffer writing-buffer)

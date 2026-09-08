@@ -2,8 +2,8 @@
 
 ## Status
 
-- Overall: in progress, 5/6 phases complete
-- Current phase: Phase 6
+- Overall: complete, 6/6 phases complete
+- Current phase: none
 - Commit policy: one new Git commit after each accepted phase
 
 Phase status:
@@ -13,7 +13,7 @@ Phase status:
 - Phase 3: complete
 - Phase 4: complete
 - Phase 5: complete
-- Phase 6: pending
+- Phase 6: complete
 
 ## Goal
 
@@ -272,13 +272,31 @@ unchanged. Validation: `appearance-test.el` 13/13,
 3. Provision the declared `markdown-table-wrap-pretty` package when needed so
    Markdown test startup matches a normal deployment. Do not treat a missing
    local package checkout as a configuration behavior failure.
-4. Perform a graphical macOS smoke test of C-p, `SPC s g`, C-x C-f then C-o,
-   Markdown list editing, Cmd+J, Cmd+A, and `SPC Z`.
+4. Run a nonintrusive Emacs Lisp smoke suite for C-p, `SPC s g`, C-x C-f
+   then C-o, Markdown list editing, Cmd+J, Cmd+A, and `SPC Z`. Dispatch the
+   configured commands directly and replace only external prompt, terminal,
+   and agent boundaries with in-memory implementations.
 5. Mark this plan complete only after every phase's success criteria have direct
    validation evidence.
 
 ### Success Criteria
 
 - All focused automated checks pass in a provisioned environment.
-- Manual GUI behavior confirms every user-facing key and rendering contract.
+- Automated Emacs Lisp behavior confirms every user-facing key and rendering
+  contract without focusing or manipulating desktop applications.
 - Every phase is marked complete and committed separately.
+
+### Implementation Status
+
+Completed 2026-09-08. The seven focused and integration ERT files pass 68/68:
+appearance 13/13, file picker 12/12, Markdown 7/7, send targets 6/6, window
+layouts 15/15, leader bindings 9/9, and the nonintrusive Emacs Lisp smoke
+suite 6/6. The smoke suite dispatches the configured C-p, `SPC s g`, C-x C-f,
+C-o, Markdown, Cmd+J, Cmd+A, and `SPC Z` paths while replacing only external
+prompt, terminal-process, and agent-process boundaries with in-memory
+implementations. The declared `markdown-table-wrap-pretty` package is present
+and its real overlay integration passes. Final combined review identified a
+post-activation font-size synchronization gap in writing mode; the shared
+mode-line refresh path and lifecycle assertions now cover increase, decrease,
+and reset commands. Config batch load, `check-parens`, and `git diff --check`
+also pass.

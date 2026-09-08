@@ -313,31 +313,39 @@
 (setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
 
 
+(defvar-local my/write-mode-line-scale-cookie nil
+  "Mode-line face remapping cookie set by `my/write-mode'.")
+
+(defun my/update-write-mode-line-scale (enabled)
+  "Replace the writing-mode mode-line remapping when ENABLED is non-nil."
+  (when enabled
+    (when my/write-mode-line-scale-cookie
+      (face-remap-remove-relative my/write-mode-line-scale-cookie))
+    (setq my/write-mode-line-scale-cookie
+          (face-remap-add-relative
+           'mode-line
+           :height (expt text-scale-mode-step text-scale-mode-amount)))))
+
 (defun my/increase-font-size () (interactive)
    (text-scale-adjust 0.5)
+   (my/update-write-mode-line-scale my/write-mode-line-scale-cookie)
 )
 
 (defun my/decrease-font-size () (interactive)
    (text-scale-adjust -0.5)
+   (my/update-write-mode-line-scale my/write-mode-line-scale-cookie)
 )
 
 (defun my/reset-font-size () (interactive)
    (text-scale-adjust 0)
+   (my/update-write-mode-line-scale my/write-mode-line-scale-cookie)
 )
-
-(defvar-local my/write-mode-line-scale-cookie nil
-  "Mode-line face remapping cookie set by `my/write-mode'.")
 
 (defun my/write-mode() (interactive)
    (setq olivetti-body-width 60)
    (olivetti-mode 1)
    (text-scale-set 3.0)
-   (when my/write-mode-line-scale-cookie
-     (face-remap-remove-relative my/write-mode-line-scale-cookie))
-   (setq my/write-mode-line-scale-cookie
-         (face-remap-add-relative
-          'mode-line
-          :height (expt text-scale-mode-step text-scale-mode-amount)))
+   (my/update-write-mode-line-scale t)
    (display-line-numbers-mode 0)
 )
 
