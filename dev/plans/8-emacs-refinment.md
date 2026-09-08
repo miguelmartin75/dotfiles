@@ -2,15 +2,15 @@
 
 ## Status
 
-- Overall: in progress, 2/6 phases complete
-- Current phase: Phase 3
+- Overall: in progress, 3/6 phases complete
+- Current phase: Phase 4
 - Commit policy: one new Git commit after each accepted phase
 
 Phase status:
 
 - Phase 1: complete
 - Phase 2: complete
-- Phase 3: in progress
+- Phase 3: complete
 - Phase 4: pending
 - Phase 5: pending
 - Phase 6: pending
@@ -177,6 +177,17 @@ visit leaves an isolated jump ring empty. Validation: `my-file-picker-test.el`
 - Normal and visual TAB/C-i remain Evil jump-forward.
 - Two RET presses after a nested item create one parent-level empty sibling;
   top-level empty-list exit remains unchanged.
+
+### Implementation Status
+
+Completed 2026-09-08. Markdown insert-state TAB and backtab now demote and
+promote list items through the public command for the active Markdown mode,
+while ordinary indentation and higher-priority table and fenced-code maps stay
+intact. A second RET on an empty nested item promotes it to a parent-level
+sibling in both implementations; top-level exit and existing task-item
+behavior remain unchanged. Focused coverage verifies both Markdown modes,
+normal and visual Evil jump bindings, tables, and fenced code. Validation:
+`markdown-parity-test.el` 7/7, `check-parens`, and `git diff --check`.
 
 ## Phase 4: Add CWD and Agent Terminal Entry Points
 
