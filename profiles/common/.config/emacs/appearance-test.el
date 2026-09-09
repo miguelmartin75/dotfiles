@@ -1,6 +1,7 @@
 ;;; appearance-test.el --- Appearance behavior tests -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'cl-lib)
 (require 'face-remap)
 (require 'markdown-ts-mode)
 (require 'seq)
@@ -485,6 +486,93 @@
         (should (= (window-total-height window) 14))
         (delete-window window))
       (kill-buffer "*Completions*"))))
+
+(ert-deftest my/appearance-native-completion-collect-routes-and-binds ()
+  (let ((key (kbd "C-q")))
+    (should (featurep 'embark))
+    (dolist (map (list minibuffer-local-completion-map
+                       completion-in-region-mode-map
+                       completion-list-mode-map
+                       (make-composed-keymap
+                        minibuffer-local-filename-completion-map
+                        minibuffer-local-completion-map)
+                       (make-composed-keymap
+                        minibuffer-local-filename-completion-map
+                        minibuffer-local-must-match-map)
+                       minibuffer-local-must-match-map))
+      (should (eq (lookup-key map key) #'my/completion-collect)))
+    (should (eq (lookup-key global-map key) #'quoted-insert)))
+  ;; `completing-read' in batch immediately reads stdin, before it enters a
+  ;; recursive minibuffer.  Exercise the native tables through Embark's real
+  ;; minibuffer collector and the effective completion maps instead.
+  (let ((directory (make-temp-file "native-completion-collect-" t)))
+    (unwind-protect
+        (progn
+          (write-region "" nil (expand-file-name "alpha" directory) nil 'silent)
+          (write-region "" nil (expand-file-name "alpine" directory) nil 'silent)
+          (let ((default-directory directory)
+                (minibuffer-completion-table #'completion-file-name-table)
+                (minibuffer-completion-predicate nil))
+            (cl-letf (((symbol-function 'minibufferp)
+                       (lambda (&rest ignored) t))
+                      ((symbol-function 'minibuffer-contents) (lambda () "al"))
+                      ((symbol-function 'embark--minibuffer-point) (lambda () 2))
+                      ((symbol-function 'embark--metadata)
+                       (lambda ()
+                         (completion-metadata
+                          "al" minibuffer-completion-table nil))))
+              (should (equal (cdr (embark-minibuffer-candidates))
+                             '("alpha" "alpine"))))))
+      (delete-directory directory t)))
+  (save-window-excursion
+    (let ((source-buffer (generate-new-buffer " *completion source*"))
+          collect-buffers)
+      (unwind-protect
+          (progn
+            (switch-to-buffer source-buffer)
+            (insert "al")
+            (setq-local completion-at-point-functions
+                        (list (lambda ()
+                                (list (point-min) (point-max)
+                                      '("alpha" "alpine" "beta")))))
+            (should (completion-at-point))
+            (should (completion-at-point))
+            (let ((completion-window (get-buffer-window "*Completions*")))
+              (should (window-live-p completion-window))
+              (with-current-buffer (window-buffer completion-window)
+                (should (eq completion-reference-buffer source-buffer)))
+              (my/completion-collect)
+              (setq collect-buffers
+                    (seq-filter
+                     (lambda (buffer)
+                       (with-current-buffer buffer
+                         (derived-mode-p 'embark-collect-mode)))
+                     (buffer-list)))
+              (should (= (length collect-buffers) 1))
+              (should (equal (with-current-buffer (car collect-buffers)
+                               (mapcar #'car tabulated-list-entries))
+                             '("alpha" "alpine")))
+              (with-selected-window completion-window
+                (my/completion-collect))
+              (let ((focused-collect-buffers
+                     (seq-filter
+                      (lambda (buffer)
+                        (with-current-buffer buffer
+                          (derived-mode-p 'embark-collect-mode)))
+                      (buffer-list))))
+                (should (= (length focused-collect-buffers) 2))
+                (dolist (buffer focused-collect-buffers)
+                  (should (equal (with-current-buffer buffer
+                                   (mapcar #'car tabulated-list-entries))
+                                 '("alpha" "alpine"))))
+                (setq collect-buffers focused-collect-buffers))))
+        (kill-buffer source-buffer)
+        (dolist (buffer collect-buffers)
+          (when (buffer-live-p buffer)
+            (kill-buffer buffer)))
+        (let ((completion-buffer (get-buffer "*Completions*")))
+          (when completion-buffer
+            (kill-buffer completion-buffer)))))))
 
 (ert-deftest my/appearance-minibuffer-navigation-preserves-input ()
   (save-window-excursion

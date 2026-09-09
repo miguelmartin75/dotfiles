@@ -2,7 +2,7 @@
 
 ## Status
 
-- Overall: complete, 6/6 phases and 2/2 follow-ups complete
+- Overall: complete, 6/6 phases and 3/3 follow-ups complete
 - Current milestone: none
 - Commit policy: one new Git commit after each accepted phase or follow-up
 
@@ -402,4 +402,57 @@ collector produces root-relative file targets whose default action visits the
 file. Validation: file-picker ERT 13/13, integration smoke ERT 6/6,
 leader-binding ERT 9/9, appearance ERT 13/13, real default pipeline, config
 batch load, `check-parens`, and `git diff --check`. Final combined review
+completed with no findings.
+
+## Follow-up: Native Completion Collect
+
+- ID: `native-completion-collect`
+- Owner: `8-emacs-refinment`
+- Status: complete
+
+### Context
+
+C-q currently creates an Embark Collect buffer only inside the Ivy minibuffer
+used by Counsel fzf. Native minibuffer completion and completion-at-point both
+display `*Completions*`, but retain their ordinary C-q behavior and therefore
+cannot collect the displayed candidate set.
+
+### Changes
+
+1. Add one native-completion command in `init.el` that invokes
+   `embark-collect` directly from a completion minibuffer or focused
+   `*Completions*` buffer. When completion-at-point retains focus in its source
+   buffer, run the collector in the visible `*Completions*` buffer associated
+   with that source.
+2. Register a native completion-list collector that walks the displayed
+   candidate properties directly. This avoids the installed Embark collector's
+   non-terminating `next-completion` loop under Emacs 31.1 while retaining
+   Embark's candidate typing and actions.
+3. Bind C-q in native minibuffer completion, filename completion,
+   completion-at-point, and `completion-list-mode` maps. Keep the Ivy-specific
+   fzf binding and leave global C-q unchanged outside active completion.
+4. Extend focused and integration ERT coverage for minibuffer, in-buffer, and
+   focused completion-list routing without desktop automation.
+
+### Success Criteria
+
+- C-q collects the displayed candidates for every native minibuffer completion
+  prompt that uses `*Completions*`, including filename prompts.
+- C-q collects completion-at-point candidates while focus remains in the
+  source buffer and while focus is in `*Completions*`.
+- Counsel fzf retains its file-aware collect behavior.
+- Ordinary C-q remains `quoted-insert` when no completion UI is active.
+
+### Implementation Status
+
+Implementation and validation completed 2026-09-08. Embark now loads eagerly
+so native completion metadata is present before the first `*Completions*`
+buffer. C-q collects native minibuffer, filename, completion-at-point, and
+focused completion-list candidates while preserving the fzf-specific collector
+and global `quoted-insert`. The native collector walks displayed candidate
+properties directly, avoiding the installed Embark collector's non-terminating
+`next-completion` loop on Emacs 31.1 while preserving candidate types and
+bounds. Validation: appearance and completion integration ERT 14/14,
+file-picker ERT 13/13, integration smoke ERT 6/6, leader-binding ERT 9/9,
+config batch load, `check-parens`, and `git diff --check`. Final combined review
 completed with no findings.

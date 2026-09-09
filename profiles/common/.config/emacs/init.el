@@ -468,7 +468,7 @@
   :commands counsel-fzf)
 
 (use-package embark
-  :commands (embark-act embark-collect)
+  :demand t
   :bind ("C-c ." . embark-act))
 
 (use-package embark-consult
@@ -498,6 +498,53 @@
           (lambda ()
             (setq-local window-min-height completions-max-height)))
 
+(defun my/completion-list-candidates ()
+  "Return candidates displayed in the current native completion list."
+  (when (derived-mode-p 'completion-list-mode)
+    (let ((position (point-min))
+          (end (point-max))
+          type candidates)
+      (save-excursion
+        (while (< position end)
+          (unless (get-text-property position 'mouse-face)
+            (setq position
+                  (next-single-property-change
+                   position 'mouse-face nil end)))
+          (when (< position end)
+            (goto-char position)
+            (let ((target (embark-target-completion-list-candidate)))
+              (unless type
+                (setq type (car target)))
+              (push (cdr target) candidates))
+            (setq position
+                  (next-single-property-change
+                   position 'mouse-face nil end)))))
+      (cons type (nreverse candidates)))))
+
+(add-hook 'embark-candidate-collectors
+          #'my/completion-list-candidates -90)
+
+(defun my/completion-collect ()
+  "Collect candidates from the active native completion UI."
+  (interactive)
+  (if (minibufferp)
+      (embark-collect)
+    (let (completion-window)
+      (if (derived-mode-p 'completion-list-mode)
+          (setq completion-window (selected-window))
+        (let ((source-buffer (current-buffer))
+              (window (get-buffer-window "*Completions*")))
+          (when (and window
+                     (eq (buffer-local-value
+                          'completion-reference-buffer
+                          (window-buffer window))
+                         source-buffer))
+            (setq completion-window window))))
+      (unless completion-window
+        (user-error "No visible *Completions* buffer for the current buffer"))
+      (with-selected-window completion-window
+        (embark-collect)))))
+
 (keymap-set completion-in-region-mode-map "TAB"
             #'minibuffer-next-completion)
 (keymap-set completion-in-region-mode-map "S-TAB"
@@ -510,14 +557,17 @@
             #'minibuffer-previous-completion)
 (keymap-set completion-in-region-mode-map "M-g M-c"
             #'switch-to-completions)
+(keymap-set completion-in-region-mode-map "C-q" #'my/completion-collect)
 
 (keymap-set completion-list-mode-map "C-n" #'next-completion)
 (keymap-set completion-list-mode-map "C-p" #'previous-completion)
+(keymap-set completion-list-mode-map "C-q" #'my/completion-collect)
 
 (keymap-set minibuffer-local-completion-map "C-n"
             #'minibuffer-next-completion)
 (keymap-set minibuffer-local-completion-map "C-p"
             #'minibuffer-previous-completion)
+(keymap-set minibuffer-local-completion-map "C-q" #'my/completion-collect)
 (keymap-set minibuffer-local-filename-completion-map "C-n"
             #'minibuffer-next-completion)
 (keymap-set minibuffer-local-filename-completion-map "C-p"
