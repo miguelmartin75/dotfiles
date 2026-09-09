@@ -460,7 +460,7 @@
   (should (eq completions-format 'one-column))
   (should-not consult-async-split-style)
   (should-not (default-value 'minibuffer-completion-auto-choose))
-  (should (eq (key-binding (kbd "C-x b")) #'consult-buffer))
+  (should (eq (key-binding (kbd "C-x b")) #'my/select-buffer))
   (should (eq (lookup-key minibuffer-local-completion-map (kbd "C-n"))
               #'minibuffer-next-completion))
   (should (eq (lookup-key minibuffer-local-completion-map (kbd "C-p"))

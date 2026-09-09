@@ -635,13 +635,13 @@ Selecting a stack does not eagerly run or validate external programs.
 ## Status
 
 - Overall: in progress
-- Current milestone: Phase 2 (pending)
+- Current milestone: Phase 3 (pending)
 - Commit policy: one new Git commit after each accepted Phase
 
 Phase status:
 
 - Phase 1: complete
-- Phase 2: pending
+- Phase 2: complete
 - Phase 3: pending
 - Phase 4: pending
 - Phase 5: pending
@@ -783,6 +783,29 @@ validation.
 - S-RET accepts valid literal input and cannot escape a must-match prompt.
 
 ## Phase 2: Introduce Stable Command Facades
+
+### Implementation Status
+
+Completed 2026-09-09 in the Phase 2 milestone commit. Seven profile-owned
+facades now dispatch interactive buffer, command, incremental-search,
+kill-ring, Imenu, recent-file, and Isearch-history commands without rewriting
+bindings during stack transitions. Native buffer selection uses a
+repository-owned Consult source built from public live-buffer APIs. The narrow
+native adapter suppresses Ivy dynamically for the complete Consult Isearch
+history call, and Ivy C-q is configured once for `ivy-occur` without changing
+global C-q.
+
+Direct C-x b, M-x, Evil C-s, and Phase 2 leader keys now resolve to the stable
+facades. Table-driven ERT verifies both backend mappings and interactive prefix
+forwarding, while focused tests cover the public buffer source, native adapter
+restoration, and one-time Ivy map setup. The cumulative combined reviewer found
+that `quit` could bypass the Phase 1 transaction rollback; the accepted
+follow-up handles both `error` and `quit`, re-signals the original condition,
+and includes a simulated partial-activation quit test. Validation: completion
+stack ERT 12/12, appearance ERT 14/14, leader ERT 11/11, clean module byte
+compilation, `check-parens`, `git diff --check`, real Ivy binding assertions,
+double init, soft reload, and a fresh no-findings confirmation review. File,
+line, and ripgrep commands remain deferred to Phases 3 and 4.
 
 ### Changes
 

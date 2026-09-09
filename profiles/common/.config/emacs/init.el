@@ -459,12 +459,21 @@
              consult-ripgrep
              consult-xref
              consult-yank-from-kill-ring)
-  :bind ([remap switch-to-buffer] . consult-buffer)
   :init
-  (setq consult-buffer-sources '(consult--source-buffer)))
+  (setq consult-buffer-sources '(my/consult-live-buffer-source)))
+
+(use-package ivy
+  :commands (ivy-occur ivy-switch-buffer))
 
 (use-package counsel
-  :commands counsel-fzf)
+  :commands (counsel-M-x
+             counsel-fzf
+             counsel-imenu
+             counsel-recentf
+             counsel-yank-pop))
+
+(use-package swiper
+  :commands swiper-isearch)
 
 (use-package embark
   :demand t
@@ -600,6 +609,9 @@
 
 (require 'my-completion-stack
          (expand-file-name "my-completion-stack.el" my/config-directory))
+
+(keymap-global-set "C-x b" #'my/select-buffer)
+(keymap-global-set "M-x" #'my/select-command)
 
 (require 'savehist)
 (add-to-list 'savehist-additional-variables 'search-ring)
@@ -1898,7 +1910,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (global-set-key (kbd "s-w") #'tab-bar-close-tab)
 
 (evil-define-key '(normal visual insert) 'global
-  (kbd "C-s") #'isearch-forward)
+  (kbd "C-s") #'my/search-incremental)
 
 (defvar my/leader-map nil
   "Leader map shared by Evil normal and visual states.")
@@ -1910,9 +1922,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 (dolist
     (binding
-     '(("," . consult-buffer)
+     '(("," . my/select-buffer)
        ("/" . consult-line)
-       ("?" . consult-isearch-history)
+       ("?" . my/select-isearch-history)
        ("m" . evil-show-marks)
        ("j" . evil-show-jumps)
        ("l" . display-line-numbers-mode)
@@ -1928,8 +1940,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("f r" . my/set-default-directory-to-project-root)
        ("f d" . my/set-default-directory-to-current-file)
        ("f R" . my/find-file-sshx)
-       ("f o" . consult-recent-file)
-       ("b b" . consult-buffer)
+       ("f o" . my/select-recent-file)
+       ("b b" . my/select-buffer)
        ("w h" . evil-window-left)
        ("w j" . evil-window-down)
        ("w k" . evil-window-up)
@@ -1957,10 +1969,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("s b" . my/consult-line-multi-all-buffers)
        ("s g" . consult-ripgrep)
        ("s w" . my/consult-ripgrep-region-or-symbol)
-       ("s h" . consult-isearch-history)
-       ("s c" . execute-extended-command)
-       ("s k" . consult-yank-from-kill-ring)
-       ("s s" . consult-imenu)
+       ("s h" . my/select-isearch-history)
+       ("s c" . my/select-command)
+       ("s k" . my/select-kill-ring)
+       ("s s" . my/select-imenu)
        ("s v" . my/toggle-completion-stack)
        ("s V" . my/completion-stack-menu)
        ("s S" . xref-find-apropos)

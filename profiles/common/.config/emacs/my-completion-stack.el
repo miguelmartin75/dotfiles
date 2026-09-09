@@ -5,6 +5,24 @@
 (require 'xref)
 
 (defvar ivy-do-completion-in-region)
+(defvar ivy-minibuffer-map)
+(defvar ivy-mode)
+
+(declare-function consult-buffer "consult")
+(declare-function consult-imenu "consult")
+(declare-function consult-isearch-history "consult")
+(declare-function consult-recent-file "consult")
+(declare-function consult-xref "consult-xref")
+(declare-function consult-yank-from-kill-ring "consult")
+(declare-function counsel-M-x "counsel")
+(declare-function counsel-imenu "counsel")
+(declare-function counsel-recentf "counsel")
+(declare-function counsel-yank-pop "counsel")
+(declare-function ivy-completing-read "ivy")
+(declare-function ivy-mode "ivy")
+(declare-function ivy-occur "ivy")
+(declare-function ivy-switch-buffer "ivy")
+(declare-function swiper-isearch "swiper")
 
 (defconst my/completion-stack-default 'native-consult
   "Completion stack applied when no saved preference is valid.")
@@ -36,6 +54,23 @@
 (defvar my/completion-stack-which-key-configured nil
   "Whether dynamic Which Key descriptions have been registered.")
 
+(defvar my/ivy-minibuffer-map-configured nil
+  "Whether profile-owned Ivy minibuffer bindings have been installed.")
+
+(defvar my/consult-live-buffer-source
+  `( :name "Buffer"
+     :narrow ?b
+     :category buffer
+     :history buffer-name-history
+     :default t
+     :items
+     ,(lambda ()
+        (mapcar (lambda (buffer)
+                  (cons (buffer-name buffer) buffer))
+                (buffer-list)))
+     :action ,#'switch-to-buffer)
+  "Consult source containing only currently live buffers.")
+
 (unless my/completion-stack-captured
   (setq my/completion-stack-native-reader completing-read-function
         my/completion-stack-native-completion-in-region-function
@@ -45,6 +80,15 @@
         my/completion-stack-native-xref-show-definitions-function
         xref-show-definitions-function
         my/completion-stack-captured t))
+
+(defun my/configure-ivy-minibuffer-map ()
+  "Install the profile-owned Ivy minibuffer bindings once."
+  (unless my/ivy-minibuffer-map-configured
+    (keymap-set ivy-minibuffer-map "C-q" #'ivy-occur)
+    (setq my/ivy-minibuffer-map-configured t)))
+
+(with-eval-after-load 'ivy
+  (my/configure-ivy-minibuffer-map))
 
 (defun my/set-completion-stack (stack)
   "Apply completion STACK without changing in-buffer completion.
@@ -105,7 +149,7 @@ while a minibuffer, completion-in-region session, or Transient is active."
                     xref-show-definitions-function #'consult-xref))
             (setq my/completion-stack stack
                   my/completion-stack-saved stack))
-        (error
+        ((error quit)
          (condition-case nil
              (if previous-ivy-mode
                  (progn
@@ -125,6 +169,59 @@ while a minibuffer, completion-in-region session, or Transient is active."
                my/completion-stack previous-stack
                my/completion-stack-saved previous-saved)
          (signal (car condition) (cdr condition)))))))
+
+(defun my/call-with-native-completion (function &rest arguments)
+  "Call FUNCTION with ARGUMENTS while the native minibuffer owns completion."
+  (let ((ivy-mode nil)
+        (completing-read-function #'completing-read-default))
+    (apply function arguments)))
+
+(defun my/dispatch-completion-stack-command (native-command ivy-command)
+  "Interactively call NATIVE-COMMAND or IVY-COMMAND for the applied stack."
+  (call-interactively
+   (if (eq my/completion-stack 'ivy-counsel)
+       ivy-command
+     native-command)))
+
+(defun my/select-buffer ()
+  "Select a live buffer with the applied completion stack."
+  (interactive)
+  (my/dispatch-completion-stack-command #'consult-buffer #'ivy-switch-buffer))
+
+(defun my/select-command ()
+  "Select and run a command with the applied completion stack."
+  (interactive)
+  (my/dispatch-completion-stack-command
+   #'execute-extended-command #'counsel-M-x))
+
+(defun my/search-incremental ()
+  "Search incrementally in the current buffer with the applied stack."
+  (interactive)
+  (my/dispatch-completion-stack-command #'isearch-forward #'swiper-isearch))
+
+(defun my/select-kill-ring ()
+  "Select a kill-ring entry with the applied completion stack."
+  (interactive)
+  (my/dispatch-completion-stack-command
+   #'consult-yank-from-kill-ring #'counsel-yank-pop))
+
+(defun my/select-imenu ()
+  "Select an Imenu entry with the applied completion stack."
+  (interactive)
+  (my/dispatch-completion-stack-command #'consult-imenu #'counsel-imenu))
+
+(defun my/select-recent-file ()
+  "Select a recent file with the applied completion stack."
+  (interactive)
+  (my/dispatch-completion-stack-command #'consult-recent-file #'counsel-recentf))
+
+(defun my/select-isearch-history ()
+  "Select an Isearch history entry with native Consult presentation."
+  (interactive)
+  (if (eq my/completion-stack 'ivy-counsel)
+      (my/call-with-native-completion
+       #'call-interactively #'consult-isearch-history)
+    (call-interactively #'consult-isearch-history)))
 
 (defun my/toggle-completion-stack ()
   "Toggle between the native Consult and Ivy Counsel completion stacks."
