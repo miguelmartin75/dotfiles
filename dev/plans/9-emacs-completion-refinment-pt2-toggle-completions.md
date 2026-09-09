@@ -635,14 +635,14 @@ Selecting a stack does not eagerly run or validate external programs.
 ## Status
 
 - Overall: in progress
-- Current milestone: Phase 3 (pending)
+- Current milestone: Phase 4 (pending)
 - Commit policy: one new Git commit after each accepted Phase
 
 Phase status:
 
 - Phase 1: complete
 - Phase 2: complete
-- Phase 3: pending
+- Phase 3: complete
 - Phase 4: pending
 - Phase 5: pending
 - Phase 6: pending
@@ -852,6 +852,29 @@ line, and ripgrep commands remain deferred to Phases 3 and 4.
   options only from the intended Evil normal/visual binding.
 
 ## Phase 3: Make File Discovery Stack-Aware
+
+### Implementation Status
+
+Completed 2026-09-09 in the Phase 3 milestone commit. File discovery now uses
+one frontend-neutral controller whose prompt adapters return explicit selected,
+toggle, or cancel results. Local native discovery uses public `consult-fd`;
+local Ivy discovery uses separate argv-only `fd` and fzf processes with NUL
+framing, platform filename coding, generation ownership, public dynamic
+candidate updates, and complete cleanup. Remote Consult calls remain inside the
+native-completion adapter, while project selection uses only public project.el
+data with exact-first and case-folded canonical path mapping.
+
+The shared Transient translates root, file-universe, symlink, and case intent
+at each backend. C-q exports the current safe fzf candidate snapshot to Dired,
+and the controller records exactly one Evil jump after a successful
+cross-buffer visit. The combined review found and resolved Unicode decoding,
+case-folded project lookup, and fzf no-match status handling; two fresh
+confirmation passes resolved the signal-status edge and reported no remaining
+findings. Validation: picker ERT 13/13, completion stack ERT 12/12, appearance
+ERT 14/14, leader ERT 12/12, affected GUI smoke ERT 2/2, real Unicode fd/fzf
+runtime probes, double init plus soft reload, clean module byte compilation,
+`check-parens`, and `git diff --check`. Line and ripgrep search remain assigned
+to Phase 4.
 
 ### Changes
 

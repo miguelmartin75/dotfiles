@@ -97,6 +97,35 @@
     (should (eq (key-binding (kbd (car binding)))
                 (cdr binding)))))
 
+(ert-deftest my/leader-bindings-file-picker-commands-and-minibuffer-keys ()
+  (with-temp-buffer
+    (dolist (state '(evil-normal-state evil-visual-state))
+      (funcall state)
+      (should (eq (key-binding (kbd "C-p"))
+                  #'my/find-file-recursive-configured))
+      (should (eq (key-binding (kbd "M-p"))
+                  #'my/file-picker-fzf-menu))
+      (should (eq (key-binding (kbd "SPC f p"))
+                  #'my/find-file-recursive-configured))
+      (should (eq (key-binding (kbd "SPC f P"))
+                  #'my/file-picker-fzf-menu))
+      (should-not (eq (key-binding (kbd "C-S-p"))
+                      #'my/file-picker-fzf-menu))))
+  (should (eq (keymap-lookup minibuffer-local-map "M-p")
+              #'previous-history-element))
+  (require 'ivy)
+  (should (eq (keymap-lookup ivy-minibuffer-map "M-p")
+              #'ivy-previous-history-element))
+  (should (eq (keymap-lookup completion-in-region-mode-map "C-p")
+              #'minibuffer-previous-completion))
+  (let ((bindings
+         (which-key--get-keymap-bindings
+          (keymap-lookup my/leader-map "f"))))
+    (should (equal (assoc "p" bindings)
+                   '("p" . "find file recursively")))
+    (should (equal (assoc "P" bindings)
+                   '("P" . "configure recursive files")))))
+
 (ert-deftest my/leader-bindings-magit-state-precedence ()
   (dolist (mode-and-native-space
            '((magit-status-mode . magit-diff-show-or-scroll-up)

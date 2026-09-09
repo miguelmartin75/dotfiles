@@ -467,7 +467,6 @@
 
 (use-package counsel
   :commands (counsel-M-x
-             counsel-fzf
              counsel-imenu
              counsel-recentf
              counsel-yank-pop))
@@ -1933,7 +1932,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("v" . my/default-mode)
        ("f f" . my/find-file-project)
        ("f F" . my/find-file-recursive-root)
-       ("f p" . my/file-picker-fzf-menu)
+       ("f p" . my/find-file-recursive-configured)
+       ("f P" . my/file-picker-fzf-menu)
        ("f D" . my/find-file-recursive-current-directory)
        ("f h" . my/find-file)
        ("f y" . copy-current-file-path)
@@ -2119,8 +2119,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (evil-define-key 'visual magit-mode-map (kbd "SPC") my/visual-leader-map)
 
 (evil-define-key '(normal visual) 'global
-  (kbd "C-p") #'my/find-file-fzf-root
-  (kbd "C-S-p") #'my/file-picker-fzf-menu)
+  (kbd "C-p") #'my/find-file-recursive-configured
+  (kbd "M-p") #'my/file-picker-fzf-menu)
 (evil-define-key 'visual 'global
   (kbd "C-c C-c") #'my/send-region-or-buffer)
 (evil-define-key 'visual 'global
@@ -2148,7 +2148,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "c" "code"
     "d" "diagnostics"
     "f" "files"
-    "f p" "configure fzf picker"
+    "f p" "find file recursively"
+    "f P" "configure recursive files"
     "g" "git"
     "g p" "preview hunk"
     "g s" "stage hunk"

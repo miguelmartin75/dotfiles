@@ -2,640 +2,466 @@
 
 (require 'ert)
 (require 'cl-lib)
+(require 'my-completion-stack)
 (require 'my-file-picker)
 
-(defvar consult-async-split-style)
-(defvar consult-async-split-styles-alist)
+(declare-function ivy-completing-read "ivy")
+
 (defvar consult-fd-args)
 (defvar consult-find-args)
-(defvar counsel-fzf-cmd)
-(defvar evil--jumps-window-jumps)
-(defvar evil--jumps-jumping)
+(defvar tramp-methods)
+(defvar ivy-mode)
 
-(ert-deftest my/file-picker-toggle-successfully-selects-once ()
-  (let ((root (file-name-as-directory (make-temp-file "picker root " t))))
-    (unwind-protect
-        (dolist (case '((hierarchical "nested/file name.txt"
-                                     "file name\\.txt")
-                        (hierarchical ".hidden" "\\.hidden")
-                        (hierarchical "+notes" "\\+notes")
-                        (recursive "file name\\.txt" "file name.txt")))
-          (let ((opened (list nil))
-                captured-root
-                captured-initial
-                captured-split-style
-                (aborts 0)
-                (consult-async-split-style 'perl)
-                (my/file-picker-transaction (list nil)))
-            (cl-letf (((symbol-function 'my/file-picker-recursive-session)
-                       (lambda (dir initial)
-                         (setq captured-root dir
-                               captured-initial initial
-                               captured-split-style
-                               consult-async-split-style)
-                         (let ((file (expand-file-name "file name.txt" dir))
-                               (buffer (generate-new-buffer
-                                        " *my-file-picker-test*")))
-                           (setcar opened (cons file (car opened)))
-                           (with-current-buffer buffer
-                             (setq buffer-file-name file))
-                           buffer)))
-                      ((symbol-function 'my/file-picker-hierarchical-session)
-                       (lambda (dir initial)
-                         (setq captured-root dir
-                               captured-initial initial)
-                         (expand-file-name initial dir)))
-                      ((symbol-function 'find-file)
-                       (lambda (file &rest _ignored)
-                         (setcar opened (cons file (car opened)))
-                         (let ((buffer (generate-new-buffer
-                                        " *my-file-picker-test*")))
-                           (with-current-buffer buffer
-                             (setq buffer-file-name file))
-                           buffer)))
-                      ((symbol-function 'abort-recursive-edit)
-                       (lambda ()
-                         (setq aborts (1+ aborts))
-                         (signal 'quit nil))))
-              (with-current-buffer (window-buffer (minibuffer-window))
-                (let ((inhibit-read-only t))
-                  (erase-buffer)
-                  (insert (cadr case))
-                  (setq-local my/file-picker-kind (car case)
-                              my/file-picker-root root)
-                  (should
-                   (eq (condition-case nil
-                           (my/file-picker-toggle)
-                         (quit 'quit))
-                       'quit))))
-              (should (= aborts 2))
-              (should (= (length (car opened)) 1))
-              (if (eq (car case) 'hierarchical)
-                  (progn
-                    (should (string-equal captured-root
-                                          (if (string-prefix-p "nested/"
-                                                               (cadr case))
-                                              (expand-file-name "nested/" root)
-                                            root)))
-                    (should (string-equal captured-initial (caddr case)))
-                    (should-not captured-split-style))
-                (should (string-suffix-p (caddr case)
-                                         (car (car opened))))))))
-      (delete-directory root t))))
-
-(ert-deftest my/file-picker-hierarchical-read-file-name-initialization ()
-  (let ((root "/tmp/picker-root/")
-        (nested-root "/tmp/picker-root/nested/")
-        calls
-        composed-initial
-        opened)
-    (cl-letf (((symbol-function 'read-file-name)
-               (lambda (prompt &optional directory default-filename mustmatch
-                               initial predicate)
-                 (push (list prompt directory default-filename mustmatch
-                             initial predicate)
-                       calls)
-                 "/tmp/selected"))
-              ((symbol-function 'find-file)
-               (lambda (file &rest _ignored)
-                 (setq opened file))))
-      (my/file-picker-hierarchical-session nested-root "file name.txt")
-      (let ((default-directory root))
-        (my/find-file-sshx)))
-    (should
-     (equal (nreverse calls)
-            `(("Find file: " ,nested-root nil nil "file name.txt" nil)
-              ("Find file: " "/" nil nil "sshx:" nil))))
-    (cl-letf (((symbol-function 'read-from-minibuffer)
-               (lambda (_prompt &optional initial-contents &rest _ignored)
-                 (setq composed-initial
-                       (if (consp initial-contents)
-                           (car initial-contents)
-                         initial-contents))
-                 composed-initial)))
-      (my/file-picker-hierarchical-session root "/sshx:"))
-    (should (string-equal composed-initial "/sshx:"))
-    (should (string-equal opened "/tmp/selected"))))
-
-(ert-deftest my/file-picker-project-toggle-transfers-input-literally ()
-  (let ((root "/tmp/project-root/")
-        captured-kind
-        captured-root
-        captured-reader
-        captured-initial
-        (parser-calls 0)
-        (split-style-bound (boundp 'consult-async-split-style))
-        (split-style-value (and (boundp 'consult-async-split-style)
-                                consult-async-split-style)))
-    (unwind-protect
-        (progn
-          (makunbound 'consult-async-split-style)
-          (cl-letf (((symbol-function 'project-current)
-                     (lambda (&optional _maybe-prompt _directory) 'project))
-                    ((symbol-function 'project-root)
-                     (lambda (_project) root))
-                    ((symbol-function 'project-find-file)
-                     (lambda (&optional _include-all)
-                       (run-hooks 'minibuffer-setup-hook)
-                       (setq captured-kind my/file-picker-kind
-                             captured-root my/file-picker-root
-                             captured-reader
-                             project-read-file-name-function)))
-                    ((symbol-function 'my/file-picker-literal-query)
-                     (lambda (_query)
-                       (setq parser-calls (1+ parser-calls))
-                       (error "Consult parser must not run"))))
-            (with-current-buffer (window-buffer (minibuffer-window))
-              (my/find-file-project))
-            (should (eq captured-kind 'project))
-            (should (string-equal captured-root root))
-            (should (eq captured-reader #'project--read-file-absolute))
-            (dolist (query '(".hidden" "#notes" "file.*" "/async/filter"))
-              (let ((my/file-picker-transaction (list nil)))
-                (cl-letf (((symbol-function 'my/file-picker-hierarchical-session)
-                           (lambda (dir initial)
-                             (setq captured-root dir
-                                   captured-initial initial)
-                             (expand-file-name "selected" dir)))
-                          ((symbol-function 'find-file)
-                           (lambda (&rest _ignored) nil))
-                          ((symbol-function 'abort-recursive-edit)
-                           (lambda () (signal 'quit nil))))
-                  (with-current-buffer (window-buffer (minibuffer-window))
-                    (let ((inhibit-read-only t))
-                      (erase-buffer)
-                      (insert query)
-                      (setq-local my/file-picker-kind 'project
-                                  my/file-picker-root root)
-                      (should
-                       (eq (condition-case nil
-                               (my/file-picker-toggle)
-                             (quit 'quit))
-                           'quit))))
-                  (should (string-equal captured-root root))
-                  (should (string-equal captured-initial query)))))
-            (should (= parser-calls 0))))
-      (if split-style-bound
-          (set 'consult-async-split-style split-style-value)
-        (makunbound 'consult-async-split-style)))))
-
-(ert-deftest my/file-picker-project-prompt-keeps-project-relative-paths ()
-  (let ((root (file-name-as-directory (make-temp-file "picker-project-" t)))
-        prompt
-        collection
-        opened)
-    (unwind-protect
-        (cl-letf (((symbol-function 'project-current)
-                   (lambda (&optional _maybe-prompt _directory) 'project))
-                  ((symbol-function 'project-root)
-                   (lambda (_project) root))
-                  ((symbol-function 'project-files)
-                   (lambda (_project &optional _dirs)
-                     '("src/a.el" "src/b.el")))
-                  ((symbol-function 'thing-at-point)
-                   (lambda (&rest _ignored) nil))
-                  ((symbol-function 'completing-read)
-                   (lambda (read-prompt read-collection &rest _ignored)
-                     (setq prompt read-prompt
-                           collection read-collection)
-                     "src/a.el"))
-                  ((symbol-function 'find-file)
-                   (lambda (file &rest _ignored)
-                     (setq opened file))))
-          (my/find-file-project)
-          (should (string-equal prompt (format "Find file in %s: " root)))
-          (should (equal (all-completions "" collection)
-                         '("src/a.el" "src/b.el")))
-          (should (string-equal opened (expand-file-name "src/a.el" root))))
-      (delete-directory root t))))
-
-(ert-deftest my/file-picker-nested-cancel-restores-outer-state ()
-  (let ((root (file-name-as-directory (make-temp-file "picker-cancel-" t))))
-    (unwind-protect
-        (dolist (case '((hierarchical "folder/file.txt")
-                        (recursive "file.* -- --extension el")))
-          (let ((refreshed nil)
-                (my/file-picker-transaction (list nil)))
-            (cl-letf (((symbol-function 'my/file-picker-recursive-session)
-                       (lambda (&rest _ignored) (signal 'quit nil)))
-                      ((symbol-function 'my/file-picker-hierarchical-session)
-                       (lambda (&rest _ignored) (signal 'quit nil)))
-                      ((symbol-function 'my/file-picker-refresh)
-                       (lambda (buffer)
-                         (with-current-buffer buffer
-                           (setq refreshed
-                                 (list my/file-picker-kind
-                                       my/file-picker-root
-                                       (minibuffer-contents-no-properties)))))))
-              (with-current-buffer (window-buffer (minibuffer-window))
-                (let ((inhibit-read-only t))
-                  (erase-buffer)
-                  (insert (cadr case))
-                  (setq-local my/file-picker-kind (car case)
-                              my/file-picker-root root)
-                  (my/file-picker-toggle)))
-              (should (eq (car refreshed) (car case)))
-              (should (string-equal (cadr refreshed) root))
-              (should (string-suffix-p (cadr case) (caddr refreshed))))))
-      (delete-directory root t))))
-
-(ert-deftest my/file-picker-query-and-path-transfer ()
-  (let ((consult-async-split-styles-alist
-         '((none)
-           (comma :separator 44)
-           (semicolon :separator 59)
-           (perl :initial 35))))
-    (dolist (case '((perl "#plain name.txt" "plain name.txt")
-                    (perl "#name\\.txt" "name.txt")
-                    (perl "#dir/name.txt" "dir/name.txt")
-                    (perl "#\\.hidden" ".hidden")
-                    (perl "#\\+notes" "+notes")
-                    (perl "#file.*" nil)
-                    (perl "##literal" nil)
-                    (perl "#/async/filter" "/async/filter")
-                    (perl "#foo#bar" nil)
-                    (perl "#query --" nil)
-                    (perl "#query -- --extension el" nil)
-                    (perl "#--hidden" "--hidden")
-                    (comma "async,filter" nil)
-                    (comma ",leading" ",leading")
-                    (comma "foo#bar" "foo#bar")
-                    (semicolon "async;filter" nil)
-                    (semicolon ";leading" ";leading")
-                    (nil "/async/filter" "/async/filter")
-                    (nil "query --" nil)
-                    (nil "query -- -g *.el" nil)
-                    (nil "query --hidden" "query --hidden")
-                    (nil "--hidden" "--hidden")
-                    (nil "\\.hidden" ".hidden")
-                    (nil "\\+notes" "+notes")))
-      (let ((consult-async-split-style (car case)))
-        (should (equal (my/file-picker-literal-query (cadr case))
-                       (caddr case))))))
-  (dolist (case '(("/sshx:user@host:/repo/src/file.el"
-                   "/sshx:user@host:/repo/src/" "file.el")
-                  ("/absolute/root/file.el" "/absolute/root/" "file.el")
-                  ("~/source/file.el" "~/source/" "file.el")
-                  ("folder with spaces/file.el" "folder with spaces/" "file.el")))
-    (should (string-equal (file-name-directory (car case)) (cadr case)))
-    (should (string-equal (file-name-nondirectory (car case)) (caddr case)))))
-
-(ert-deftest my/file-picker-toggle-requires-complete-remote-host ()
-  (let ((root "/tmp/picker-root/")
-        recursive-calls
-        (my/file-picker-transaction (list nil)))
-    (cl-letf (((symbol-function 'my/file-picker-recursive-session)
-               (lambda (dir initial)
-                 (push (list dir initial) recursive-calls)
-                 (let ((buffer (generate-new-buffer
-                                " *my-file-picker-remote-test*")))
-                   (with-current-buffer buffer
-                     (setq buffer-file-name (concat dir "selected")))
-                   buffer)))
-              ((symbol-function 'abort-recursive-edit)
-               (lambda () (signal 'quit nil))))
-      (dolist (input '("/sshx:"
-                       "/sshx:/"
-                       "/sshx::"
-                       "/sshx:host/path/file.el"
-                       "/sshx:user@host/path/file.el"))
-        (with-current-buffer (window-buffer (minibuffer-window))
-          (let ((inhibit-read-only t))
-            (erase-buffer)
-            (insert input)
-            (setq-local my/file-picker-kind 'hierarchical
-                        my/file-picker-root root)
-            (should-error (my/file-picker-toggle)
-                          :type 'user-error))))
-      (should-not recursive-calls)
-      (dolist (case '(("/sshx:host:"
-                       "/sshx:host:" "")
-                      ("/sshx:user@host:/repo/file.el"
-                       "/sshx:user@host:/repo/" "file\\.el")))
-        (let ((my/file-picker-transaction (list nil)))
-          (with-current-buffer (window-buffer (minibuffer-window))
-            (let ((inhibit-read-only t))
-              (erase-buffer)
-              (insert (car case))
-              (setq-local my/file-picker-kind 'hierarchical
-                          my/file-picker-root root)
-              (should
-               (eq (condition-case nil
-                       (my/file-picker-toggle)
-                     (quit 'quit))
-                   'quit))))
-          (should (equal (pop recursive-calls) (cdr case))))))))
-
-(ert-deftest my/file-picker-selects-recursive-backend-and-find-contract ()
-  (dolist (case '(("/tmp/root/" nil consult-fd)
-                  ("/sshx:user@host:/repo/" "/remote/fd" consult-fd)
-                  ("/sshx:user@host:/repo/" nil consult-find)))
-    (let (called executable-default executable-remote captured-args)
-      (cl-letf (((symbol-function 'file-remote-p)
-                 (lambda (file &optional _identification _connected)
-                   (and (string-prefix-p "/sshx:" file) "/sshx:user@host:")))
-                ((symbol-function 'executable-find)
-                 (lambda (_command &optional remote)
-                   (setq executable-default default-directory
-                         executable-remote remote)
-                   (cadr case)))
-                ((symbol-function 'consult-fd)
-                 (lambda (_root _initial)
-                   (setq called 'consult-fd
-                         captured-args consult-fd-args)
-                   (current-buffer)))
-                ((symbol-function 'consult-find)
-                 (lambda (_root _initial)
-                   (setq called 'consult-find
-                         captured-args consult-find-args)
-                   (current-buffer))))
-        (my/file-picker-recursive-session (car case) nil)
-        (should (eq called (caddr case)))
-        (if (string-prefix-p "/sshx:" (car case))
-            (progn
-              (should executable-remote)
-              (should (string-equal executable-default (car case))))
-          (should-not executable-remote))
-        (should (member "f" captured-args))
-        (if (eq called 'consult-find)
-            (progn
-              (should (member "-prune" captured-args))
-              (should-not (member "-L" captured-args)))
-          (should (member "--hidden" captured-args))
-          (should (member "--no-ignore" captured-args))))))
-  (let* ((root (file-name-as-directory (make-temp-file "picker-find-" t)))
-         (default-directory root)
-         (visible (expand-file-name "visible.txt" root))
-         (hidden (expand-file-name ".hidden" root))
-         (git-dir (expand-file-name ".git" root))
-         (target-dir (expand-file-name "target" root))
-         (link-dir (expand-file-name "linked" root)))
-    (unwind-protect
-        (progn
-          (write-region "" nil visible nil 'silent)
-          (write-region "" nil hidden nil 'silent)
-          (make-directory git-dir)
-          (write-region "" nil (expand-file-name "ignored" git-dir) nil 'silent)
-          (make-directory target-dir)
-          (write-region "" nil (expand-file-name "through-link" target-dir)
-                        nil 'silent)
-          (make-symbolic-link target-dir link-dir)
-          (let ((files (apply #'process-lines my/file-picker-remote-find-args)))
-            (should (member "./visible.txt" files))
-            (should (member "./.hidden" files))
-            (should-not (member "./.git/ignored" files))
-            (should-not (member "./linked/through-link" files))))
-      (delete-directory root t))))
-
-(ert-deftest my/file-picker-fzf-transient-args-control-root-and-command ()
-  (let ((project-root "/tmp/fzf-project/")
-        (directory-root "/tmp/fzf-directory/")
-        (remote-root "/sshx:user@host:/repo/")
-        (default-directory "/tmp/fzf-directory/")
-        (transient-values nil)
-        project
-        local-calls
-        remote-call)
-    (cl-letf (((symbol-function 'project-current)
-               (lambda (&optional _maybe-prompt _directory) project))
-              ((symbol-function 'project-root)
-               (lambda (value)
-                 (if (eq value 'remote) remote-root project-root)))
-              ((symbol-function 'file-remote-p)
-               (lambda (file &optional _identification _connected)
-                 (and (string-prefix-p "/sshx:" file) "/sshx:user@host:")))
-              ((symbol-function 'executable-find)
-               (lambda (_command &optional _remote) "/opt/homebrew/bin/fzf"))
-              ((symbol-function 'counsel-fzf)
-               (lambda (initial directory &optional prompt)
-                 (push (list initial directory prompt default-directory
-                             counsel-fzf-cmd)
-                       local-calls)))
-              ((symbol-function 'counsel-fzf-action)
-               (lambda (&rest _ignored) nil))
-              ((symbol-function 'my/find-file-recursive)
-               (lambda (root)
-                 (setq remote-call root))))
-      (setq project 'project)
-      (should (equal (sort (copy-sequence
-                            (transient-args 'my/file-picker-fzf-menu))
-                           #'string<)
-                     (sort (copy-sequence my/file-picker-fzf-default-args)
-                           #'string<)))
-      (my/find-file-fzf-root)
-      (should (equal (car local-calls)
-                     (list nil project-root nil project-root
-                           (my/file-picker-fzf-command
-                            my/file-picker-fzf-default-args))))
-      (should-not (string-match-p "--follow" (car (last (car local-calls)))))
-      (setf (alist-get 'my/file-picker-fzf-menu transient-values)
-            '("--root=directory" "--follow"))
-      (should (equal (sort (copy-sequence
-                            (transient-args 'my/file-picker-fzf-menu))
-                           #'string<)
-                     '("--follow" "--root=directory")))
-      (my/find-file-fzf-root)
-      (should (equal (car local-calls)
-                     (list nil directory-root nil directory-root
-                           (my/file-picker-fzf-command
-                            '("--root=directory" "--follow")))))
-      (let ((suffixes (transient-suffixes 'my/file-picker-fzf-menu)))
-        (dolist (suffix suffixes)
-          (when (cl-typep suffix 'transient-argument)
-            (pcase (oref suffix argument)
-              ("--root=" (oset suffix value "project"))
-              ("--hidden" (oset suffix value "--hidden"))
-              ("--no-ignore" (oset suffix value "--no-ignore"))
-              ("--follow" (oset suffix value "--follow")))))
-        (let ((transient-current-command 'my/file-picker-fzf-menu)
-              (transient-current-suffixes suffixes))
-          (should (equal (sort (copy-sequence
-                                (transient-args 'my/file-picker-fzf-menu))
-                               #'string<)
-                         '("--follow" "--hidden" "--no-ignore"
-                           "--root=project")))
-          (my/find-file-fzf-root)))
-      (should (equal (car local-calls)
-                     (list nil project-root nil project-root
-                           (my/file-picker-fzf-command
-                            '("--root=project" "--hidden" "--no-ignore"
-                              "--follow")))))
-      (should-not (string-match-p
-                   "--unexpected"
-                   (my/file-picker-fzf-command
-                    '("--root=project" "--unexpected"))))
-      (setq project 'remote)
-      (setf (alist-get 'my/file-picker-fzf-menu transient-values)
-            '("--root=project"))
-      (my/find-file-fzf-root)
-      (should (string-equal remote-call remote-root)))))
-
-(ert-deftest my/file-picker-fzf-collects-files-with-a-local-c-q-map ()
-  (require 'package)
-  (package-initialize)
-  (require 'ivy)
-  (require 'embark)
-  (let ((root "/tmp/fzf-collect-root/")
-        (global-c-q (keymap-lookup (current-global-map) "C-q")))
-    (should (eq (alist-get 'counsel-fzf ivy-hooks-alist)
-                #'my/file-picker-fzf-setup))
-    (should (eq (car embark-candidate-collectors)
-                #'my/file-picker-fzf-candidates))
-    (with-temp-buffer
-      (let ((counsel--fzf-dir root))
-        (my/file-picker-fzf-setup))
-      (should (string-equal default-directory root))
-      (should (eq (keymap-lookup (current-local-map) "C-q")
-                  #'embark-collect))
-      (should (eq (keymap-lookup (current-global-map) "C-q") global-c-q))
-      (let ((ivy-last (make-ivy-state :caller 'counsel-fzf))
-            (ivy--old-cands '("src/one.el" "README.md"))
-            (embark-candidate-collectors
-             '(my/file-picker-fzf-candidates))
-            (post-command-hook '(ivy--queue-exhibit)))
-        (cl-letf (((symbol-function 'minibufferp) (lambda (&rest _ignored) t)))
-          (should (equal (my/file-picker-fzf-candidates)
-                         '(file "src/one.el" "README.md")))
-          (should (equal (plist-get (embark--maybe-transform-candidates)
-                                    :candidates)
-                         (list (expand-file-name "src/one.el" root)
-                               (expand-file-name "README.md" root)))))))
-      (let ((ivy-last (make-ivy-state :caller 'counsel-fzf))
-            (ivy--old-cands '("stale.el"))
-            (post-command-hook nil))
-        (cl-letf (((symbol-function 'minibufferp) (lambda (&rest _ignored) t)))
-          (should-not (my/file-picker-fzf-candidates))))
-      (let ((ivy-last (make-ivy-state :caller 'other-command))
-            (ivy--old-cands '("src/one.el"))
-            (post-command-hook '(ivy--queue-exhibit)))
-        (cl-letf (((symbol-function 'minibufferp) (lambda (&rest _ignored) t)))
-          (should-not (my/file-picker-fzf-candidates))))
-    (let ((embark--command 'my/find-file-fzf-root))
-      (should (eq (embark--default-action 'file) #'find-file)))))
-
-(ert-deftest my/file-picker-fzf-records-only-accepted-cross-buffer-visits ()
-  (let ((source (generate-new-buffer " *my-file-picker-source*"))
-        (target (generate-new-buffer " *my-file-picker-target*"))
-        (root "/tmp/fzf-root/")
+(ert-deftest my/file-picker-controller-transfers-results-between-frontends ()
+  (let ((source (generate-new-buffer " *file-picker-source*"))
+        (target (generate-new-buffer " *file-picker-target*"))
+        (root "/tmp/file-picker-root/")
+        recursive-call
         jumps)
-    (unwind-protect
-        (progn
-          (with-current-buffer source
-            (insert "source")
-            (goto-char 3))
-          (dolist (case '(accepted canceled same-buffer))
-            (let ((action-calls 0))
-              (cl-letf (((symbol-function 'project-current)
-                         (lambda (&optional _maybe-prompt _directory) 'project))
-                        ((symbol-function 'project-root)
-                         (lambda (_project) root))
-                        ((symbol-function 'file-remote-p)
-                         (lambda (&rest _ignored) nil))
-                        ((symbol-function 'executable-find)
-                         (lambda (_command &optional _remote)
-                           "/opt/homebrew/bin/fzf"))
-                        ((symbol-function 'counsel-fzf)
-                         (lambda (&rest _ignored)
-                           (unless (eq case 'canceled)
-                             (counsel-fzf-action "target.el"))))
-                        ((symbol-function 'counsel-fzf-action)
-                         (lambda (_candidate)
-                           (setq action-calls (1+ action-calls))
-                           (if (eq case 'same-buffer) source target)))
-                        ((symbol-function 'evil-set-jump)
-                         (lambda (marker)
-                           (push (list (marker-buffer marker)
-                                       (marker-position marker))
-                                 jumps))))
-                (with-current-buffer source
-                  (my/find-file-fzf-root))
-                (if (eq case 'canceled)
-                    (should (= action-calls 0))
-                  (should (= action-calls 1))))))
-          (should (equal jumps (list (list source 3)))))
-      (kill-buffer source)
-      (kill-buffer target))))
-
-(ert-deftest my/file-picker-records-source-jumps-for-accepted-file-visits ()
-  (let ((source (generate-new-buffer " *my-file-picker-source*"))
-        (target (generate-new-buffer " *my-file-picker-target*"))
-        (root "/tmp/picker-root/")
-        (target-file "/tmp/picker-root/target.el")
-        jumps)
-    (unwind-protect
-        (progn
-          (with-current-buffer source
-            (insert "source")
-            (goto-char 4))
-          (with-current-buffer target
-            (setq buffer-file-name target-file))
-          (cl-letf (((symbol-function 'evil-set-jump)
-                     (lambda (marker)
-                       (push (list (marker-buffer marker)
-                                   (marker-position marker))
-                             jumps)))
-                    ((symbol-function 'my/file-picker-hierarchical-session)
-                     (lambda (&rest _ignored) target-file))
-                    ((symbol-function 'my/file-picker-recursive-session)
-                     (lambda (&rest _ignored) target))
-                    ((symbol-function 'find-file)
-                     (lambda (&rest _ignored) target))
-                    ((symbol-function 'project-current)
-                     (lambda (&optional _maybe-prompt _directory) 'project))
-                    ((symbol-function 'project-root)
-                     (lambda (_project) root))
-                    ((symbol-function 'project-find-file)
-                     (lambda (&optional _include-all) target)))
-            (with-current-buffer source
-              (my/find-file root)
-              (my/find-file-recursive root)
-              (my/find-file-project)))
-          (should (equal jumps (list (list source 4)
-                                     (list source 4)
-                                     (list source 4)))))
-      (kill-buffer source)
-      (kill-buffer target))))
-
-(ert-deftest my/file-picker-evil-jump-backward-restores-accepted-source-only ()
-  (require 'package)
-  (package-initialize)
-  (require 'evil)
-  (let* ((source-file (make-temp-file "my-file-picker-source-" nil ".el"))
-         (target-file (make-temp-file "my-file-picker-target-" nil ".el"))
-         (source (find-file-noselect source-file))
-         (target (find-file-noselect target-file))
-         (root (file-name-directory source-file))
-         (evil--jumps-window-jumps (make-hash-table :test #'eq))
-         (evil--jumps-jumping nil)
-         source-point)
     (unwind-protect
         (progn
           (with-current-buffer source
             (insert "source")
             (goto-char 3)
-            (setq source-point (point)))
-          (switch-to-buffer source)
-          (cl-letf (((symbol-function 'my/file-picker-hierarchical-session)
-                     (lambda (&rest _ignored) (signal 'quit nil))))
-            (should (eq (condition-case nil
-                            (my/find-file root)
-                          (quit 'quit))
-                        'quit)))
-          (should (ring-empty-p (evil--jumps-get-window-jump-list)))
-          (cl-letf (((symbol-function 'my/file-picker-hierarchical-session)
-                     (lambda (&rest _ignored) target-file))
-                    ((symbol-function 'find-file)
-                     (lambda (&rest _ignored)
-                       (switch-to-buffer target)
-                       target)))
-            (my/find-file root))
-          (should (eq (current-buffer) target))
-          (evil-jump-backward 1)
-          (should (eq (current-buffer) source))
-          (should (= (point) source-point)))
+            (cl-letf (((symbol-function 'my/file-picker-hierarchical-session)
+                       (lambda (&rest ignored)
+                         (ignore ignored)
+                         '(toggle-recursive "nested/file name.txt")))
+                      ((symbol-function 'my/file-picker-recursive-session)
+                       (lambda (next-root initial literal-initial)
+                         (setq recursive-call
+                               (list next-root initial literal-initial))
+                         '(selected "/tmp/file-picker-root/nested/file name.txt")))
+                      ((symbol-function 'find-file)
+                       (lambda (&rest ignored)
+                         (ignore ignored)
+                         target))
+                      ((symbol-function 'evil-set-jump)
+                       (lambda (marker)
+                         (push (list (marker-buffer marker)
+                                     (marker-position marker))
+                               jumps))))
+              (should (eq (my/file-picker-run 'hierarchical root nil) target))))
+          (should (equal recursive-call
+                         (list "/tmp/file-picker-root/nested/"
+                               "file name.txt" t)))
+          (should (equal jumps (list (list source 3)))))
       (kill-buffer source)
-      (kill-buffer target)
-      (delete-file source-file)
-      (delete-file target-file))))
+      (kill-buffer target))))
+
+(ert-deftest my/file-picker-controller-recovers-recursive-query-for-hierarchy ()
+  (let (hierarchical-call)
+    (cl-letf (((symbol-function 'my/file-picker-recursive-session)
+               (lambda (&rest ignored)
+                 (ignore ignored)
+                 '(toggle-hierarchical "#file\\.el")))
+              ((symbol-function 'my/file-picker-literal-query)
+               (lambda (query)
+                 (should (string-equal query "#file\\.el"))
+                 "file.el"))
+              ((symbol-function 'my/file-picker-hierarchical-session)
+               (lambda (root initial)
+                 (setq hierarchical-call (list root initial))
+                 '(cancel))))
+      (let ((my/completion-stack 'native-consult))
+        (should-not (my/file-picker-run 'recursive "/tmp/file-picker-root/" nil)))
+      (should (equal hierarchical-call
+                     '("/tmp/file-picker-root/" "file.el"))))))
+
+(ert-deftest my/file-picker-toggle-records-results-and-rejects-incomplete-tramp ()
+  (with-temp-buffer
+    (let ((my/file-picker-result nil)
+          (tramp-methods '(("sshx"))))
+      (setq-local my/file-picker-kind 'hierarchical
+                  my/file-picker-root "/tmp/file-picker-root/")
+      (cl-letf (((symbol-function 'minibufferp) (lambda (&rest ignored)
+                                                   (ignore ignored) t))
+                ((symbol-function 'minibuffer-contents-no-properties)
+                 (lambda () "nested/file.el"))
+                ((symbol-function 'abort-recursive-edit)
+                 (lambda () (signal 'quit nil))))
+        (should (eq (condition-case nil
+                        (my/file-picker-toggle)
+                      (quit 'quit))
+                    'quit))
+        (should (equal my/file-picker-result
+                       '(toggle-recursive "nested/file.el")))))
+    (let ((tramp-methods '(("sshx"))))
+      (setq-local my/file-picker-kind 'hierarchical
+                  my/file-picker-root "/tmp/file-picker-root/")
+      (cl-letf (((symbol-function 'minibufferp) (lambda (&rest ignored)
+                                                   (ignore ignored) t))
+                ((symbol-function 'minibuffer-contents-no-properties)
+                 (lambda () "/sshx:"))
+                ((symbol-function 'file-remote-p)
+                 (lambda (&rest ignored) (ignore ignored) nil)))
+        (should-error (my/file-picker-toggle) :type 'user-error)))))
+
+(ert-deftest my/file-picker-project-session-uses-public-relative-candidates ()
+  (let ((completion-ignore-case t)
+        (root "/tmp/file-picker-project/")
+        collection)
+    (cl-letf (((symbol-function 'project-files)
+               (lambda (&rest ignored)
+                 (ignore ignored)
+                 '("src/one.el" "/tmp/file-picker-project/README.md")))
+              ((symbol-function 'completing-read)
+               (lambda (prompt candidates &rest ignored)
+                 (ignore prompt ignored)
+                 (setq collection candidates)
+                 "SRC/ONE.EL")))
+      (should (equal
+               (my/file-picker-project-session 'project root nil)
+               '(selected "/tmp/file-picker-project/src/one.el")))
+      (should (equal (mapcar #'car collection)
+                     '("src/one.el" "README.md"))))
+    (cl-letf (((symbol-function 'project-files)
+               (lambda (&rest ignored)
+                 (ignore ignored)
+                 '("src/one.el" "src/ONE.EL")))
+              ((symbol-function 'completing-read)
+               (lambda (&rest ignored)
+                 (ignore ignored)
+                 "src/ONE.EL")))
+      (should
+       (equal
+        (my/file-picker-project-session 'project root nil)
+        '(selected "/tmp/file-picker-project/src/ONE.EL"))))
+    (cl-letf (((symbol-function 'project-files)
+               (lambda (&rest ignored) (ignore ignored) nil)))
+      (should-error (my/file-picker-project-session 'project root nil)
+                    :type 'user-error))))
+
+(ert-deftest my/file-picker-recursive-routing-keeps-remote-consult-native ()
+  (let (calls observed)
+    (cl-letf (((symbol-function 'transient-args)
+               (lambda (&rest ignored)
+                 (ignore ignored)
+                 my/file-picker-fzf-default-args))
+              ((symbol-function 'file-remote-p)
+               (lambda (root &rest ignored)
+                 (ignore ignored)
+                 (and (string-prefix-p "/sshx:" root) "sshx")))
+              ((symbol-function 'my/file-picker-consult-recursive-session)
+               (lambda (&rest arguments)
+                 (push (cons 'consult arguments) calls)
+                 '(cancel)))
+              ((symbol-function 'my/file-picker-ivy-fzf-session)
+               (lambda (&rest arguments)
+                 (push (cons 'ivy arguments) calls)
+                 '(cancel))))
+      (let ((my/completion-stack 'native-consult))
+        (my/file-picker-recursive-session "/tmp/local/" "native"))
+      (let ((my/completion-stack 'ivy-counsel))
+        (my/file-picker-recursive-session "/tmp/local/" "ivy")
+        (cl-letf (((symbol-function 'my/call-with-native-completion)
+                   (lambda (function &rest arguments)
+                     (let ((ivy-mode nil)
+                           (completing-read-function #'completing-read-default))
+                       (setq observed (list ivy-mode completing-read-function))
+                       (apply function arguments)))))
+          (my/file-picker-recursive-session "/sshx:user@host:/repo/" "remote")))
+      (should (equal observed '(nil completing-read-default)))
+      (should (equal (mapcar #'car (nreverse calls))
+                     '(consult ivy consult))))))
+
+(ert-deftest my/file-picker-native-adapter-restores-ivy-after-remote-call ()
+  (let ((ivy-mode t)
+        (completing-read-function #'ivy-completing-read)
+        observed)
+    (should
+     (eq (my/call-with-native-completion
+          (lambda ()
+            (setq observed (list ivy-mode completing-read-function))
+            'done))
+         'done))
+    (should (equal observed '(nil completing-read-default)))
+    (should ivy-mode)
+    (should (eq completing-read-function #'ivy-completing-read))
+    (should
+     (eq (condition-case nil
+             (my/call-with-native-completion
+              (lambda () (signal 'quit nil)))
+           (quit 'quit))
+         'quit))
+    (should ivy-mode)
+    (should (eq completing-read-function #'ivy-completing-read))))
+
+(ert-deftest my/file-picker-remote-consult-prefers-fd-and-validates-find-options ()
+  (let ((args '("--hidden" "--no-ignore" "--follow"
+                "--case=insensitive"))
+        calls)
+    (cl-letf (((symbol-function 'my/file-picker-prompt-result)
+               (lambda (kind root syntax function)
+                 (push (list kind root syntax) calls)
+                 (list 'selected (funcall function))))
+              ((symbol-function 'consult-fd)
+               (lambda (&rest ignored)
+                 (ignore ignored)
+                 (push (list 'fd consult-fd-args) calls)
+                 "/sshx:user@host:/repo/fd.el"))
+              ((symbol-function 'consult-find)
+               (lambda (&rest ignored)
+                 (ignore ignored)
+                 (push (list 'find consult-find-args) calls)
+                 "/sshx:user@host:/repo/find.el")))
+      (cl-letf (((symbol-function 'executable-find)
+                 (lambda (&rest ignored) (ignore ignored) "/remote/fd")))
+        (should
+         (equal (my/file-picker-consult-recursive-session
+                 "/sshx:user@host:/repo/" nil args t)
+                '(selected "/sshx:user@host:/repo/fd.el")))
+        (should (member "--ignore-case" (cadr (assq 'fd calls)))))
+      (setq calls nil)
+      (cl-letf (((symbol-function 'executable-find)
+                 (lambda (&rest ignored) (ignore ignored) nil)))
+        (should
+         (equal (my/file-picker-consult-recursive-session
+                 "/sshx:user@host:/repo/" nil args t)
+                '(selected "/sshx:user@host:/repo/find.el")))
+        (should (equal (cl-subseq (cadr (assq 'find calls)) 0 3)
+                       '("find" "-L" ".")))
+        (should-error
+         (my/file-picker-consult-recursive-session
+          "/sshx:user@host:/repo/" nil '("--case=smart") t)
+         :type 'user-error)))))
+
+(ert-deftest my/file-picker-translates-stack-neutral-argv-with-literal-query ()
+  (dolist (case '(("insensitive" "--ignore-case" "--ignore-case")
+                  ("smart" nil "--smart-case")
+                  ("sensitive" "--case-sensitive" "+i")))
+    (let* ((args (list "--root=project" "--hidden" "--no-ignore"
+                       (concat "--case=" (car case))))
+           (fd (my/file-picker-fd-arguments args))
+           (query "$(touch bad); --filter='quoted' [a-z]")
+           (fzf (my/file-picker-fzf-arguments query args)))
+      (should (member "--hidden" fd))
+      (should (member "--no-ignore" fd))
+      (should-not (member "--follow" fd))
+      (if (cadr case)
+          (should (member (cadr case) fd))
+        (should-not (member "--ignore-case" fd)))
+      (should (member (caddr case) fzf))
+      (should (member (concat "--filter=" query) fzf))
+      (should-not (member query fzf)))))
+
+(ert-deftest my/file-picker-fzf-generation-owns-processes-and-rejects-stale-output ()
+  (let* ((session (make-my/file-picker-ivy-fzf-session
+                   :root "/tmp/file-picker-root/" :generation 0
+                   :tail "" :active t))
+         (my/file-picker-active-ivy-fzf-session session)
+         created
+         deleted
+         forwarded
+         eof
+         buffers)
+    (unwind-protect
+        (cl-letf (((symbol-function 'make-process)
+                   (lambda (&rest arguments)
+                     (let ((process
+                            (intern
+                             (format "process-%d" (1+ (length created))))))
+                       (push (cons process arguments) created)
+                       process)))
+                  ((symbol-function 'process-live-p)
+                   (lambda (process) (and process t)))
+                  ((symbol-function 'delete-process)
+                   (lambda (process) (push process deleted)))
+                  ((symbol-function 'process-send-string)
+                   (lambda (process output)
+                     (push (list process output) forwarded)))
+                  ((symbol-function 'process-send-eof)
+                   (lambda (process) (push process eof)))
+                  ((symbol-function 'process-status)
+                   (lambda (&rest ignored) (ignore ignored) 'exit))
+                  ((symbol-function 'process-exit-status)
+                   (lambda (&rest ignored) (ignore ignored) 0)))
+          (my/file-picker-start-fzf-generation
+           session my/file-picker-fzf-default-args "first")
+          (setq buffers
+                (list (my/file-picker-ivy-fzf-session-fd-buffer session)
+                      (my/file-picker-ivy-fzf-session-fzf-buffer session)))
+          (let ((first-fd
+                 (my/file-picker-ivy-fzf-session-fd-process session))
+                (first-fzf
+                 (my/file-picker-ivy-fzf-session-fzf-process session)))
+            (my/file-picker-start-fzf-generation
+             session my/file-picker-fzf-default-args "second")
+            (setq buffers
+                  (append
+                   (list (my/file-picker-ivy-fzf-session-fd-buffer session)
+                         (my/file-picker-ivy-fzf-session-fzf-buffer session))
+                   buffers))
+            (should
+             (equal
+              (sort (copy-sequence deleted)
+                    (lambda (left right)
+                      (string< (symbol-name left) (symbol-name right))))
+              (sort (list first-fd first-fzf)
+                    (lambda (left right)
+                      (string< (symbol-name left) (symbol-name right)))))))
+          (let ((generation
+                 (my/file-picker-ivy-fzf-session-generation session))
+                (fd (my/file-picker-ivy-fzf-session-fd-process session))
+                (fzf (my/file-picker-ivy-fzf-session-fzf-process session)))
+            (my/file-picker-fd-filter session generation fd "one\0")
+            (should (equal forwarded (list (list fzf "one\0"))))
+            (my/file-picker-fd-sentinel session generation fd)
+            (should (equal eof (list fzf)))
+            (my/file-picker-fzf-filter session generation fzf "one\0two")
+            (should
+             (equal (my/file-picker-ivy-fzf-session-candidates session)
+                    '("one")))
+            (should
+             (string-equal (my/file-picker-ivy-fzf-session-tail session) "two"))
+            (my/file-picker-fzf-filter session generation fzf "\0three\0")
+            (should
+             (equal (my/file-picker-ivy-fzf-session-candidates session)
+                    '("one" "two" "three")))
+            (my/file-picker-fzf-filter
+             session (1- generation) fzf "stale\0")
+            (should-not
+             (member "stale"
+                     (my/file-picker-ivy-fzf-session-candidates session))))
+          (should (= (length created) 4))
+          (dolist (entry created)
+            (should (listp (plist-get (cdr entry) :command)))
+            (should
+             (eq (plist-get (cdr entry) :coding)
+                 (or file-name-coding-system
+                     default-file-name-coding-system
+                     'utf-8-unix))))
+          (my/file-picker-close-fzf-session session)
+          (should-not (my/file-picker-ivy-fzf-session-fd-process session))
+          (should-not (my/file-picker-ivy-fzf-session-fzf-process session))
+          (dolist (buffer buffers)
+            (should-not (buffer-live-p buffer))))
+      (dolist (buffer buffers)
+        (when (buffer-live-p buffer)
+          (kill-buffer buffer))))))
+
+(ert-deftest my/file-picker-fzf-processes-decode-utf-8-nul-candidates ()
+  (unless (and (executable-find "fd") (executable-find "fzf"))
+    (ert-skip "fd and fzf are required"))
+  (let* ((root (file-name-as-directory
+                (make-temp-file "file-picker-utf-8-" t)))
+         (file (expand-file-name "caf\u00e9.txt" root))
+         (session (make-my/file-picker-ivy-fzf-session
+                   :root root :generation 0 :tail "" :active t))
+         (my/file-picker-active-ivy-fzf-session session))
+    (unwind-protect
+        (progn
+          (with-temp-file file)
+          (my/file-picker-start-fzf-generation
+           session my/file-picker-fzf-default-args "")
+          (while (or (process-live-p
+                      (my/file-picker-ivy-fzf-session-fd-process session))
+                     (process-live-p
+                      (my/file-picker-ivy-fzf-session-fzf-process session)))
+            (accept-process-output nil 0.1))
+          (accept-process-output nil 0.1)
+          (should
+           (member
+            "./caf\u00e9.txt"
+            (mapcar #'ucs-normalize-NFC-string
+                    (my/file-picker-ivy-fzf-session-candidates session)))))
+      (my/file-picker-close-fzf-session session)
+      (delete-directory root t))))
+
+(ert-deftest my/file-picker-fzf-sentinel-treats-no-match-as-normal ()
+  (let* ((session (make-my/file-picker-ivy-fzf-session
+                   :generation 1 :fzf-process 'fzf :active t))
+         (my/file-picker-active-ivy-fzf-session session)
+         (state 'exit)
+         (status 1)
+         messages)
+    (cl-letf (((symbol-function 'process-status)
+               (lambda (&rest ignored) (ignore ignored) state))
+              ((symbol-function 'process-exit-status)
+               (lambda (&rest ignored) (ignore ignored) status))
+              ((symbol-function 'message)
+               (lambda (format-string &rest arguments)
+                 (push (apply #'format format-string arguments) messages))))
+      (my/file-picker-fzf-sentinel session 1 'fzf)
+      (should-not messages)
+      (setq status 2)
+      (my/file-picker-fzf-sentinel session 1 'fzf)
+      (should
+       (equal messages '("fzf file discovery failed with status 2")))
+      (setq state 'signal
+            status 1)
+      (my/file-picker-fzf-sentinel session 1 'fzf)
+      (should
+       (equal messages
+              '("fzf file discovery failed with status 1"
+                "fzf file discovery failed with status 2"))))))
+
+(ert-deftest my/file-picker-fzf-export-builds-dired-snapshot-without-rerun ()
+  (let* ((session (make-my/file-picker-ivy-fzf-session
+                   :root "/tmp/file-picker-root/" :active t
+                   :candidates '("src/one.el" "README.md")))
+         (my/file-picker-active-ivy-fzf-session session)
+         snapshot
+         dired-buffer)
+    (unwind-protect
+        (cl-letf (((symbol-function 'ivy-exit-with-action)
+                   (lambda (action &rest ignored)
+                     (ignore ignored)
+                     (funcall action nil)))
+                  ((symbol-function 'dired)
+                   (lambda (files)
+                     (setq snapshot files
+                           dired-buffer
+                           (get-buffer-create " *file-picker-dired*"))))
+                  ((symbol-function 'make-process)
+                   (lambda (&rest ignored)
+                     (ignore ignored)
+                     (error "C-q must not start another process"))))
+          (my/file-picker-fzf-export)
+          (should (equal snapshot
+                         '("/tmp/file-picker-root/"
+                           "/tmp/file-picker-root/src/one.el"
+                           "/tmp/file-picker-root/README.md")))
+          (should (eq
+                   dired-buffer
+                   (my/file-picker-ivy-fzf-session-export-buffer session))))
+      (when (buffer-live-p dired-buffer)
+        (kill-buffer dired-buffer)))))
+
+(ert-deftest my/file-picker-records-one-jump-only-for-successful-cross-buffer-visit ()
+  (let ((source (generate-new-buffer " *file-picker-source*"))
+        (target (generate-new-buffer " *file-picker-target*"))
+        jumps
+        visits)
+    (unwind-protect
+        (with-current-buffer source
+          (insert "source")
+          (goto-char 4)
+          (cl-letf (((symbol-function 'my/file-picker-hierarchical-session)
+                     (lambda (&rest ignored)
+                       (ignore ignored)
+                       '(selected "/tmp/file-picker-target.el")))
+                    ((symbol-function 'find-file)
+                     (lambda (&rest ignored)
+                       (ignore ignored)
+                       (setq visits (1+ (or visits 0)))
+                       target))
+                    ((symbol-function 'evil-set-jump)
+                     (lambda (marker)
+                       (push (list (marker-buffer marker)
+                                   (marker-position marker))
+                             jumps))))
+            (should (eq (my/file-picker-run 'hierarchical "/tmp/" nil) target)))
+          (cl-letf (((symbol-function 'my/file-picker-hierarchical-session)
+                     (lambda (&rest ignored)
+                       (ignore ignored)
+                       '(cancel))))
+            (should-not (my/file-picker-run 'hierarchical "/tmp/" nil)))
+          (should (= visits 1))
+          (should (equal jumps (list (list source 4)))))
+      (kill-buffer source)
+      (kill-buffer target))))
+
+(provide 'my-file-picker-test)
 
 ;;; my-file-picker-test.el ends here
