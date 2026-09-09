@@ -466,7 +466,7 @@
   (should (eq (lookup-key minibuffer-local-completion-map (kbd "C-p"))
               #'minibuffer-previous-completion))
   (should (eq (lookup-key minibuffer-local-map (kbd "S-<return>"))
-              #'exit-minibuffer))
+              #'minibuffer-complete-and-exit))
   (save-window-excursion
     (dolist (line-count '(2 30))
       (with-current-buffer-window

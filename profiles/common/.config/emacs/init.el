@@ -85,6 +85,7 @@
   "Reload local packages and the active Emacs configuration."
   (interactive)
   (dolist (file '("my-file-picker.el"
+                  "my-completion-stack.el"
                   "my-org-datetree.el"
                   "my-workflow.el"
                   "my-agent-events.el"
@@ -460,9 +461,7 @@
              consult-yank-from-kill-ring)
   :bind ([remap switch-to-buffer] . consult-buffer)
   :init
-  (setq xref-show-xrefs-function #'consult-xref
-        xref-show-definitions-function #'consult-xref
-        consult-buffer-sources '(consult--source-buffer)))
+  (setq consult-buffer-sources '(consult--source-buffer)))
 
 (use-package counsel
   :commands counsel-fzf)
@@ -572,7 +571,7 @@
             #'minibuffer-next-completion)
 (keymap-set minibuffer-local-filename-completion-map "C-p"
             #'minibuffer-previous-completion)
-(keymap-set minibuffer-local-map "S-<return>" #'exit-minibuffer)
+(keymap-set minibuffer-local-map "S-<return>" #'minibuffer-complete-and-exit)
 
 (defun my/file-completion-at-point ()
   "Return file completion data for a path-like name at point."
@@ -599,10 +598,18 @@
 (define-key evil-insert-state-map (kbd "M-/") #'dabbrev-expand)
 (define-key evil-insert-state-map (kbd "C-M-/") #'dabbrev-completion)
 
+(require 'my-completion-stack
+         (expand-file-name "my-completion-stack.el" my/config-directory))
+
 (require 'savehist)
 (add-to-list 'savehist-additional-variables 'search-ring)
 (add-to-list 'savehist-additional-variables 'regexp-search-ring)
+(add-to-list 'savehist-additional-variables 'my/completion-stack-saved)
 (savehist-mode 1)
+(my/set-completion-stack
+ (if (memq my/completion-stack-saved my/completion-stack-values)
+     my/completion-stack-saved
+   my/completion-stack-default))
 (recentf-mode 1)
 
 
@@ -1954,6 +1961,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("s c" . execute-extended-command)
        ("s k" . consult-yank-from-kill-ring)
        ("s s" . consult-imenu)
+       ("s v" . my/toggle-completion-stack)
+       ("s V" . my/completion-stack-menu)
        ("s S" . xref-find-apropos)
        ("s d" . xref-find-definitions)
        ("s D" . eglot-find-declaration)
@@ -2115,6 +2124,11 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
   (which-key-add-keymap-based-replacements
     my/terminal-window-map
     "C-b" "send Ctrl-B")
+  (unless my/completion-stack-which-key-configured
+    (which-key-add-key-based-replacements
+      "SPC s v" #'my/completion-stack-which-key-description
+      "SPC s V" '("completion stack menu" . my/completion-stack-menu))
+    (setq my/completion-stack-which-key-configured t))
   (which-key-add-keymap-based-replacements
     my/leader-map
     "a" "ai"

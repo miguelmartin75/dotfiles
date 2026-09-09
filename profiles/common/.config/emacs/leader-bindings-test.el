@@ -65,6 +65,18 @@
       (should-not (key-binding (kbd "SPC z")))
       (should-not (key-binding (kbd "SPC v"))))))
 
+(ert-deftest my/leader-bindings-completion-stack-controls-and-label ()
+  (dolist (state '(evil-normal-state evil-visual-state))
+    (funcall state)
+    (should (eq (key-binding (kbd "SPC s v"))
+                #'my/toggle-completion-stack))
+    (should (eq (key-binding (kbd "SPC s V"))
+                #'my/completion-stack-menu)))
+  (let ((my/completion-stack 'ivy-counsel))
+    (should (equal (which-key--maybe-replace
+                    '("SPC s v" . "my/toggle-completion-stack"))
+                   '("SPC s v" . "toggle completion stack (ivy-counsel)")))))
+
 (ert-deftest my/leader-bindings-magit-state-precedence ()
   (dolist (mode-and-native-space
            '((magit-status-mode . magit-diff-show-or-scroll-up)
