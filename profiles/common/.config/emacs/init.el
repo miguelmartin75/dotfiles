@@ -86,6 +86,7 @@
   (interactive)
   (dolist (file '("my-file-picker.el"
                   "my-completion-stack.el"
+                  "my-search.el"
                   "my-org-datetree.el"
                   "my-workflow.el"
                   "my-agent-events.el"
@@ -448,6 +449,12 @@
 
 (setq consult-async-split-style nil)
 
+(require 'my-completion-stack
+         (expand-file-name "my-completion-stack.el" my/config-directory))
+
+(require 'my-search
+         (expand-file-name "my-search.el" my/config-directory))
+
 (use-package consult
   :commands (consult-buffer
              consult-fd
@@ -455,6 +462,7 @@
              consult-isearch-history
              consult-line
              consult-line-multi
+             consult-project-buffer
              consult-recent-file
              consult-ripgrep
              consult-xref
@@ -472,7 +480,7 @@
              counsel-yank-pop))
 
 (use-package swiper
-  :commands swiper-isearch)
+  :commands (swiper-all swiper-isearch))
 
 (use-package embark
   :demand t
@@ -497,7 +505,14 @@
       completions-format 'one-column
       completions-detailed t
       completions-max-height 14
-      minibuffer-visible-completions nil)
+      minibuffer-visible-completions nil
+      completion-ignore-case t
+      read-buffer-completion-ignore-case t
+      read-file-name-completion-ignore-case t
+      case-fold-search t
+      search-upper-case nil
+      evil-ex-search-case 'insensitive
+      ivy-case-fold-search-default t)
 
 (setq-default minibuffer-completion-auto-choose nil)
 
@@ -606,9 +621,6 @@
 (define-key evil-insert-state-map (kbd "M-/") #'dabbrev-expand)
 (define-key evil-insert-state-map (kbd "C-M-/") #'dabbrev-completion)
 
-(require 'my-completion-stack
-         (expand-file-name "my-completion-stack.el" my/config-directory))
-
 (keymap-global-set "C-x b" #'my/select-buffer)
 (keymap-global-set "M-x" #'my/select-command)
 
@@ -623,34 +635,6 @@
    my/completion-stack-default))
 (recentf-mode 1)
 
-
-(defun my/consult-line-multi-all-buffers ()
-  "Search for a matching line across all open buffers."
-  (interactive)
-  (consult-line-multi t))
-
-(defun my/consult-ripgrep-region-or-symbol ()
-  "Search the project for the active region or symbol at point."
-  (interactive)
-  (let ((text (if (use-region-p)
-                  (buffer-substring-no-properties
-                   (region-beginning) (region-end))
-                (thing-at-point 'symbol t))))
-    (unless text
-      (user-error "No region or symbol at point"))
-    (deactivate-mark)
-    (let ((query
-           (string-replace
-            " " "\\ "
-            (replace-regexp-in-string
-             (rx (any "\n\\.^$|?*+(){}[]-"))
-             (lambda (match) (format "\\x%02x" (aref match 0)))
-             text t t))))
-      (consult-ripgrep
-       nil
-       (if (string-match-p "\n" text)
-           (concat query " -- --multiline")
-         query)))))
 
 (defun my/set-default-directory-to-project-root ()
   "Set the current buffer's default directory to its project root."
@@ -1922,7 +1906,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (dolist
     (binding
      '(("," . my/select-buffer)
-       ("/" . consult-line)
+       ("/" . my/search-line)
        ("?" . my/select-isearch-history)
        ("m" . evil-show-marks)
        ("j" . evil-show-jumps)
@@ -1942,6 +1926,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("f R" . my/find-file-sshx)
        ("f o" . my/select-recent-file)
        ("b b" . my/select-buffer)
+       ("b B" . my/search-buffer-menu)
        ("w h" . evil-window-left)
        ("w j" . evil-window-down)
        ("w k" . evil-window-up)
@@ -1965,10 +1950,14 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("w t q" . tab-bar-close-tab)
        ("w t [" . tab-bar-switch-to-prev-tab)
        ("w t ]" . tab-bar-switch-to-next-tab)
-       ("s l" . consult-line)
-       ("s b" . my/consult-line-multi-all-buffers)
-       ("s g" . consult-ripgrep)
-       ("s w" . my/consult-ripgrep-region-or-symbol)
+       ("s l" . my/search-line)
+       ("s L" . my/search-line-menu)
+       ("s b" . my/search-lines)
+       ("s B" . my/search-lines-menu)
+       ("s g" . my/search-ripgrep)
+       ("s G" . my/search-ripgrep-menu)
+       ("s w" . my/search-ripgrep-region-or-symbol)
+       ("s W" . my/search-ripgrep-menu)
        ("s h" . my/select-isearch-history)
        ("s c" . my/select-command)
        ("s k" . my/select-kill-ring)
@@ -2150,6 +2139,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "f" "files"
     "f p" "find file recursively"
     "f P" "configure recursive files"
+    "b B" "buffer options menu"
     "g" "git"
     "g p" "preview hunk"
     "g s" "stage hunk"
@@ -2164,6 +2154,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "r" "review"
     "r v" "view annotations"
     "s" "search"
+    "s L" "line search options menu"
+    "s B" "multi-buffer line search options menu"
+    "s G" "ripgrep options menu"
+    "s W" "ripgrep options menu"
     "t" "terminals"
     "t r" "replay region/buffer, or choose target"
     "t R" "choose target for region/buffer"

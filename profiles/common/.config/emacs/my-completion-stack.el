@@ -8,7 +8,6 @@
 (defvar ivy-minibuffer-map)
 (defvar ivy-mode)
 
-(declare-function consult-buffer "consult")
 (declare-function consult-imenu "consult")
 (declare-function consult-isearch-history "consult")
 (declare-function consult-recent-file "consult")
@@ -21,7 +20,6 @@
 (declare-function ivy-completing-read "ivy")
 (declare-function ivy-mode "ivy")
 (declare-function ivy-occur "ivy")
-(declare-function ivy-switch-buffer "ivy")
 (declare-function swiper-isearch "swiper")
 
 (defconst my/completion-stack-default 'native-consult
@@ -56,20 +54,6 @@
 
 (defvar my/ivy-minibuffer-map-configured nil
   "Whether profile-owned Ivy minibuffer bindings have been installed.")
-
-(defvar my/consult-live-buffer-source
-  `( :name "Buffer"
-     :narrow ?b
-     :category buffer
-     :history buffer-name-history
-     :default t
-     :items
-     ,(lambda ()
-        (mapcar (lambda (buffer)
-                  (cons (buffer-name buffer) buffer))
-                (buffer-list)))
-     :action ,#'switch-to-buffer)
-  "Consult source containing only currently live buffers.")
 
 (unless my/completion-stack-captured
   (setq my/completion-stack-native-reader completing-read-function
@@ -182,11 +166,6 @@ while a minibuffer, completion-in-region session, or Transient is active."
    (if (eq my/completion-stack 'ivy-counsel)
        ivy-command
      native-command)))
-
-(defun my/select-buffer ()
-  "Select a live buffer with the applied completion stack."
-  (interactive)
-  (my/dispatch-completion-stack-command #'consult-buffer #'ivy-switch-buffer))
 
 (defun my/select-command ()
   "Select and run a command with the applied completion stack."

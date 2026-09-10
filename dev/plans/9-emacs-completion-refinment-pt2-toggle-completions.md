@@ -635,7 +635,7 @@ Selecting a stack does not eagerly run or validate external programs.
 ## Status
 
 - Overall: in progress
-- Current milestone: Phase 4 (pending)
+- Current milestone: Phase 5 (pending)
 - Commit policy: one new Git commit after each accepted Phase
 
 Phase status:
@@ -643,7 +643,7 @@ Phase status:
 - Phase 1: complete
 - Phase 2: complete
 - Phase 3: complete
-- Phase 4: pending
+- Phase 4: complete
 - Phase 5: pending
 - Phase 6: pending
 
@@ -932,6 +932,35 @@ to Phase 4.
   none.
 
 ## Phase 4: Add Search Options and Complete Command Coverage
+
+### Implementation Status
+
+Completed 2026-09-09 in the Phase 4 milestone commit. `my-search.el` now owns
+stack-aware line, multi-buffer line, buffer, and ripgrep facades plus their
+saved Transients. Native routes use public Consult commands, all-open Ivy line
+search uses Swiper, project-scoped Ivy line search uses the native adapter, and
+local Ivy ripgrep uses one argv-only, generation-owned rg JSON process. Remote
+Ivy ripgrep remains inside the native Consult adapter so local processes never
+receive TRAMP roots.
+
+The adapters translate case, origin, scope, root, file-universe, matching,
+glob, type, and context intent at the owning boundary. The custom rg reader
+preserves arbitrary query data, publishes typed match and context candidates,
+converts UTF-8 byte offsets to character columns, restores cancelled previews,
+and exports the current candidate snapshot to Grep without rerunning rg. The
+stable lowercase immediate and uppercase options bindings now cover every
+configurable search family.
+
+The combined reviewer covered 764 production and 662 test additions. Review
+found and resolved native multiline seed handling, typed trailing-whitespace
+preservation, and atomic Consult glob/type/context arguments; a fresh final
+confirmation reported no findings. Validation: search ERT 10/10, completion
+stack ERT 11/11, file picker ERT 13/13, leader ERT 12/12, appearance ERT
+14/14, GUI smoke ERT 7/7, real rg Unicode/context/literal-seed and installed
+Consult argument-builder probes, double init plus soft reload, clean module
+byte compilation, `check-parens`, and `git diff --check`. Live graphical
+completion and persistent-result acceptance remain assigned to Phases 5 and
+6.
 
 ### Changes
 
