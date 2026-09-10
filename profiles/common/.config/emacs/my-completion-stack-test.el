@@ -593,11 +593,12 @@
         (ivy-height-alist '((counsel-M-x . 6)))
         (display-buffer-alist
          '(("\\*Messages\\*" display-buffer-same-window))))
-    ;; Ivy owns C-c C-o upstream; the profile adds the equivalent C-q.
+    ;; Ivy owns C-c C-o upstream; the profile uses C-q for Embark collection.
     (keymap-set ivy-minibuffer-map "C-c C-o" #'ivy-occur)
     (my/configure-ivy)
     (should my/ivy-minibuffer-map-configured)
-    (should (eq (keymap-lookup ivy-minibuffer-map "C-q") #'ivy-occur))
+    (should (eq (keymap-lookup ivy-minibuffer-map "C-q")
+                #'embark-collect))
     (should (eq (keymap-lookup ivy-minibuffer-map "C-c C-o") #'ivy-occur))
     (should (= ivy-height 14))
     (should (equal ivy-height-alist '((counsel-M-x . 6))))

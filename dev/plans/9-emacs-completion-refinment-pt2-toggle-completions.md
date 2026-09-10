@@ -85,7 +85,7 @@ Layer ownership is explicit:
 | Hierarchical files | `read-file-name`, native frontend | `read-file-name`, Ivy frontend | `C-x C-f` remains local/TRAMP-aware and create-capable. |
 | Xref | Consult presentation | Native Xref result buffers | Consult is not run through Ivy. |
 | Diagnostics and call hierarchies | Native buffers | Native buffers | Existing domain-specific persistent views remain unchanged. |
-| Persistent completion results | Embark Collect and Export | Ivy Occur and command-specific Counsel Occur | Each frontend owns its candidate snapshot. |
+| Persistent completion results | Embark Collect and Export | Embark Collect by default; Ivy Occur on `C-c C-o` | Embark owns the preferred snapshot while Ivy retains its fallback. |
 | Reusable settings | Transient | The same profile-owned Transients | Settings express intent and each backend translates it. |
 
 Do not enable `counsel-mode`. It broadly remaps commands outside the selected
@@ -138,9 +138,9 @@ file prompts use native `*Completions*`.
 
 In `ivy-counsel`, ordinary `completing-read` and `read-file-name` prompts use
 Ivy. Ivy owns selection, filtering, its minibuffer keymap, and literal-input
-semantics. `C-q` invokes `ivy-occur`, and Ivy's normal action dispatcher remains
-available. Embark remains loaded for at-point actions and native CAPF, but does
-not replace Ivy's ordinary minibuffer action model.
+semantics. `C-q` invokes `embark-collect`, while `C-c C-o` retains
+`ivy-occur` as the explicit fallback and Ivy's normal action dispatcher remains
+available.
 
 ### `C-x C-f`
 
@@ -324,15 +324,15 @@ than building a generic framework.
 | `C-SPC` | Eglot, file, Ispell, and major-mode CAPFs | Native completion-in-region | Same | Native acceptance; C-q Embark Collect |
 | `M-/` | Dabbrev expansion | `dabbrev-expand` | Same | None |
 | `C-M-/` | Dabbrev completion | Native completion-in-region | Same | C-q Embark Collect |
-| `C-x C-f`, `SPC f h` | Hierarchical local/TRAMP open or create | `my/find-file`, native frontend | `my/find-file`, Ivy frontend | Native Collect or Ivy Occur |
+| `C-x C-f`, `SPC f h` | Hierarchical local/TRAMP open or create | `my/find-file`, native frontend | `my/find-file`, Ivy frontend | Embark Collect; Ivy Occur fallback |
 | `C-p`, `SPC f p` | Configured recursive project/default-root files | Streaming `consult-fd` | Local safe Ivy fzf reader; remote native Consult adapter | Dired Export or repository-owned fzf Dired result |
 | `M-p`, `SPC f P` | Recursive file options | Shared Transient | Same | Runs the selected facade on action |
 | `SPC f f` | Project files | project.el, native frontend | project.el, Ivy frontend | Frontend-specific persistence |
 | `SPC f F` | Fixed recursive all-files universe | Consult route | Local safe Ivy fzf reader; remote native Consult adapter | Frontend-specific persistence |
 | `SPC f D` | Recursive current-file directory | Consult route | Local safe Ivy fzf reader; remote native Consult adapter | Frontend-specific persistence |
 | `SPC f R` | Hierarchical `/sshx:` entry | Native file completion | Ivy file completion | Frontend-specific persistence |
-| `SPC f o` | Recent files | `consult-recent-file` | `counsel-recentf` | Embark Export or Ivy Occur |
-| `C-x b`, `SPC ,`, `SPC b b` | Buffer selection | `consult-buffer` | `ivy-switch-buffer` | Ibuffer Export or Ivy Occur |
+| `SPC f o` | Recent files | `consult-recent-file` | `counsel-recentf` | Embark Collect/Export; Ivy Occur fallback |
+| `C-x b`, `SPC ,`, `SPC b b` | Buffer selection | `consult-buffer` | `counsel-switch-buffer` | Embark Collect/Ibuffer Export; Ivy Occur fallback |
 | `SPC b B` | Buffer options | Shared Transient | Same | Runs `my/select-buffer` |
 
 ### Text search and selection
@@ -530,8 +530,9 @@ UI:
 
 - native CAPF, native minibuffer, and Consult/native prompts use
   `my/completion-collect` and Embark Collect;
-- Ivy, Counsel, and Swiper prompts use `ivy-occur` or the command-specific
-  Occur function registered by Counsel;
+- ordinary Ivy, Counsel, and Swiper prompts use Embark Collect, while
+  `C-c C-o` retains `ivy-occur` or the command-specific Occur function as an
+  explicit fallback;
 - the repository-owned Ivy fzf prompt uses its repository-owned Dired exporter
   over the current safe session state;
 - the repository-owned Ivy rg prompt uses its repository-owned `grep-mode`
@@ -539,8 +540,8 @@ UI:
 - global `C-q` remains `quoted-insert` outside a completion UI.
 
 Retain `C-c .` for Embark actions. In an Ivy prompt, Ivy's own `M-o` action
-dispatcher remains the primary action surface. Do not try to force one action
-implementation across both frontends.
+dispatcher remains available. The shared Ivy map prefers Embark only for the
+candidate snapshot; repository-owned readers retain their typed exporters.
 
 Remove the existing fzf-specific Embark collector, Ivy setup hook, Embark
 default-action override, `counsel-fzf` shell command, and private Ivy state
@@ -635,7 +636,7 @@ Selecting a stack does not eagerly run or validate external programs.
 ## Status
 
 - Overall: complete
-- Current milestone: Follow-up `ivy-ui-polish` (complete)
+- Current milestone: Follow-up `ivy-embark-collect` (complete)
 - Commit policy: one new Git commit after each accepted Phase
 
 Phase status:
@@ -650,6 +651,7 @@ Phase status:
 Follow-up status:
 
 - `ivy-ui-polish`: complete
+- `ivy-embark-collect`: complete
 
 ## Goal
 
@@ -678,8 +680,9 @@ stable while the selected frontend and command implementations change.
 9. Use a frontend-neutral file-picker controller instead of suspended nested
    minibuffers and frontend-specific refresh.
 10. Keep Transient values stack-neutral and translate them at each backend.
-11. Use Embark Collect/Export for native and Consult prompts, Ivy/Counsel Occur
-    where supported, and repository-owned typed exporters for custom fzf and rg
+11. Use Embark Collect/Export for native and Consult prompts, prefer Embark
+    Collect for ordinary Ivy/Counsel/Swiper prompts, retain Ivy Occur on
+    `C-c C-o`, and use repository-owned typed exporters for custom fzf and rg
     readers.
 12. Keep exact fzf ranking and streaming as explicit alternative behaviors;
     do not claim that either path provides both.
@@ -1221,6 +1224,55 @@ GUI smoke coverage.
   buffer when cancelled.
 - Stack transitions, reloads, and existing completion tests remain clean.
 
+## Follow-up: Prefer Embark Collect in Ivy
+
+### Implementation Status
+
+Completed 2026-09-09 in the `ivy-embark-collect` follow-up milestone. The user
+preference supersedes the original ordinary-Ivy `C-q` contract. Ordinary Ivy,
+Counsel, and Swiper prompts now create an Embark Collect snapshot with `C-q`
+using Embark's default window behavior, while upstream `C-c C-o` remains
+available for Ivy Occur. Repository-owned fzf and ripgrep readers retain their
+typed `C-q` exporters because those commands preserve backend-specific result
+metadata.
+
+The implementation binds the shared Ivy minibuffer map directly to the public
+`embark-collect` command and declares that public dependency for clean byte
+compilation. No wrapper, display override, live collector, private adapter, or
+`embark-consult` coupling was added. Embark's installed Ivy collector returned
+the active Ivy candidate set in a direct integration probe.
+
+Validation: the six regression suites passed 71/71 across completion
+lifecycle, appearance, file picking, search, leader bindings, and GUI smoke
+coverage. Focused completion ERT passed 14/14 after final cleanup. Installed
+binding probes confirmed direct Embark collection, the Ivy Occur fallback,
+native and global `C-q`, and custom fzf/ripgrep exporters. Double init plus
+`my/soft-reload`, temporary byte compilation, `check-parens`, and
+`git diff --check` passed. A fresh final review reported no findings. Batch
+mode could not drive the complete recursive Ivy keystroke path because Ivy
+reads stdin before entering its minibuffer; binding, collector, and focused
+behavior checks cover that path instead.
+
+### Changes
+
+1. Bind `C-q` in `ivy-minibuffer-map` directly to public `embark-collect` and
+   preserve Embark's default window behavior.
+2. Keep upstream `C-c C-o` on `ivy-occur` as the explicit Ivy-owned fallback.
+3. Keep the same-window Ivy Occur display rule for fallback invocations.
+4. Preserve native completion Collect bindings, global `quoted-insert`, and
+   the repository-owned fzf and ripgrep exporters.
+5. Update focused coverage and validate real installed Ivy/Embark integration.
+
+### Success Criteria
+
+- Ordinary Ivy, Counsel, and Swiper `C-q` creates one Embark Collect snapshot
+  with Embark's default window layout and does not invoke Ivy Occur.
+- `C-c C-o` still invokes Ivy Occur and uses its same-window display rule.
+- Custom fzf and ripgrep `C-q` bindings still invoke their typed exporters.
+- Native completion `C-q` and global `C-q` retain their existing behavior.
+- Reloads, stack transitions, and the completion regression suites remain
+  clean.
+
 ## Overall Success Criteria
 
 - `native-consult` and `ivy-counsel` are complete selectable profiles rather
@@ -1262,8 +1314,9 @@ GUI smoke coverage.
   live-buffer-only project filter.
 - Portable remote `find` cannot reproduce fd ignore semantics or all case
   modes.
-- Ivy Occur and Embark Export produce different buffer modes and action models.
-  Persistent-result equivalence means usable targets, not identical UI.
+- Embark Collect and the Ivy Occur fallback produce different buffer modes and
+  action models. Persistent-result equivalence means usable targets, not
+  identical UI.
 - Saved Transient and stack values outlive code changes. Validate recognized
   values before translating them into process arguments.
 - Current installed completion packages may be archive copies or unreviewed

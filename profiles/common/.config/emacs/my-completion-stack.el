@@ -19,6 +19,7 @@
 (declare-function counsel-imenu "counsel")
 (declare-function counsel-recentf "counsel")
 (declare-function counsel-yank-pop "counsel")
+(declare-function embark-collect "embark")
 (declare-function ivy-completing-read "ivy")
 (declare-function ivy-configure "ivy" (caller &rest arguments))
 (declare-function ivy-mode "ivy")
@@ -76,7 +77,7 @@
 (defun my/configure-ivy-minibuffer-map ()
   "Install the profile-owned Ivy minibuffer bindings once."
   (unless my/ivy-minibuffer-map-configured
-    (keymap-set ivy-minibuffer-map "C-q" #'ivy-occur)
+    (keymap-set ivy-minibuffer-map "C-q" #'embark-collect)
     (setq my/ivy-minibuffer-map-configured t)))
 
 (defun my/configure-ivy ()
