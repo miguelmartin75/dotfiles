@@ -7,6 +7,8 @@
 (add-to-list 'load-path
              (file-name-directory (or load-file-name buffer-file-name)))
 (require 'my-completion-stack)
+(require 'my-file-picker)
+(require 'my-search)
 
 (defconst my/completion-stack-test-directory
   (file-name-directory (expand-file-name (or load-file-name buffer-file-name)))
@@ -180,30 +182,91 @@
 
 (ert-deftest my/completion-stack-transitions-start-no-process-or-provisioning ()
   (my/completion-stack-test-with-isolated-state
-    (let (activity)
-      (let ((make-process-advice
-             (lambda (&rest _arguments) (push 'make-process activity)))
-            (start-process-advice
-             (lambda (&rest _arguments) (push 'start-process activity)))
-            (refresh-advice
-             (lambda (&rest _arguments)
-               (push 'package-refresh-contents activity)))
-            (install-advice
-             (lambda (&rest _arguments) (push 'package-install activity))))
-        (unwind-protect
-            (progn
-              (advice-add 'make-process :before make-process-advice)
-              (advice-add 'start-process :before start-process-advice)
-              (advice-add 'package-refresh-contents :before refresh-advice)
-              (advice-add 'package-install :before install-advice)
+    (let (activity advices)
+      (unwind-protect
+          (progn
+            (dolist (function '(executable-find
+                                process-file
+                                file-remote-p
+                                make-process
+                                start-process
+                                package-refresh-contents
+                                package-install
+                                package-install-file
+                                package-vc-install))
+              (let ((advice
+                     (lambda (&rest arguments)
+                       (ignore arguments)
+                       (push function activity))))
+                (advice-add function :before advice)
+                (push (cons function advice) advices)))
+            (my/select-native-completion-stack)
+            (my/select-ivy-completion-stack)
+            (my/toggle-completion-stack)
+            (my/toggle-completion-stack)
+            (my/select-native-completion-stack)
+            (should-not activity))
+        (dolist (entry advices)
+          (advice-remove (car entry) (cdr entry)))))))
+
+(ert-deftest my/completion-stack-transitions-preserve-persistent-results ()
+  (my/completion-stack-test-with-isolated-state
+    (let* ((root (file-name-as-directory
+                  (make-temp-file "my-completion-stack-results-" t)))
+           (file (expand-file-name "result.el" root))
+           (file-session
+            (make-my/file-picker-ivy-fzf-session
+             :root root :active t :candidates '("result.el")))
+           (search-session
+            (make-my/search-rg-session
+             :root root :active t
+             :candidates
+             (list (make-my/search-rg-candidate
+                    :file file :line 2 :column 1 :text "result"))))
+           (my/file-picker-active-ivy-fzf-session file-session)
+           (my/search-active-rg-session search-session)
+           dired-buffer
+           grep-buffer)
+      (unwind-protect
+          (progn
+            (with-temp-file file
+              (insert "first\nresult\n"))
+            (save-window-excursion
+              (cl-letf (((symbol-function 'ivy-exit-with-action)
+                         (lambda (action &rest arguments)
+                           (ignore arguments)
+                           (funcall action nil))))
+                (my/file-picker-fzf-export)
+                (my/search-rg-export))
+              (setq dired-buffer
+                    (my/file-picker-ivy-fzf-session-export-buffer file-session)
+                    grep-buffer
+                    (my/search-rg-session-export-buffer search-session))
+              (should (buffer-live-p dired-buffer))
+              (should (buffer-live-p grep-buffer))
               (my/set-completion-stack 'native-consult)
               (my/set-completion-stack 'ivy-counsel)
               (my/set-completion-stack 'native-consult)
-              (should-not activity))
-          (advice-remove 'make-process make-process-advice)
-          (advice-remove 'start-process start-process-advice)
-          (advice-remove 'package-refresh-contents refresh-advice)
-          (advice-remove 'package-install install-advice))))))
+              (with-current-buffer dired-buffer
+                (should (derived-mode-p 'dired-mode))
+                (should (dired-goto-file file))
+                (should (equal (dired-get-filename) file)))
+              (with-current-buffer grep-buffer
+                (should (derived-mode-p 'grep-mode))
+                (should (string-match-p (regexp-quote file) (buffer-string))))
+              (pop-to-buffer grep-buffer)
+              (goto-char (point-min))
+              (next-error 1 t)
+              (with-current-buffer (get-file-buffer file)
+                (should (= (line-number-at-pos) 2)))))
+        (when (buffer-live-p dired-buffer)
+          (kill-buffer dired-buffer))
+        (when (buffer-live-p grep-buffer)
+          (kill-buffer grep-buffer))
+        (let ((file-buffer (get-file-buffer file)))
+          (when (buffer-live-p file-buffer)
+            (kill-buffer file-buffer)))
+        (delete-directory root t)))))
 
 (ert-deftest my/completion-stack-menu-has-the-required-selecting-suffixes ()
   (dolist (spec '(("n" "Native and Consult" my/select-native-completion-stack)
@@ -389,15 +452,146 @@
     (should ivy-mode)
     (should (eq completing-read-function #'ivy-completing-read))))
 
-(ert-deftest my/completion-stack-configures-only-ivy-minibuffer-collect ()
+(ert-deftest my/completion-stack-and-transient-values-persist-across-emacs ()
+  (let* ((root (make-temp-file "my-completion-stack-persistence-" t))
+         (savehist-file (expand-file-name "savehist" root))
+         (transient-values-file (expand-file-name "transient-values" root))
+         (child-one-home (file-name-as-directory
+                          (expand-file-name "child-one" root)))
+         (child-two-home (file-name-as-directory
+                          (expand-file-name "child-two" root)))
+         (emacs (expand-file-name invocation-name invocation-directory))
+         (setup
+          `(progn
+             (setq savehist-file ,savehist-file
+                   transient-values-file ,transient-values-file)
+             (add-to-list 'load-path ,my/completion-stack-test-directory)
+             (defvar ivy-mode nil)
+             (defvar ivy-do-completion-in-region nil)
+             (defvar ivy-minibuffer-map (make-sparse-keymap))
+             (defun ivy-completing-read (&rest arguments)
+               (apply #'completing-read-default arguments))
+             (defun ivy-mode (enabled)
+               (setq ivy-mode (> enabled 0)
+                     completing-read-function
+                     (if ivy-mode
+                         #'ivy-completing-read
+                       #'completing-read-default)))
+             (require 'my-completion-stack)
+             (require 'my-file-picker)
+             (require 'my-search)
+             (require 'savehist)
+             (add-to-list 'savehist-additional-variables
+                          'my/completion-stack-saved)
+             (savehist-mode 1)
+             (defun my/completion-stack-test-child-set (stack)
+               (let ((original-require (symbol-function 'require)))
+                 (cl-letf (((symbol-function 'require)
+                            (lambda (feature &optional filename noerror)
+                              (if (eq feature 'ivy)
+                                  'ivy
+                                (funcall original-require feature filename noerror)))))
+                   (my/set-completion-stack stack))))))
+         (child-one
+          `(let ((user-emacs-directory ,child-one-home))
+             ,setup
+             (my/completion-stack-test-child-set 'ivy-counsel)
+             (my/file-picker-fzf-menu)
+             (cl-letf (((symbol-function 'transient-infix-read)
+                        (lambda (&rest arguments)
+                          (ignore arguments)
+                          "sensitive")))
+               (execute-kbd-macro (kbd "c")))
+             (transient-save)
+             (transient-quit-all)
+             (my/search-ripgrep-menu)
+             (cl-letf (((symbol-function 'transient-infix-read)
+                        (lambda (&rest arguments)
+                          (ignore arguments)
+                          "smart")))
+               (execute-kbd-macro (kbd "c")))
+             (transient-save)
+             (transient-quit-all)
+             (savehist-save)
+             (princ "phase5-child-one-complete")))
+         (child-two
+          `(let ((user-emacs-directory ,child-two-home))
+             ,setup
+             (my/completion-stack-test-child-set
+              (if (memq my/completion-stack-saved my/completion-stack-values)
+                  my/completion-stack-saved
+                my/completion-stack-default))
+             (unless (and (eq my/completion-stack 'ivy-counsel)
+                          (eq my/completion-stack-saved 'ivy-counsel))
+               (error "Saved completion stack was not applied"))
+             (unless (equal (transient-args 'my/file-picker-fzf-menu)
+                            '("--case=sensitive" "--no-ignore" "--hidden"
+                              "--root=project"))
+               (error "File picker did not restore its saved values"))
+             (unless (equal (transient-args 'my/search-ripgrep-menu)
+                            '("--context=0" "--matching=regexp" "--case=smart"
+                              "--no-ignore" "--hidden" "--root=project"))
+               (error "Ripgrep did not restore its family-specific values"))
+             (my/file-picker-fzf-menu)
+             (cl-letf (((symbol-function 'transient-infix-read)
+                        (lambda (&rest arguments)
+                          (ignore arguments)
+                          "smart")))
+               (execute-kbd-macro (kbd "c")))
+             (execute-kbd-macro (kbd "C-g"))
+             (unless (equal (transient-args 'my/file-picker-fzf-menu)
+                            '("--case=sensitive" "--no-ignore" "--hidden"
+                              "--root=project"))
+               (error "Cancel overwrote saved file picker values"))
+             (my/file-picker-fzf-menu)
+             (transient-reset)
+             (transient-quit-all)
+             (my/search-ripgrep-menu)
+             (transient-reset)
+             (transient-quit-all)
+             (unless (equal (sort (copy-sequence
+                                   (transient-args 'my/file-picker-fzf-menu))
+                                  #'string<)
+                            (sort (copy-sequence my/file-picker-fzf-default-args)
+                                  #'string<))
+               (error "File picker reset did not restore code defaults"))
+             (unless (equal (sort (copy-sequence
+                                   (transient-args 'my/search-ripgrep-menu))
+                                  #'string<)
+                            (sort (copy-sequence my/search-ripgrep-default-args)
+                                  #'string<))
+               (error "Ripgrep reset did not restore code defaults"))
+             (when (or (assoc 'my/file-picker-fzf-menu transient-values)
+                       (assoc 'my/search-ripgrep-menu transient-values))
+               (error "Transient reset did not remove saved values"))
+             (princ "phase5-child-two-complete"))))
+    (unwind-protect
+        (dolist (child `((,child-one . "phase5-child-one-complete")
+                         (,child-two . "phase5-child-two-complete")))
+          (with-temp-buffer
+            (let ((status
+                   (process-file emacs nil t nil
+                                 "--batch" "-Q"
+                                 "-L" my/completion-stack-test-directory
+                                 "--eval" (prin1-to-string (car child)))))
+              (unless (= status 0)
+                (error "Persistence child failed: %s" (buffer-string)))
+              (should (string-match-p (cdr child) (buffer-string))))))
+      (delete-directory root t))))
+
+(ert-deftest my/completion-stack-configures-ivy-minibuffer-collect-bindings ()
   (let ((my/ivy-minibuffer-map-configured nil)
         (ivy-minibuffer-map (make-sparse-keymap)))
+    ;; Ivy owns C-c C-o upstream; the profile adds the equivalent C-q.
+    (keymap-set ivy-minibuffer-map "C-c C-o" #'ivy-occur)
     (my/configure-ivy-minibuffer-map)
     (should my/ivy-minibuffer-map-configured)
     (should (eq (keymap-lookup ivy-minibuffer-map "C-q") #'ivy-occur))
+    (should (eq (keymap-lookup ivy-minibuffer-map "C-c C-o") #'ivy-occur))
     (keymap-set ivy-minibuffer-map "C-q" #'ignore)
     (my/configure-ivy-minibuffer-map)
     (should (eq (keymap-lookup ivy-minibuffer-map "C-q") #'ignore))
+    (should (eq (keymap-lookup ivy-minibuffer-map "C-c C-o") #'ivy-occur))
     (should (eq (keymap-lookup global-map "C-q") #'quoted-insert))))
 
 ;;; my-completion-stack-test.el ends here

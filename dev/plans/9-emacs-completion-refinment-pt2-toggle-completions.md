@@ -635,7 +635,7 @@ Selecting a stack does not eagerly run or validate external programs.
 ## Status
 
 - Overall: in progress
-- Current milestone: Phase 5 (pending)
+- Current milestone: Phase 6 (pending)
 - Commit policy: one new Git commit after each accepted Phase
 
 Phase status:
@@ -644,7 +644,7 @@ Phase status:
 - Phase 2: complete
 - Phase 3: complete
 - Phase 4: complete
-- Phase 5: pending
+- Phase 5: complete
 - Phase 6: pending
 
 ## Goal
@@ -1011,6 +1011,33 @@ completion and persistent-result acceptance remain assigned to Phases 5 and
 - Cancellation restores the original location and publishes no stale preview.
 
 ## Phase 5: Finish Actions and Persistence
+
+### Implementation Status
+
+Completed 2026-09-09 in the Phase 5 milestone commit. The repository-owned Ivy
+fzf and rg readers now retain the standard `C-c C-o` export key alongside C-q.
+Both commands export their current typed candidate snapshots without starting
+a new collection or process, and the rg Grep snapshot includes a non-result
+heading so `next-error` reaches the first match reliably.
+
+Native Collect remains usable from minibuffer and CAPF completion surfaces,
+and loading Consult activates the registered Embark Dired, Ibuffer, Occur,
+Grep, and Xref exporters. A direct exporter probe followed real target metadata
+back to its file, buffer, line, Grep match, and Xref location. Persistent Dired
+and Grep buffers stayed usable through a native/Ivy/native stack round trip.
+
+Two isolated child Emacs processes shared only their Savehist and Transient
+files. The second process restored and applied the saved Ivy stack, restored
+family-specific file and search values, preserved the last saved values after
+C-g, and reset both families to code defaults while removing their stored
+entries. Stack selectors and toggles were also observed with executable,
+remote-path, process, and package-provisioning spies and performed none of
+those operations. Validation: completion stack ERT 13/13, file picker ERT
+13/13, search ERT 10/10, appearance ERT 14/14, leader ERT 12/12, GUI smoke ERT
+7/7, direct Embark export target probe, double init plus soft reload, clean
+module byte compilation, `check-parens`, private-dependency scan, and
+`git diff --check`. The Phase added fewer than 800 reviewable lines, so it did
+not trigger a size-gated reviewer checkpoint.
 
 ### Changes
 

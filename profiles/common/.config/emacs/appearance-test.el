@@ -490,6 +490,15 @@
 (ert-deftest my/appearance-native-completion-collect-routes-and-binds ()
   (let ((key (kbd "C-q")))
     (should (featurep 'embark))
+    (require 'consult)
+    (should (featurep 'embark-consult))
+    (dolist (exporter '((buffer . embark-export-ibuffer)
+                        (file . embark-export-dired)
+                        (consult-location . embark-consult-export-location-occur)
+                        (consult-grep . embark-consult-export-grep)
+                        (consult-xref . embark-consult-export-xref)))
+      (should (eq (alist-get (car exporter) embark-exporters-alist)
+                  (cdr exporter))))
     (dolist (map (list minibuffer-local-completion-map
                        completion-in-region-mode-map
                        completion-list-mode-map

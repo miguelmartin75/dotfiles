@@ -397,36 +397,46 @@
                 "fzf file discovery failed with status 2"))))))
 
 (ert-deftest my/file-picker-fzf-export-builds-dired-snapshot-without-rerun ()
-  (let* ((session (make-my/file-picker-ivy-fzf-session
-                   :root "/tmp/file-picker-root/" :active t
+  (let* ((root (file-name-as-directory (make-temp-file "my-file-picker-export-" t)))
+         (files (list (expand-file-name "src/one.el" root)
+                      (expand-file-name "README.md" root)))
+         (session (make-my/file-picker-ivy-fzf-session
+                   :root root :active t
                    :candidates '("src/one.el" "README.md")))
          (my/file-picker-active-ivy-fzf-session session)
-         snapshot
          dired-buffer)
     (unwind-protect
-        (cl-letf (((symbol-function 'ivy-exit-with-action)
-                   (lambda (action &rest ignored)
-                     (ignore ignored)
-                     (funcall action nil)))
-                  ((symbol-function 'dired)
-                   (lambda (files)
-                     (setq snapshot files
-                           dired-buffer
-                           (get-buffer-create " *file-picker-dired*"))))
-                  ((symbol-function 'make-process)
-                   (lambda (&rest ignored)
-                     (ignore ignored)
-                     (error "C-q must not start another process"))))
-          (my/file-picker-fzf-export)
-          (should (equal snapshot
-                         '("/tmp/file-picker-root/"
-                           "/tmp/file-picker-root/src/one.el"
-                           "/tmp/file-picker-root/README.md")))
-          (should (eq
-                   dired-buffer
-                   (my/file-picker-ivy-fzf-session-export-buffer session))))
+        (progn
+          (make-directory (file-name-directory (car files)))
+          (dolist (file files)
+            (with-temp-file file
+              (insert "exported file\n")))
+          (cl-letf (((symbol-function 'ivy-exit-with-action)
+                     (lambda (action &rest ignored)
+                       (ignore ignored)
+                       (funcall action nil)))
+                    ((symbol-function 'make-process)
+                     (lambda (&rest ignored)
+                       (ignore ignored)
+                       (error "Export must not start another process")))
+                    ((symbol-function 'my/file-picker-fzf-collection)
+                     (lambda (&rest ignored)
+                       (ignore ignored)
+                       (error "Export must not start a fresh collection"))))
+            (dolist (key '("C-q" "C-c C-o"))
+              (let ((command (lookup-key my/file-picker-ivy-fzf-map (kbd key))))
+                (should (eq command #'my/file-picker-fzf-export))
+                (funcall command)
+                (setq dired-buffer
+                      (my/file-picker-ivy-fzf-session-export-buffer session))
+                (with-current-buffer dired-buffer
+                  (should (derived-mode-p 'dired-mode))
+                  (dolist (file files)
+                    (should (dired-goto-file file))
+                    (should (equal (dired-get-filename) file))))))))
       (when (buffer-live-p dired-buffer)
-        (kill-buffer dired-buffer)))))
+        (kill-buffer dired-buffer))
+      (delete-directory root t))))
 
 (ert-deftest my/file-picker-records-one-jump-only-for-successful-cross-buffer-visit ()
   (let ((source (generate-new-buffer " *file-picker-source*"))

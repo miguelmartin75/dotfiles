@@ -98,6 +98,7 @@
 (defvar my/search-rg-map
   (let ((map (make-sparse-keymap)))
     (keymap-set map "C-q" #'my/search-rg-export)
+    (keymap-set map "C-c C-o" #'my/search-rg-export)
     map)
   "Keymap added to the repository-owned Ivy ripgrep reader.")
 
@@ -555,6 +556,7 @@
       (let ((inhibit-read-only t))
         (erase-buffer)
         (setq default-directory root)
+        (insert "Repository-owned ripgrep snapshot:\n")
         (dolist (candidate (my/search-rg-session-candidates session))
           (insert
            (format "%s:%d:%d:%s\n"

@@ -74,6 +74,7 @@
   (let ((map (make-sparse-keymap)))
     (keymap-set map "C-c C-r" #'my/file-picker-toggle)
     (keymap-set map "C-q" #'my/file-picker-fzf-export)
+    (keymap-set map "C-c C-o" #'my/file-picker-fzf-export)
     map)
   "Keymap composed with Ivy for the repository-owned fzf reader.")
 
