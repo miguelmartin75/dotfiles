@@ -634,8 +634,8 @@ Selecting a stack does not eagerly run or validate external programs.
 
 ## Status
 
-- Overall: in progress
-- Current milestone: Phase 6 (pending)
+- Overall: complete
+- Current milestone: Phase 6 (complete)
 - Commit policy: one new Git commit after each accepted Phase
 
 Phase status:
@@ -645,7 +645,7 @@ Phase status:
 - Phase 3: complete
 - Phase 4: complete
 - Phase 5: complete
-- Phase 6: pending
+- Phase 6: complete
 
 ## Goal
 
@@ -1070,6 +1070,50 @@ not trigger a size-gated reviewer checkpoint.
   families.
 
 ## Phase 6: Integrated Validation and Documentation
+
+### Implementation Status
+
+Completed 2026-09-09 in the Phase 6 milestone commit. Real terminal Emacs
+prompts selected candidates through native completion and Ivy after repeated
+in-process stack changes, with the active `C-q` action changing from
+`my/completion-collect` to `ivy-occur`. Native `*Completions*` CAPF sessions
+accepted a source-backed candidate in both stacks. Real clangd and Eglot
+sessions also accepted a completion item carrying a `textEdit` in both stacks
+while the repository-owned native completion-in-region function remained
+installed. The available server fixture did not expose snippets or
+`additionalTextEdits`, so those item forms are not represented as live-tested.
+
+Real fd 10.4.2, fzf 0.65.2, and rg 15.2.0 runs exercised mixed-case, hidden,
+ignored, symlinked, and `.git` paths. The translated fd and rg argument paths
+preserved the documented inclusion and exclusion rules. Controlled producers
+showed Consult fd accepting the first candidate before producer EOF, rg
+delivering its first line while still running, and fzf withholding output
+until EOF before returning globally ranked results. The automated terminal rg
+prompt could not reliably select its first displayed candidate before EOF, so
+visible rg prompt streaming remains supported by the real line-buffered
+producer and focused adapter coverage rather than a completed timed UI
+acceptance probe.
+
+The six integration suites passed together in one Emacs process, 69/69:
+completion stack 13/13, appearance 14/14, file picker 13/13, search 10/10,
+leader bindings 12/12, and GUI smoke 7/7. The aggregate run exposed an active
+completion-in-region cleanup leak in the appearance fixture; cleanup now ends
+that mode before killing the source buffer. Double init, soft reload,
+`check-parens`, temporary byte compilation, facade and lowercase leader
+audits, and `git diff --check` also passed. The cumulative size-gated review of
+Phases 5 and 6 reported no findings.
+
+No usable authenticated TRAMP host was available: configured SSH targets
+either rejected authentication or timed out, localhost refused connections,
+and the Teleport-backed target required interactive browser authentication.
+Remote routing therefore retains its focused test coverage and is not claimed
+as a live success. No graphical display was available; real UI checks ran in a
+terminal and the graphical contract retains its GUI smoke coverage. The
+current user package directory contains archive snapshots rather than the
+reviewed VC descriptors. Exact clean VC provisioning was validated in the
+isolated Phase 1 home, while these integrated runtime checks used the installed
+package snapshots. The superseded native-only plan remains a pending design
+record and now points to this completed toggle plan.
 
 ### Changes
 

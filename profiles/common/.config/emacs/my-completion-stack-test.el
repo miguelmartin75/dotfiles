@@ -355,8 +355,13 @@
                     (let ((window (get-buffer-window "*Completions*")))
                       (should (window-live-p window))
                       (with-current-buffer (window-buffer window)
-                        (should (eq completion-reference-buffer source))))
-                    (completion-in-region-mode -1))
+                        (should (eq completion-reference-buffer source)))
+                      (with-selected-window window
+                        (goto-char (point-min))
+                        (next-completion 1)
+                        (choose-completion)))
+                    (with-current-buffer source
+                      (should (equal (buffer-string) "alpha"))))
                 (let ((completion-buffer (get-buffer "*Completions*")))
                   (when completion-buffer
                     (kill-buffer completion-buffer)))

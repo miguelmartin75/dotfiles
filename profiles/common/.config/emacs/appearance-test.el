@@ -575,6 +575,9 @@
                                    (mapcar #'car tabulated-list-entries))
                                  '("alpha" "alpine"))))
                 (setq collect-buffers focused-collect-buffers))))
+        (with-current-buffer source-buffer
+          (when completion-in-region-mode
+            (completion-in-region-mode -1)))
         (kill-buffer source-buffer)
         (dolist (buffer collect-buffers)
           (when (buffer-live-p buffer)
