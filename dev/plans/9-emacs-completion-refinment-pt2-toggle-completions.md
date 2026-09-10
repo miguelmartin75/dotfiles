@@ -635,7 +635,7 @@ Selecting a stack does not eagerly run or validate external programs.
 ## Status
 
 - Overall: complete
-- Current milestone: Phase 6 (complete)
+- Current milestone: Follow-up `ivy-ui-polish` (complete)
 - Commit policy: one new Git commit after each accepted Phase
 
 Phase status:
@@ -646,6 +646,10 @@ Phase status:
 - Phase 4: complete
 - Phase 5: complete
 - Phase 6: complete
+
+Follow-up status:
+
+- `ivy-ui-polish`: complete
 
 ## Goal
 
@@ -1160,6 +1164,62 @@ record and now points to this completed toggle plan.
   the final contract.
 - Startup is offline and starts no file enumeration, content search, or remote
   operation.
+
+## Follow-up: Ivy UI Polish
+
+### Implementation Status
+
+Completed 2026-09-09 in the `ivy-ui-polish` follow-up milestone. Ivy `C-q`
+still resolves only to `ivy-occur`; Embark Collect remains owned by the native
+completion maps. An anchored, reload-safe display rule now keeps Ivy Occur in
+the launching window, including repeated sessions whose generated buffer names
+end in numeric collision suffixes such as `<2>`. Ivy defaults to a 14-row
+height without changing caller-specific height overrides, and Counsel's public
+per-caller configuration now starts `M-x` with empty input.
+
+All-scope Ivy buffer selection now uses `counsel-switch-buffer` for live
+candidate previews through the existing preview-restoration boundary. Normal
+selection keeps the chosen buffer, while cancellation restores the original
+buffer, point, window, and window start. Global action-on-move behavior remains
+disabled so preview does not execute unrelated command, yank, or file actions.
+
+Validation: the focused completion and search suites passed 25/25, and the six
+integration suites passed 71/71 across completion lifecycle, appearance, file
+picking, search, leader bindings, and GUI smoke coverage. Batch init loading,
+double init loading plus `my/soft-reload`, temporary byte compilation,
+`check-parens`, and `git diff --check` passed. Installed Ivy/Counsel probes
+confirmed height 14, an empty `counsel-M-x` initial input, preservation of the
+5-row `counsel-yank-pop` override, distinct native and Ivy `C-q` ownership, and
+single-window display for normal and collision-suffixed Ivy Occur buffers. The
+first final review identified the generated-buffer suffix gap; the fix added a
+real collision test, and a fresh final review reported no findings. No
+graphical display was available, so graphical behavior retains the existing
+GUI smoke coverage.
+
+### Changes
+
+1. Configure Ivy Occur buffers to reuse the launching window without changing
+   native Embark Collect bindings or Ivy's `C-q` command.
+2. Set Ivy's default maximum height to 14 while preserving intentional
+   per-caller height overrides.
+3. Override `counsel-M-x` through Ivy's public per-caller configuration so its
+   initial input is empty.
+4. Route Ivy buffer selection through Counsel's supported preview command,
+   which previews the selected buffer and restores the origin on cancellation.
+5. Add focused behavioral coverage and repeat the integrated validation and
+   real terminal prompt checks.
+
+### Success Criteria
+
+- Ivy `C-q` creates only an Ivy-owned Occur result and does not add a second
+  result window beside the launching window.
+- Native completion `C-q` still creates an Embark Collect result.
+- Ivy uses a default maximum height of 14 candidates without overriding a
+  command's intentional caller-specific height.
+- `M-x` in the Ivy stack starts with empty editable input rather than `^`.
+- Ivy buffer selection previews the current candidate and restores the origin
+  buffer when cancelled.
+- Stack transitions, reloads, and existing completion tests remain clean.
 
 ## Overall Success Criteria
 

@@ -13,9 +13,9 @@
 (declare-function consult-line-multi "consult" (query &optional initial))
 (declare-function consult-project-buffer "consult")
 (declare-function consult-ripgrep "consult" (&optional dir initial))
+(declare-function counsel-switch-buffer "counsel" ())
 (declare-function ivy-exit-with-action "ivy" (action &optional exit-code))
 (declare-function ivy-read "ivy" (prompt collection &rest arguments))
-(declare-function ivy-switch-buffer "ivy" (&optional arg))
 (declare-function ivy-update-candidates "ivy" (candidates))
 (declare-function my/call-with-native-completion
                   "my-completion-stack" (function &rest arguments))
@@ -244,7 +244,8 @@
       (let ((completion-ignore-case (my/search-case-fold-p args))
             (ivy-case-fold-search-default (my/search-ivy-case-fold-p args)))
         (if (eq my/completion-stack 'ivy-counsel)
-            (ivy-switch-buffer)
+            (my/search-run-with-preview-restoration
+             #'counsel-switch-buffer)
           (consult-buffer))))))
 
 (defun my/search-ripgrep-arguments (args query)

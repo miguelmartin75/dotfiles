@@ -16,6 +16,8 @@
 
 (defvar ivy-mode nil)
 (defvar ivy-do-completion-in-region nil)
+(defvar ivy-height)
+(defvar ivy-height-alist)
 (defvar ivy-minibuffer-map)
 
 (defun my/completion-stack-test-native-reader (&rest arguments)
@@ -584,19 +586,60 @@
               (should (string-match-p (cdr child) (buffer-string))))))
       (delete-directory root t))))
 
-(ert-deftest my/completion-stack-configures-ivy-minibuffer-collect-bindings ()
+(ert-deftest my/completion-stack-configures-ivy-bindings-and-display-idempotently ()
   (let ((my/ivy-minibuffer-map-configured nil)
-        (ivy-minibuffer-map (make-sparse-keymap)))
+        (ivy-minibuffer-map (make-sparse-keymap))
+        (ivy-height 8)
+        (ivy-height-alist '((counsel-M-x . 6)))
+        (display-buffer-alist
+         '(("\\*Messages\\*" display-buffer-same-window))))
     ;; Ivy owns C-c C-o upstream; the profile adds the equivalent C-q.
     (keymap-set ivy-minibuffer-map "C-c C-o" #'ivy-occur)
-    (my/configure-ivy-minibuffer-map)
+    (my/configure-ivy)
     (should my/ivy-minibuffer-map-configured)
     (should (eq (keymap-lookup ivy-minibuffer-map "C-q") #'ivy-occur))
     (should (eq (keymap-lookup ivy-minibuffer-map "C-c C-o") #'ivy-occur))
+    (should (= ivy-height 14))
+    (should (equal ivy-height-alist '((counsel-M-x . 6))))
+    (should (equal (car display-buffer-alist)
+                   my/ivy-occur-display-buffer-rule))
+    (let* ((occur-name
+            (format "*ivy-occur counsel-M-x \"query-%s\"*"
+                    (make-temp-name "")))
+           (occur-buffer (generate-new-buffer occur-name))
+           (collision-buffer (generate-new-buffer occur-name)))
+      (unwind-protect
+          (progn
+            (should (string-match-p (car my/ivy-occur-display-buffer-rule)
+                                    (buffer-name occur-buffer)))
+            (should (equal (buffer-name collision-buffer)
+                           (concat occur-name "<2>")))
+            (should (string-match-p (car my/ivy-occur-display-buffer-rule)
+                                    (buffer-name collision-buffer))))
+        (kill-buffer occur-buffer)
+        (kill-buffer collision-buffer)))
+    (should-not (string-match-p (car my/ivy-occur-display-buffer-rule)
+                                "before *ivy-occur \"query\"*"))
+    (should (equal (nth 1 my/ivy-occur-display-buffer-rule)
+                   '(display-buffer-same-window display-buffer-reuse-window)))
     (keymap-set ivy-minibuffer-map "C-q" #'ignore)
-    (my/configure-ivy-minibuffer-map)
+    (my/configure-ivy)
     (should (eq (keymap-lookup ivy-minibuffer-map "C-q") #'ignore))
     (should (eq (keymap-lookup ivy-minibuffer-map "C-c C-o") #'ivy-occur))
+    (should (= (cl-count my/ivy-occur-display-buffer-rule display-buffer-alist
+                         :test #'equal)
+               1))
     (should (eq (keymap-lookup global-map "C-q") #'quoted-insert))))
+
+(ert-deftest my/completion-stack-configures-counsel-m-x-with-empty-input ()
+  (let (configurations)
+    (cl-letf (((symbol-function 'ivy-configure)
+               (lambda (&rest arguments)
+                 (push arguments configurations))))
+      (my/configure-counsel)
+      (my/configure-counsel))
+    (should (equal configurations
+                   '((counsel-M-x :initial-input "")
+                     (counsel-M-x :initial-input ""))))))
 
 ;;; my-completion-stack-test.el ends here

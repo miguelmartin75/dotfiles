@@ -55,7 +55,7 @@
                                 (nth 5 case)
                                 (if (nth 5 case) t nil))))))))
   (dolist (case '((native-consult "insensitive" consult-buffer t)
-                  (ivy-counsel "sensitive" ivy-switch-buffer nil)))
+                  (ivy-counsel "sensitive" counsel-switch-buffer nil)))
     (let ((my/completion-stack (nth 0 case))
           observed)
       (cl-letf (((symbol-function 'transient-args)
@@ -68,11 +68,11 @@
                    (setq observed
                          (list 'consult-buffer completion-ignore-case
                                ivy-case-fold-search-default))))
-                ((symbol-function 'ivy-switch-buffer)
+                ((symbol-function 'counsel-switch-buffer)
                  (lambda (&rest ignored)
                    (ignore ignored)
                    (setq observed
-                         (list 'ivy-switch-buffer completion-ignore-case
+                         (list 'counsel-switch-buffer completion-ignore-case
                                ivy-case-fold-search-default)))))
         (my/select-buffer))
       (should (equal observed
@@ -163,6 +163,39 @@
       (should (equal observed
                      (list (nth 1 case) "/tmp/my-search-root/" "seed"
                            my/search-ripgrep-default-args)))))))
+
+(ert-deftest my/search-ivy-buffer-selection-restores-cancelled-preview ()
+  (save-window-excursion
+    (let ((origin (generate-new-buffer " *my search origin*"))
+          (preview (generate-new-buffer " *my search preview*"))
+          (my/completion-stack 'ivy-counsel)
+          (ivy-calling nil)
+          (window (selected-window)))
+      (unwind-protect
+          (progn
+            (switch-to-buffer origin)
+            (insert "origin")
+            (goto-char (point-max))
+            (let (condition)
+              (cl-letf (((symbol-function 'transient-args)
+                         (lambda (&rest ignored)
+                           (ignore ignored)
+                           '("--case=insensitive" "--scope=all")))
+                        ((symbol-function 'counsel-switch-buffer)
+                         (lambda ()
+                           (should-not ivy-calling)
+                           (switch-to-buffer preview)
+                           (signal 'quit nil))))
+                (condition-case received
+                    (my/select-buffer)
+                  (quit
+                   (setq condition received))))
+              (should (equal condition '(quit))))
+            (should (eq (window-buffer window) origin))
+            (with-current-buffer origin
+              (should (= (point) (point-max)))))
+        (kill-buffer origin)
+        (kill-buffer preview)))))
 
 (ert-deftest my/completion-stack-consult-source-uses-live-public-buffers ()
   (let ((first (generate-new-buffer " *completion source first*"))

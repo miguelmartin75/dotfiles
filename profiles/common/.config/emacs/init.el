@@ -471,12 +471,13 @@
   (setq consult-buffer-sources '(my/consult-live-buffer-source)))
 
 (use-package ivy
-  :commands (ivy-occur ivy-switch-buffer))
+  :commands ivy-occur)
 
 (use-package counsel
   :commands (counsel-M-x
              counsel-imenu
              counsel-recentf
+             counsel-switch-buffer
              counsel-yank-pop))
 
 (use-package swiper

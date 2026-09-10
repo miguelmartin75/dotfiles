@@ -5,6 +5,8 @@
 (require 'xref)
 
 (defvar ivy-do-completion-in-region)
+(defvar ivy-height)
+(defvar ivy-height-alist)
 (defvar ivy-minibuffer-map)
 (defvar ivy-mode)
 
@@ -18,6 +20,7 @@
 (declare-function counsel-recentf "counsel")
 (declare-function counsel-yank-pop "counsel")
 (declare-function ivy-completing-read "ivy")
+(declare-function ivy-configure "ivy" (caller &rest arguments))
 (declare-function ivy-mode "ivy")
 (declare-function ivy-occur "ivy")
 (declare-function swiper-isearch "swiper")
@@ -55,6 +58,11 @@
 (defvar my/ivy-minibuffer-map-configured nil
   "Whether profile-owned Ivy minibuffer bindings have been installed.")
 
+(defconst my/ivy-occur-display-buffer-rule
+  '("\\`\\*ivy-occur\\(?: .+\\)?\\*\\(?:<[0-9]+>\\)?\\'"
+    (display-buffer-same-window display-buffer-reuse-window))
+  "Display Ivy Occur results in the window that launched the reader.")
+
 (unless my/completion-stack-captured
   (setq my/completion-stack-native-reader completing-read-function
         my/completion-stack-native-completion-in-region-function
@@ -71,8 +79,21 @@
     (keymap-set ivy-minibuffer-map "C-q" #'ivy-occur)
     (setq my/ivy-minibuffer-map-configured t)))
 
+(defun my/configure-ivy ()
+  "Apply the profile-owned Ivy settings."
+  (my/configure-ivy-minibuffer-map)
+  (setq ivy-height 14)
+  (add-to-list 'display-buffer-alist my/ivy-occur-display-buffer-rule))
+
 (with-eval-after-load 'ivy
-  (my/configure-ivy-minibuffer-map))
+  (my/configure-ivy))
+
+(defun my/configure-counsel ()
+  "Apply the profile-owned Counsel settings."
+  (ivy-configure 'counsel-M-x :initial-input ""))
+
+(with-eval-after-load 'counsel
+  (my/configure-counsel))
 
 (defun my/set-completion-stack (stack)
   "Apply completion STACK without changing in-buffer completion.
