@@ -15,18 +15,30 @@
 (declare-function ghostel-create "ghostel" (name action))
 (declare-function ghostel-paste-string "ghostel" (text))
 (declare-function ghostel-send-key "ghostel" (key &optional modifier))
-(declare-function ghostel-semi-char-mode "ghostel")
-(declare-function evil-ghostel-insert "evil-ghostel")
+(declare-function my/ghostel-enter-terminal-input "init")
 (declare-function term-sessions-open "term-sessions-frontends" (entry &optional command))
 (declare-function term-sessions-send "term-sessions-zmx" (name text))
-(declare-function term-sessions-read-existing-session-entry "term-sessions-frontends"
-                  (&optional prompt))
+(declare-function term-sessions--read-session-entry "term-sessions-frontends"
+                  (&optional prompt require-existing))
+
+(defun my/read-zmx-session-entry (prompt &optional require-existing)
+  "Read a zmx session entry with PROMPT.
+
+When REQUIRE-EXISTING is non-nil, reject names that are not running sessions."
+  (require 'term-sessions-frontends)
+  (term-sessions--read-session-entry prompt require-existing))
 
 (defconst my/right-split-action
   '((display-buffer-in-direction)
     (direction . right)
     (window-width . 0.5))
   "Display action for equal-width right-hand splits.")
+
+(defconst my/below-split-action
+  '((display-buffer-in-direction)
+    (direction . below)
+    (window-height . 0.5))
+  "Display action for equal-height below splits.")
 
 (defun my/send-text-save-last-target (target)
   "Save TARGET as the current tab's last successful text target."
@@ -42,12 +54,11 @@
          (process-live-p process))))
 
 (defvar my/cwd-terminal-targets nil
-  "Ghostel target descriptors cached by exact raw `default-directory' values.")
+  "Persistent zmx target descriptors cached by exact directories.")
 
 (defun my/open-cwd-terminal ()
-  "Toggle the live Ghostel terminal for the exact current directory."
+  "Toggle the persistent zmx terminal for the exact current directory."
   (interactive)
-  (require 'ghostel)
   (let* ((entry
           (cl-find-if
            (lambda (candidate)
@@ -57,35 +68,47 @@
          (target (if entry
                      (cdr entry)
                    (alist-get directory my/cwd-terminal-targets nil nil #'equal)))
-         (live (my/ghostel-target-live-p target))
+         (buffer (plist-get target :buffer))
+         (live (buffer-live-p buffer))
          (window (and live
                       (get-buffer-window (plist-get target :buffer)
                                          (selected-frame)))))
     (if window
         (quit-window nil window)
       (unless live
-        (let* ((project (project-current nil directory))
-               (directory-name
+        (let* ((directory-name
                 (file-name-nondirectory
                  (directory-file-name (expand-file-name directory))))
-               (name (if project
-                         (project-name project)
-                       (if (string-empty-p directory-name)
-                           (abbreviate-file-name
-                            (directory-file-name (expand-file-name directory)))
-                         directory-name)))
+               (readable-name
+                (replace-regexp-in-string
+                 "[^[:alnum:]_.-]+" "-"
+                 (if (string-empty-p directory-name) "root" directory-name)))
+               (workspace-id
+                (or (my/tab-current-property 'my/workspace-id)
+                    (my/workspace-default-id directory)))
+               (name (format "emacs-%s-shell-%s"
+                             readable-name
+                             (substring
+                              (secure-hash 'sha1
+                                           (concat workspace-id "\0" directory))
+                              0 10)))
                (default-directory directory)
-               (buffer
-                (ghostel-create (format "*ghostel: %s*" name)
-                                my/right-split-action)))
-          (setq target (list :type 'ghostel
-                             :buffer buffer
-                             :process (get-buffer-process buffer)))
-          (unless (my/ghostel-target-live-p target)
-            (user-error "Created Ghostel buffer cannot accept input"))
+               (descriptor (list :type 'zmx
+                                 :name name
+                                 :directory directory
+                                 :cwd (or (file-remote-p directory 'localname)
+                                          directory)))
+               (display-buffer-overriding-action my/right-split-action))
+          (term-sessions-open descriptor nil)
+          (setq buffer (current-buffer)
+                target (plist-put descriptor :buffer buffer))
+          (unless (buffer-live-p buffer)
+            (user-error "Opened zmx terminal did not return a live buffer"))
           (setf (alist-get directory my/cwd-terminal-targets nil nil #'equal)
                 target)))
-      (pop-to-buffer (plist-get target :buffer)))
+      (pop-to-buffer buffer)
+      (with-current-buffer buffer
+        (my/ghostel-enter-terminal-input)))
     (my/send-text-save-last-target target)))
 
 (defun my/send-text-deliver (target text replay)
@@ -167,7 +190,7 @@
                 nil t))
               (entry
                (if (string= selection "existing session")
-                   (term-sessions-read-existing-session-entry "zmx session: ")
+                   (my/read-zmx-session-entry "zmx session: " t)
                  (let ((name (read-string "New zmx session name: ")))
                    (list :name name
                          :directory source-directory
@@ -180,9 +203,7 @@
              (term-sessions-open entry nil)
              (let ((buffer (current-buffer)))
                (with-current-buffer buffer
-                 (ghostel-semi-char-mode)
-                 (unless (eq evil-state 'insert)
-                   (evil-ghostel-insert))))))
+                 (my/ghostel-enter-terminal-input)))))
          (setq target (plist-put (copy-sequence entry) :type 'zmx))))
       ("buffer"
        (require 'ghostel)
@@ -354,18 +375,21 @@ suitable interpreter.  No results are written back to the Markdown file."
   (interactive)
   (my/send-text-to-target (my/markdown-fenced-code-body)))
 
-(defun my/create-ghostel-terminal-in-split (&optional name directory)
-  "Create a Ghostel terminal in a right-side split and save it for this tab."
+(defun my/create-ghostel-terminal-in-split (&optional name directory display-action)
+  "Create a nonpersistent Ghostel terminal and save it for this tab.
+NAME remains explicit, DIRECTORY defaults to `default-directory', and
+DISPLAY-ACTION defaults to `my/right-split-action'."
   (interactive
    (let ((directory default-directory))
      (list (read-string "Ghostel buffer name (optional): ") directory)))
   (unless directory
     (setq directory default-directory))
+  (unless display-action
+    (setq display-action my/right-split-action))
   (require 'ghostel)
   (let* ((default-directory directory)
          (buffer
-          (ghostel-create name
-                          my/right-split-action))
+          (ghostel-create name display-action))
          (target (list :type 'ghostel
                        :buffer buffer
                        :process (get-buffer-process buffer))))
@@ -373,34 +397,73 @@ suitable interpreter.  No results are written back to the Markdown file."
       (user-error "Created Ghostel buffer cannot accept input"))
     (my/send-text-save-last-target target)))
 
-(defun my/open-or-create-zmx-session-in-split (&optional entry command)
-  "Open or create zmx session ENTRY in a split and save it for this tab."
+(defun my/open-or-create-zmx-session-in-split
+    (&optional entry command display-action)
+  "Open or create zmx session ENTRY in a split and save it for this tab.
+COMMAND is passed to `term-sessions-open'.  DISPLAY-ACTION defaults to
+`my/right-split-action'."
   (interactive
-   (let ((directory default-directory))
-     (if current-prefix-arg
-         (let ((name (read-string "New zmx session name: ")))
-           (when (string-empty-p name)
-             (user-error "zmx session name cannot be empty"))
-           (let ((command (read-string "Command for new session (optional): ")))
-             (list (list :name name
-                         :directory directory
-                         :cwd (or (file-remote-p directory 'localname)
-                                  directory))
-                   (unless (string-empty-p command) command))))
-       (let ((default-directory directory))
-         (list (term-sessions-read-existing-session-entry "zmx session: ") nil)))))
+   (let* ((directory default-directory)
+          (default-directory directory)
+          (entry (progn
+                   (require 'term-sessions-list)
+                   (my/read-zmx-session-entry "zmx session: " nil)))
+          (name (plist-get entry :name))
+          (command
+           (when (and current-prefix-arg
+                      (not (plist-member entry :session)))
+             (read-string "Command for new session (optional): "))))
+     (when (string-empty-p name)
+       (user-error "zmx session name cannot be empty"))
+     (list entry
+           (unless (string-empty-p (or command "")) command)
+           my/right-split-action)))
+  (unless display-action
+    (setq display-action my/right-split-action))
   (let ((default-directory (plist-get entry :directory))
-        (display-buffer-overriding-action my/right-split-action))
+        (display-buffer-overriding-action display-action))
     (when (string-empty-p (plist-get entry :name))
       (user-error "zmx session name cannot be empty"))
     (term-sessions-open entry command)
     (let ((buffer (current-buffer)))
+      (my/send-text-save-last-target
+       (plist-put (copy-sequence entry) :type 'zmx))
       (with-current-buffer buffer
-        (ghostel-semi-char-mode)
-        (unless (eq evil-state 'insert)
-          (evil-ghostel-insert))))
-    (my/send-text-save-last-target
-     (plist-put (copy-sequence entry) :type 'zmx))))
+        (my/ghostel-enter-terminal-input)))))
+
+(defvar my/zmx-terminal-name-sequence 0
+  "Sequence used to keep generated zmx terminal names unique.")
+
+(defun my/create-zmx-terminal-in-split (display-action)
+  "Create a fresh persistent zmx terminal using DISPLAY-ACTION."
+  (let* ((directory default-directory)
+         (directory-name
+          (file-name-nondirectory
+           (directory-file-name (expand-file-name directory))))
+         (readable-name
+          (replace-regexp-in-string
+           "[^[:alnum:]_.-]+" "-"
+           (if (string-empty-p directory-name) "root" directory-name)))
+         (name (format "emacs-%s-%s-%d-%d"
+                       readable-name
+                       (format-time-string "%Y%m%d-%H%M%S")
+                       (emacs-pid)
+                       (cl-incf my/zmx-terminal-name-sequence)))
+         (entry (list :name name
+                      :directory directory
+                      :cwd (or (file-remote-p directory 'localname)
+                               directory))))
+    (my/open-or-create-zmx-session-in-split entry nil display-action)))
+
+(defun my/create-zmx-terminal-right ()
+  "Create a fresh persistent zmx terminal in a right-side split."
+  (interactive)
+  (my/create-zmx-terminal-in-split my/right-split-action))
+
+(defun my/create-zmx-terminal-below ()
+  "Create a fresh persistent zmx terminal in a below split."
+  (interactive)
+  (my/create-zmx-terminal-in-split my/below-split-action))
 
 (defvar my/annotations nil
   "Queued source annotations awaiting explicit target selection.")

@@ -362,15 +362,23 @@ roots and working-directory containment have been checked."
                   derived-root (plist-get relay :workspace-root)
                   source (plist-get relay :workspace-root)
                   remote t))
-        (setq cwd (my/agent-events-validate-directory
-                   cwd "Working directory" my/agent-events-max-cwd-bytes)
-              derived-root (my/workspace-normalize-root cwd))
-        (unless (eq workspace-root my/agent-events-missing)
-          (my/agent-events-validate-directory workspace-root "Workspace root"
-                                              my/agent-events-max-workspace-root-bytes)
-          (unless (and (equal workspace-root (my/workspace-normalize-root workspace-root))
-                       (equal workspace-root derived-root))
-            (user-error "Workspace root is not normalized for this working directory"))))
+        (setq cwd
+              (my/workspace-canonical-directory
+               (my/agent-events-validate-directory
+                cwd "Working directory" my/agent-events-max-cwd-bytes)))
+        (if (eq workspace-root my/agent-events-missing)
+            (setq derived-root (my/workspace-normalize-root cwd))
+          (setq workspace-root-identity
+                (my/workspace-canonical-directory
+                 (my/agent-events-validate-directory
+                  workspace-root "Workspace root"
+                  my/agent-events-max-workspace-root-bytes)))
+          (unless (equal workspace-root workspace-root-identity)
+            (user-error "Workspace root is not canonical"))
+          (unless (my/agent-events-remote-path-contained-p
+                   workspace-root-identity cwd)
+            (user-error "Working directory is outside the workspace root"))
+          (setq derived-root workspace-root-identity)))
       (append
        (list :schema-version schema-version
              :provider provider
@@ -432,33 +440,35 @@ roots and working-directory containment have been checked."
   "Return EVENT annotated with its verified task routing state.
 
 This function never creates or rebinds tabs.  A task-qualified event can stay
-unbound when no matching bound tab exists, while concrete task/root or tab/task
-disagreement is rejected."
+unbound when no matching bound tab exists.  Task identity disambiguates tabs
+that intentionally share a root; an unqualified same-root event is ambiguous."
   (let* ((root (plist-get event :workspace-root))
          (task-id (plist-get event :task-id))
          (tabs (my/agent-events-tabs-for-root root))
          (route (if (> (length tabs) 1) 'ambiguous 'unbound))
-         task)
+         task
+         matching-tabs)
     (when task-id
       (setq task (my/workflow-find-task task-id))
       (unless task
         (user-error "Agent event references an unknown task"))
       (unless (equal (plist-get task :root) root)
-        (user-error "Agent event task, workspace root, and working directory disagree")))
+        (user-error "Agent event task, workspace root, and working directory disagree"))
+      (dolist (tab tabs)
+        (when (equal (alist-get 'my/work-task-id (cdr tab)) task-id)
+          (push tab matching-tabs)))
+      (setq matching-tabs (nreverse matching-tabs)))
     (cond
+     (task
+      (cond
+       ((> (length matching-tabs) 1)
+        (setq route 'ambiguous))
+       ((car matching-tabs)
+        (setq route 'bound))
+       (t
+        (setq route 'unbound))))
      ((> (length tabs) 1)
       (setq route 'ambiguous))
-     (task
-      (let ((bound-task-id (alist-get 'my/work-task-id (cdr (car tabs)))))
-        (cond
-         ((null (car tabs))
-          (setq route 'unbound))
-         ((null bound-task-id)
-          (setq route 'unbound))
-         ((not (equal bound-task-id task-id))
-         (user-error "Agent event task disagrees with the workspace tab"))
-         (t
-          (setq route 'bound)))))
      ((car tabs)
       (let ((bound-task-id (alist-get 'my/work-task-id (cdr (car tabs)))))
         (when bound-task-id

@@ -37,6 +37,16 @@
   "Optional non-work Org file included in the agenda when it exists."
   :type 'file)
 
+(defcustom my/workspace-configurations nil
+  "Named workspace configurations keyed by stable string IDs.
+
+Each entry has the form (ID :name NAME :root ROOT :entry ENTRY :layout LAYOUT).
+NAME and ROOT are required.  ENTRY is an optional file, absolute or relative to
+ROOT.  LAYOUT is an optional layout symbol that defaults to `focus'.  IDs
+beginning with
+\"directory:\" are reserved for deterministic directory workspaces."
+  :type 'sexp)
+
 (defconst my/workflow-log-kinds
   '(start progress decision blocker handoff done)
   "Supported explicit labels for global work-log entries.")
@@ -58,6 +68,50 @@ symlinks with `file-truename'."
          (project (project-current nil directory))
          (root (if project (project-root project) directory)))
     (file-name-as-directory (expand-file-name root))))
+
+(defun my/workspace-canonical-directory (directory)
+  "Return exact DIRECTORY as an absolute name with one trailing slash."
+  (file-name-as-directory (expand-file-name directory)))
+
+(defun my/workspace-default-id (root)
+  "Return the deterministic workspace ID for exact canonical ROOT."
+  (concat "directory:" (my/workspace-canonical-directory root)))
+
+(defun my/workspace-configuration (id)
+  "Return the validated workspace configuration for stable string ID."
+  (unless (and (stringp id) (not (string-empty-p id)))
+    (user-error "Workspace configuration ID must be a nonempty string"))
+  (let ((entry (assoc id my/workspace-configurations))
+        configuration)
+    (if entry
+        (let ((name (plist-get (cdr entry) :name))
+              (root (plist-get (cdr entry) :root))
+              (edit-entry (plist-get (cdr entry) :entry))
+              (layout (plist-get (cdr entry) :layout)))
+          (unless (and (stringp name) (not (string-empty-p name)))
+            (user-error "Workspace configuration %s needs a nonempty :name" id))
+          (unless (and (stringp root) (not (string-empty-p root)))
+            (user-error "Workspace configuration %s needs a nonempty :root" id))
+          (when (and edit-entry (not (stringp edit-entry)))
+            (user-error "Workspace configuration %s :entry must be a file name" id))
+          (when (and layout (not (symbolp layout)))
+            (user-error "Workspace configuration %s :layout must be a symbol" id))
+          (setq configuration
+                (list :id id :name name
+                      :root (my/workspace-canonical-directory root)
+                      :entry edit-entry :layout (or layout 'focus))))
+      (unless (string-prefix-p "directory:" id)
+        (user-error "Unknown workspace configuration %s" id))
+      (let ((root (substring id (length "directory:"))))
+        (unless (and (file-name-absolute-p root)
+                     (equal id (my/workspace-default-id root)))
+          (user-error "Invalid deterministic workspace configuration ID"))
+        (setq configuration
+              (list :id id
+                    :name (or (file-name-nondirectory (directory-file-name root))
+                              root)
+                    :root root :layout 'focus))))
+    configuration))
 
 (defun my/tab-current-property (property)
   "Return PROPERTY from the current tab's public property alist."
@@ -91,22 +145,70 @@ symlinks with `file-truename'."
         (setq result index)))
     result))
 
-(defun my/workspace-tab-index (root)
-  "Return the tab index managed for normalized ROOT, or nil."
+(defun my/workspace-tab-index-by-id (id)
+  "Return the tab index managed for workspace configuration ID, or nil."
   (my/tab-find-index-by-property
-   'my/workspace-root
-   (my/workspace-normalize-root root)))
+   'my/workspace-id id))
 
-(defun my/workspace-select-or-create-tab (root)
-  "Select ROOT's managed tab, creating it when it does not yet exist.
+(defun my/workspace-tab-indices-for-root (root)
+  "Return every tab index whose exact workspace root is normalized ROOT."
+  (let ((root (my/workspace-canonical-directory root))
+        (index 0)
+        result)
+    (dolist (tab (tab-bar-tabs))
+      (setq index (1+ index))
+      (when (equal (alist-get 'my/workspace-root (cdr tab)) root)
+        (push index result)))
+    (nreverse result)))
 
-Tab names are deliberately not used as workspace identity."
-  (let* ((root (my/workspace-normalize-root root))
-         (index (my/workspace-tab-index root)))
+(defun my/workspace-task-tab-index (root task-id)
+  "Return ROOT's unique tab bound to TASK-ID, or nil.
+
+Signal an error when duplicate tab bindings make the result ambiguous."
+  (let (matches)
+    (dolist (index (my/workspace-tab-indices-for-root root))
+      (let ((tab (nth (1- index) (tab-bar-tabs))))
+        (when (equal (alist-get 'my/work-task-id (cdr tab)) task-id)
+          (push index matches))))
+    (when (> (length matches) 1)
+      (user-error "Task %s is bound to multiple workspace tabs" task-id))
+    (car matches)))
+
+(defun my/workspace-tab-index (root)
+  "Return the deterministic directory workspace tab for ROOT, or nil.
+
+An existing unique root-only tab is returned so the running Emacs session can
+adopt the stable ID when this configuration is reloaded."
+  (or (my/workspace-tab-index-by-id (my/workspace-default-id root))
+      (let (matches)
+        (dolist (index (my/workspace-tab-indices-for-root root))
+          (let ((tab (nth (1- index) (tab-bar-tabs))))
+            (unless (alist-get 'my/workspace-id (cdr tab))
+              (push index matches))))
+        (when (= (length matches) 1)
+          (car matches)))))
+
+(defun my/workspace-select-or-create-tab (root &optional id name)
+  "Select ROOT's managed tab by ID, creating it when absent.
+
+ID defaults to ROOT's deterministic directory-workspace ID.  Tab names are
+display labels only and never workspace identity."
+  (let* ((root (if id
+                   (my/workspace-canonical-directory root)
+                 (my/workspace-normalize-root root)))
+         (id (or id (my/workspace-default-id root)))
+         (index (my/workspace-tab-index-by-id id)))
     (if index
-        (tab-bar-select-tab index)
+        (progn
+          (tab-bar-select-tab index)
+          (unless (equal (my/tab-current-property 'my/workspace-root) root)
+            (user-error "Workspace configuration %s is already bound to another root" id)))
       (tab-bar-new-tab)
-      (my/tab-set-current-property 'my/workspace-root root))
+      (my/tab-set-current-property 'my/workspace-id id)
+      (my/tab-set-current-property 'my/workspace-root root)
+      (my/tab-set-current-property 'my/layout-current 'focus)
+      (tab-bar-rename-tab
+       (or name (file-name-nondirectory (directory-file-name root)))))
     root))
 
 (defun my/workflow-validate-project-key (project-key)
@@ -371,6 +473,7 @@ explicit confirmation before reuse."
     (list :task task
           :task-id (plist-get task :id)
           :project-key (plist-get task :project-key)
+          :workspace-id (my/tab-current-property 'my/workspace-id)
           :workspace-root (or (my/tab-current-property 'my/workspace-root)
                               (plist-get task :root)))))
 
@@ -487,9 +590,18 @@ place so an interrupted post-save tab commit can be retried safely."
 
 (defun my/workflow-prepare-task-binding (task root)
   "Validate TASK's ROOT binding and any existing root tab before writes."
-  (let ((task-root (and task (plist-get task :root)))
-        (task-id (and task (plist-get task :id)))
-        (tab-index (my/workspace-tab-index root)))
+  (let* ((task-root (and task (plist-get task :root)))
+         (task-id (and task (plist-get task :id)))
+         (current-index
+          (cl-loop for tab in (tab-bar-tabs)
+                   for index from 1
+                   when (eq (car tab) 'current-tab)
+                   return index))
+         (tab-index
+          (or (and task-id (my/workspace-task-tab-index root task-id))
+              (and (equal (my/tab-current-property 'my/workspace-root) root)
+                   current-index)
+              (my/workspace-tab-index root))))
     (when (and task-root (not (equal task-root root))
                (not (y-or-n-p
                      (format "Rebind task %s from %s to %s? "
@@ -509,7 +621,11 @@ place so an interrupted post-save tab commit can be retried safely."
   (let ((tabs (copy-tree (tab-bar-tabs))))
     (condition-case err
         (progn
-          (my/workspace-select-or-create-tab root)
+          (let ((index (my/workspace-task-tab-index root task-id)))
+            (if index
+                (tab-bar-select-tab index)
+              (unless (equal (my/tab-current-property 'my/workspace-root) root)
+                (my/workspace-select-or-create-tab root))))
           (my/tab-set-current-property 'my/work-task-id task-id))
       (t
        (tab-bar-tabs-set tabs)
@@ -532,7 +648,11 @@ TITLE may name an existing active task or create one.  WORKSPACE-ROOT,
 PROJECT-KEY, WORK-KEY, and NOTE-FILE make the command directly usable by
 capture and tests; interactive use derives and prompts for the missing values."
   (interactive)
-  (let* ((root (my/workspace-normalize-root (or workspace-root default-directory)))
+  (let* ((current-root (my/tab-current-property 'my/workspace-root))
+         (root (if (and current-root (null workspace-root))
+                   current-root
+                 (my/workspace-normalize-root
+                  (or workspace-root default-directory))))
          (project-key
           (my/workflow-validate-project-key
            (or project-key
@@ -582,7 +702,9 @@ capture and tests; interactive use derives and prompts for the missing values."
     (when (and schema work-key (not task)
                (my/workflow-find-task-by-key schema work-key t))
       (user-error "Work key %s already exists in this project" work-key))
-    (setq root-tab-index (my/workspace-tab-index root)
+    (setq root-tab-index (and task
+                              (my/workspace-task-tab-index root
+                                                           (plist-get task :id)))
           already-bound
           (and task
                root-tab-index

@@ -91,7 +91,8 @@
                   "my-workflow.el"
                   "my-agent-events.el"
                   "my-send-text.el"
-                  "my-window-layouts.el"))
+                  "my-window-layouts.el"
+                  "my-workspace-state.el"))
     (load (expand-file-name file my/config-directory) nil nil t))
   (load config-path nil nil t))
 
@@ -1667,25 +1668,49 @@ When UP is non-nil, swap with the preceding paragraph."
   ;; `ghostel-module-compile'; terminal use never installs it implicitly.
   (setq ghostel-module-directory
         (expand-file-name "ghostel/" user-emacs-directory)
-        ghostel-module-auto-install nil))
+        ghostel-module-auto-install nil)
+  (setopt ghostel-initial-input-mode 'char
+          ghostel-readonly-fast-exit nil)
+  :config
+  (add-hook 'ghostel-exit-functions #'my/ghostel-close-pane-on-exit))
+
+(defun my/ghostel-close-pane-on-exit (buffer _event)
+  "Dismiss windows showing exited terminal BUFFER when another pane remains."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (when (or (eq (alist-get 'kind ghostel-identity) 'term)
+                (bound-and-true-p term-sessions-current-terminal-p))
+        (dolist (window (get-buffer-window-list buffer nil t))
+          (when (and (window-live-p window)
+                     (> (length (window-list (window-frame window) 'no-minibuf)) 1))
+            (quit-window nil window)))))))
+
+(defvar my/ghostel-command-mode-map (make-sparse-keymap)
+  "Emacs command map used while a Ghostel terminal remains live.")
+
+(defun my/ghostel-enter-emacs-mode ()
+  "Enter Ghostel command input with Evil normal state."
+  (interactive)
+  (ghostel-emacs-mode)
+  (use-local-map my/ghostel-command-mode-map)
+  (evil-normal-state))
+
+(defun my/ghostel-enter-terminal-input ()
+  "Send terminal input directly through Ghostel char mode."
+  (interactive)
+  (ghostel-char-mode)
+  (evil-insert-state))
 
 (use-package evil-ghostel
   :after (ghostel evil)
   :init
   (setopt evil-ghostel-initial-state 'insert
           evil-ghostel-escape 'terminal)
-  ;; Outer Evil state and Ghostel input mode are independent axes.  In outer
-  ;; insert state, plain Escape always reaches the inner terminal; normal-state
-  ;; Escape keeps its usual meaning.  Outside char mode, Command+Escape enters
-  ;; outer normal state once; C-c <escape> is the package fallback where that
-  ;; function-key event is distinguishable.  The i, a, I, and A keys keep
-  ;; evil-ghostel's terminal-aware entry behavior; o and Return alias i.  C-c C-j
-  ;; returns the Ghostel axis to semi-char; C-c M-d enters char mode, where every
-  ;; key goes inward until M-RET exits.  In semi-char plus outer insert, C-w reaches
-  ;; the PTY, C-b opens a window prefix with C-b C-b sending literal Ctrl-B, and
-  ;; M-SPC opens the shared leader.  Outer Normal and Visual state use the same
-  ;; C-b window prefix with C-b C-b scrolling a page up.  Char mode keeps C-b and
-  ;; M-SPC inward.
+  ;; Terminal input uses Ghostel char mode so control keys go directly to the
+  ;; PTY.  C-b remains the deliberate tmux-style prefix exception, with C-b C-b
+  ;; sending literal Ctrl-B.  Command+Escape enters Ghostel Emacs mode and Evil
+  ;; normal state, while C-c, C-x, C-h, M-x, C-b, and M-SPC belong to Emacs.
+  ;; Command+Escape or an insert-like key returns to char mode.
   :hook (ghostel-mode . evil-ghostel-mode)
   :config
   (defun my/evil-ghostel-insert-state-entry-when-cursor-ready (original)
@@ -1696,19 +1721,33 @@ When UP is non-nil, swap with the preceding paragraph."
                  #'my/evil-ghostel-insert-state-entry-when-cursor-ready)
   (advice-add 'evil-ghostel--insert-state-entry :around
               #'my/evil-ghostel-insert-state-entry-when-cursor-ready)
+  (set-keymap-parent my/ghostel-command-mode-map
+                     (copy-keymap ghostel-readonly-mode-map))
+  (keymap-set my/ghostel-command-mode-map "C-c"
+              (keymap-lookup (current-global-map) "C-c"))
+  (dolist (key '("i" "a" "I" "A" "o" "RET" "<return>" "s-<escape>"))
+    (keymap-set my/ghostel-command-mode-map key
+                #'my/ghostel-enter-terminal-input))
   (keymap-set ghostel-char-mode-map "s-<escape>"
-              (lambda ()
-                (interactive)
-                (ghostel-send-key "escape" "super")))
+              #'my/ghostel-enter-emacs-mode)
   (dolist (map (list ghostel-semi-char-mode-map ghostel-char-mode-map))
     (keymap-set map "s-j" #'my/open-cwd-terminal)
     (keymap-set map "s-a" #'my/work-codex-and-select-agent))
   (evil-define-key 'insert evil-ghostel-mode-map
-    (kbd "s-<escape>") #'evil-force-normal-state)
+    (kbd "s-<escape>") #'my/ghostel-enter-emacs-mode)
   (evil-define-key 'normal evil-ghostel-mode-map
-    (kbd "o") #'evil-ghostel-insert
-    (kbd "RET") #'evil-ghostel-insert
-    (kbd "<return>") #'evil-ghostel-insert))
+    (kbd "i") #'my/ghostel-enter-terminal-input
+    (kbd "a") #'my/ghostel-enter-terminal-input
+    (kbd "I") #'my/ghostel-enter-terminal-input
+    (kbd "A") #'my/ghostel-enter-terminal-input
+    (kbd "o") #'my/ghostel-enter-terminal-input
+    (kbd "RET") #'my/ghostel-enter-terminal-input
+    (kbd "<return>") #'my/ghostel-enter-terminal-input)
+  (evil-define-key* 'normal evil-ghostel-mode-map
+    (kbd "C-c") (keymap-lookup (current-global-map) "C-c")
+    (kbd "C-x") (keymap-lookup (current-global-map) "C-x")
+    (kbd "C-h") (keymap-lookup (current-global-map) "C-h")
+    (kbd "M-x") #'execute-extended-command))
 
 (defvar ghostel-compile-buffer-name)
 (use-package ghostel-compile
@@ -1733,6 +1772,9 @@ When UP is non-nil, swap with the preceding paragraph."
          (expand-file-name "my-send-text.el" my/config-directory))
 (require 'my-window-layouts
          (expand-file-name "my-window-layouts.el" my/config-directory))
+(require 'my-workspace-state
+         (expand-file-name "my-workspace-state.el" my/config-directory))
+(my/workspace-state-initialize)
 
 (defvar my/project-commands nil
   "Project-local alist of task labels and shell commands.
@@ -2038,7 +2080,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
                   (my/layout-apply name current-prefix-arg)))))
 
 (keymap-set my/leader-map "p" #'my/workspace-select)
+(keymap-set my/leader-map "P" #'my/workspace-configuration-select)
 (keymap-set my/leader-map "W" #'my/layout-select)
+(keymap-set my/leader-map "w t r" #'my/workspace-state-restore)
+(keymap-set my/leader-map "w t s" #'my/workspace-state-save)
 (keymap-set my/leader-map "a a" #'my/work-codex)
 (keymap-set my/leader-map "w z"
             (keymap-lookup
@@ -2048,10 +2093,29 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (defvar my/editor-window-map nil
   "Window prefix map for Evil Normal and Visual states.")
 
+(defun my/toggle-window-zoom ()
+  "Toggle between the selected pane and the current tab's prior layout."
+  (interactive)
+  (let ((configuration
+         (my/tab-current-property 'my/window-zoom-configuration)))
+    (if (window-configuration-p configuration)
+        (progn
+          (my/tab-set-current-property 'my/window-zoom-configuration nil)
+          (set-window-configuration configuration))
+      (unless (one-window-p t)
+        (my/tab-set-current-property 'my/window-zoom-configuration
+                                     (current-window-configuration))
+        (delete-other-windows)))))
+
 (setq my/editor-window-map (make-sparse-keymap))
 (set-keymap-parent my/editor-window-map
                    (keymap-lookup my/leader-map "w"))
 (keymap-set my/editor-window-map "C-b" #'evil-scroll-page-up)
+(keymap-set my/editor-window-map "v" #'my/create-zmx-terminal-right)
+(keymap-set my/editor-window-map "%" #'my/create-zmx-terminal-right)
+(keymap-set my/editor-window-map "s" #'my/create-zmx-terminal-below)
+(keymap-set my/editor-window-map "\"" #'my/create-zmx-terminal-below)
+(keymap-set my/editor-window-map "z" #'my/toggle-window-zoom)
 
 (defvar my/terminal-window-map nil
   "Window prefix map for terminal input in Evil Insert state.")
@@ -2063,10 +2127,21 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
             (lambda ()
               (interactive)
               (ghostel-send-key "b" "ctrl")))
+(keymap-set my/terminal-window-map "v" #'my/create-zmx-terminal-right)
+(keymap-set my/terminal-window-map "%" #'my/create-zmx-terminal-right)
+(keymap-set my/terminal-window-map "s" #'my/create-zmx-terminal-below)
+(keymap-set my/terminal-window-map "\"" #'my/create-zmx-terminal-below)
+(keymap-set my/terminal-window-map "z" #'my/toggle-window-zoom)
 
 (with-eval-after-load 'evil-ghostel
+  (keymap-set ghostel-char-mode-map "C-b" my/terminal-window-map)
+  (keymap-set my/ghostel-command-mode-map "C-b" my/editor-window-map)
+  (keymap-set my/ghostel-command-mode-map "M-SPC" my/leader-map)
   (evil-define-key* 'insert evil-ghostel-mode-map
     (kbd "C-b") my/terminal-window-map
+    (kbd "M-SPC") my/leader-map)
+  (evil-define-key* 'normal evil-ghostel-mode-map
+    (kbd "C-b") my/editor-window-map
     (kbd "M-SPC") my/leader-map))
 
 
@@ -2125,7 +2200,11 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     my/visual-leader-map "r" (cons "review" my/visual-review-map))
   (which-key-add-keymap-based-replacements
     my/terminal-window-map
-    "C-b" "send Ctrl-B")
+    "C-b" "send Ctrl-B"
+    "v" "new zmx right"
+    "%" "new zmx right"
+    "s" "new zmx below"
+    "\"" "new zmx below")
   (unless my/completion-stack-which-key-configured
     (which-key-add-key-based-replacements
       "SPC s v" #'my/completion-stack-which-key-description
@@ -2165,6 +2244,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "t g" "create Ghostel split target"
     "t z" "open/create zmx split target"
     "p" "select workspace"
+    "P" "select named workspace"
     "Z" "zen mode"
     "z" "zen mode no zoom"
     "v" "code mode"
@@ -2178,6 +2258,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "w K" "decrease height"
     "w L" "increase width"
     "w t" "tabs"
+    "w t r" "restore workspaces"
+    "w t s" "save workspaces"
     "W" "select layout"
     "a a" "open coding agent")
   (dolist (layout my/window-layouts)

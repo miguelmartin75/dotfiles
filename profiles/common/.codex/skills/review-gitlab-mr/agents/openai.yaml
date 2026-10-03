@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review GitLab MR"
+  short_description: "Review any GitLab MR for correctness and shape"
+  default_prompt: "Use $review-gitlab-mr to review this GitLab MR, including code-shape and LOC-reduction analysis."

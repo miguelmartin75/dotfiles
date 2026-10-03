@@ -24,8 +24,6 @@
 (declare-function term-sessions-open "term-sessions-frontends" (name &optional command))
 (declare-function term-sessions-open-with-frontend "term-sessions-frontends"
                   (name &optional command frontend allow-create))
-(declare-function term-sessions-read-existing-session-entry "term-sessions-frontends"
-                  (&optional prompt))
 
 (defgroup my/window-layouts nil
   "Deterministic workspace layouts."
@@ -39,7 +37,7 @@
      :key "T"
      :label "Edit + terminal"
      :buffer-function my/layout-terminal-buffer
-     :provider auto
+     :provider new-zmx
      :session nil
      :command nil)
     (agent
@@ -63,11 +61,11 @@
 The terminal `:provider' may be `auto', `project-ghostel', `folder-ghostel',
 `existing-zmx', or `new-zmx'.  A zmx `:session' is nil for an existing-session
 selection, a string for an intentionally shared session, or a function of the
-layout name and normalized root.  Automatic agent sessions include the
-verified work-task identity as well as the normalized-root hash, so rebinding
-one worktree cannot reopen the prior task's agent process.  Commands are argv
-lists, or one executable string, so owned launch commands can quote every argv
-component safely."
+layout name and normalized root.  Automatic sessions include the workspace
+configuration ID, and agent sessions also include the verified work-task
+identity, so same-root configurations and rebound tasks cannot collide.
+Commands are argv lists, or one executable string, so owned launch commands
+can quote every argv component safely."
   :type 'sexp)
 
 (defvar my/layout-codex-native-launcher nil
@@ -105,21 +103,29 @@ plist, then return its live session buffer."
       (user-error "Unknown workspace layout %s" layout)))
 
 (defun my/layout-session-name (root role)
-  "Return a root-scoped zmx name for ROOT and ROLE."
-  (let* ((basename (file-name-nondirectory (directory-file-name root)))
+  "Return a workspace-ID-scoped zmx name for ROOT and ROLE."
+  (let* ((id (or (my/tab-current-property 'my/workspace-id)
+                 (my/workspace-default-id root)))
+         (basename (file-name-nondirectory (directory-file-name root)))
          (basename (replace-regexp-in-string "[^[:alnum:]]+" "-" basename))
          (basename (string-trim basename "-+" "-+"))
-         (basename (if (string-empty-p basename) "workspace" basename)))
-    (format "%s-%s-%s"
+         (basename (if (string-empty-p basename) "workspace" basename))
+         (id-label (replace-regexp-in-string "[^[:alnum:]]+" "-" id))
+         (id-label (string-trim id-label "-+" "-+"))
+         (id-label (if (> (length id-label) 32)
+                       (substring id-label 0 32)
+                     id-label)))
+    (format "%s-%s-%s-%s"
             (downcase basename)
             (symbol-name role)
-            (substring (secure-hash 'sha1 root) 0 8))))
+            (downcase id-label)
+            (substring (secure-hash 'sha1 id) 0 8))))
 
 (defun my/layout-agent-session-name (_layout root)
-  "Return ROOT and verified-task scoped terminal-agent zmx name.
+  "Return workspace-ID and verified-task scoped terminal-agent zmx name.
 
 A task-bound workspace gets a task-distinct durable name.  Unbound workspaces
-retain the root-scoped name so intentional worktree isolation still applies."
+retain the configuration-scoped name."
   (let ((task-id (my/layout-task-id-for-root root)))
     (if task-id
         (format "%s-%s"
@@ -166,10 +172,11 @@ retain the root-scoped name so intentional worktree isolation still applies."
         (t cwd))))))
 
 (defun my/layout-target-matches-root-p (target root)
-  "Return non-nil when TARGET's advertised cwd is the normalized ROOT."
+  "Return non-nil when TARGET's advertised cwd is the exact ROOT."
   (let ((cwd (my/layout-entry-cwd target)))
     (and cwd
-         (equal (my/workspace-normalize-root cwd) root))))
+         (equal (my/workspace-canonical-directory cwd)
+                (my/workspace-canonical-directory root)))))
 
 (defun my/layout-validate-target-root (target root literal-session-p)
   "Validate TARGET against ROOT unless LITERAL-SESSION-P requests sharing."
@@ -180,8 +187,8 @@ retain the root-scoped name so intentional worktree isolation still applies."
   target)
 
 (defun my/layout-workflow-task-for-root (root)
-  "Return the current task only when it is bound to normalized ROOT."
-  (let ((root (my/workspace-normalize-root root))
+  "Return the current task only when it is bound to exact ROOT."
+  (let ((root (my/workspace-canonical-directory root))
         task)
     (condition-case nil
         (setq task (my/workflow-current-task))
@@ -324,9 +331,7 @@ retain the root-scoped name so intentional worktree isolation still applies."
                cached-target))
          target result)
     (when (eq provider 'auto)
-      (setq provider (if (my/layout-project-p root)
-                         'project-ghostel
-                       'folder-ghostel)))
+      (setq provider 'new-zmx))
     (cond
      ((and cached
            (or (and (memq provider '(project-ghostel folder-ghostel))
@@ -364,7 +369,7 @@ retain the root-scoped name so intentional worktree isolation still applies."
          (setq my/layout-provider-terminal-target target))
         ('existing-zmx
          (let* ((default-directory root)
-                (entry (term-sessions-read-existing-session-entry "Existing zmx session: "))
+                (entry (my/read-zmx-session-entry "Existing zmx session: " t))
                 (target (plist-put (copy-sequence entry) :type 'zmx)))
            (my/layout-validate-target-root target root nil)
            (setq result (term-sessions-open-with-frontend target nil 'ghostel nil)
@@ -418,7 +423,8 @@ retain the root-scoped name so intentional worktree isolation still applies."
         (setq target
               (plist-put
                (copy-sequence
-                (term-sessions-read-existing-session-entry "Existing coding-agent session: "))
+                (my/read-zmx-session-entry
+                 "Existing coding-agent session: " t))
                :type 'zmx))))
      ((functionp session)
       (let ((name (funcall session 'agent root)))
@@ -586,6 +592,9 @@ TRAMP returns to the terminal-agent path before evaluating any optional local
   "Commit successful LAYOUT runtime state after its windows are rendered."
   (when initial-root-p
     (my/tab-set-current-property 'my/workspace-root root))
+  (unless (my/tab-current-property 'my/workspace-id)
+    (my/tab-set-current-property 'my/workspace-id (my/workspace-default-id root)))
+  (my/tab-set-current-property 'my/layout-current layout)
   (my/tab-set-current-property 'my/layout-edit-buffer edit)
   (when companion
     (let* ((cache (copy-alist (my/tab-current-property 'my/layout-companion-buffers)))
@@ -664,6 +673,69 @@ TRAMP returns to the terminal-agent path before evaluating any optional local
          (choice (completing-read "Workspace layout: " choices nil t)))
     (my/layout-apply (alist-get choice choices nil nil #'string=) force)))
 
+(defun my/workspace-configuration-select (&optional id state)
+  "Select named workspace configuration ID and rebuild its layout.
+
+Interactive use prompts from `my/workspace-configurations'.  STATE is a
+reconstructable persistence record used by `my/workspace-state-restore'."
+  (interactive)
+  (unless id
+    (let ((choices
+           (mapcar
+            (lambda (entry)
+              (cons (format "%s [%s]" (plist-get (cdr entry) :name) (car entry))
+                    (car entry)))
+            my/workspace-configurations)))
+      (unless choices
+        (user-error "No named workspace configurations are defined"))
+      (setq id (alist-get (completing-read "Workspace configuration: "
+                                           choices nil t)
+                          choices nil nil #'string=))))
+  (let* ((configuration (my/workspace-configuration id))
+         (name (plist-get configuration :name))
+         (root (plist-get configuration :root))
+         (layout (or (and state (plist-get state :layout))
+                     (plist-get configuration :layout)
+                     'focus))
+         (edit-entry (if (and state (plist-member state :edit-file))
+                         (plist-get state :edit-file)
+                       (plist-get configuration :entry)))
+         (edit-file (and edit-entry
+                         (expand-file-name edit-entry root)))
+         (task-id (and state (plist-get state :task-id)))
+         (tabs (copy-tree (tab-bar-tabs)))
+         (windows (current-window-configuration))
+         prepared)
+    (unless (file-directory-p root)
+      (user-error "Workspace root does not exist: %s" root))
+    (when (and edit-file (not (file-regular-p edit-file)))
+      (user-error "Workspace edit file does not exist: %s" edit-file))
+    (when task-id
+      (let ((task (my/workflow-find-task task-id)))
+        (unless (and task (equal (plist-get task :root) root))
+          (user-error "Workspace task %s is missing or belongs to another root"
+                      task-id))))
+    (condition-case error-data
+        (progn
+          (setq prepared (if edit-file
+                             (find-file-noselect edit-file)
+                           (dired-noselect root)))
+          (my/workspace-select-or-create-tab root id name)
+          (when state
+            (my/tab-set-current-property 'my/work-task-id task-id)
+            (my/tab-set-current-property 'my/layout-terminal-target
+                                         (plist-get state :terminal-target))
+            (my/tab-set-current-property 'my/layout-agent-target
+                                         (plist-get state :agent-target))
+            (my/tab-set-current-property 'my/layout-agent-task-id task-id))
+          (my/tab-set-current-property 'my/layout-edit-buffer prepared)
+          (my/layout-render prepared nil)
+          (my/layout-apply layout))
+      (t
+       (set-window-configuration windows)
+       (tab-bar-tabs-set tabs)
+       (signal (car error-data) (cdr error-data))))))
+
 (defun my/workspace-select (&optional directory rebind)
   "Select DIRECTORY's workspace tab, or REBIND the current tab when requested.
 
@@ -690,7 +762,10 @@ Dired before it changes root or clears layout-only runtime state."
         (progn
           (cond
            ((and (not rebind) existing-index)
-            (tab-bar-select-tab existing-index))
+            (tab-bar-select-tab existing-index)
+            (unless (my/tab-current-property 'my/workspace-id)
+              (my/tab-set-current-property 'my/workspace-id
+                                           (my/workspace-default-id root))))
            (rebind
             (let ((current-index
                    (cl-loop for tab in (tab-bar-tabs)
@@ -700,8 +775,11 @@ Dired before it changes root or clears layout-only runtime state."
               (when (and existing-index
                          (not (= existing-index current-index)))
                 (user-error "Workspace %s is already owned by another tab" root)))
-            (setq prepared (dired-noselect root))
+           (setq prepared (dired-noselect root))
+            (my/tab-set-current-property 'my/workspace-id
+                                         (my/workspace-default-id root))
             (my/tab-set-current-property 'my/workspace-root root)
+            (my/tab-set-current-property 'my/layout-current 'focus)
             (my/tab-set-current-property 'my/layout-edit-buffer prepared)
             (my/tab-set-current-property 'my/work-task-id nil)
             (my/tab-set-current-property 'my/layout-companion-buffers nil)
@@ -711,11 +789,12 @@ Dired before it changes root or clears layout-only runtime state."
             (my/tab-set-current-property 'my/layout-agent-task-id nil)
             (my/tab-set-current-property 'my/layout-gptel-task-id nil)
             (my/tab-set-current-property 'my/send-text-last-target nil)
+            (tab-bar-rename-tab
+             (file-name-nondirectory (directory-file-name root)))
             (my/layout-render prepared nil))
            (t
             (setq prepared (dired-noselect root))
             (my/workspace-select-or-create-tab root)
-            (tab-bar-rename-tab (file-name-nondirectory (directory-file-name root)))
             (my/tab-set-current-property 'my/layout-edit-buffer prepared)
             (my/layout-render prepared nil))))
       (t
