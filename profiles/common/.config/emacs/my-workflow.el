@@ -28,20 +28,88 @@
   "Shared personal Org and Markdown store."
   :type 'directory)
 
-(defcustom my/workflow-project-storage-root
-  (expand-file-name "projects/" my/work-shared-directory)
-  "Directory containing one canonical index for each project."
+(defcustom my/work-private-directory
+  (expand-file-name "~/morg/private/")
+  "Private Org and Markdown store."
   :type 'directory)
 
-(defcustom my/workflow-journal-file
-  (expand-file-name "journal.org" my/work-shared-directory)
-  "Global journal file used for concise daily work logs."
-  :type 'file)
+(defcustom my/workflow-project-storage-root
+  (expand-file-name "projects/" my/work-shared-directory)
+  "Directory containing one canonical index for each shared project."
+  :type 'directory)
+
+(defcustom my/workflow-private-project-storage-root
+  (expand-file-name "projects/" my/work-private-directory)
+  "Directory containing one canonical index for each private project."
+  :type 'directory)
 
 (defcustom my/workflow-life-file
-  (expand-file-name "life.org" my/work-shared-directory)
+  (expand-file-name "notes/irl/life.org" my/work-shared-directory)
   "Optional non-work Org file included in the agenda when it exists."
   :type 'file)
+
+(defun my/work-store-directory (store)
+  "Return STORE's note directory, accepting only shared or private."
+  (pcase store
+    ("shared" my/work-shared-directory)
+    ("private" my/work-private-directory)
+    (_ (user-error "Unknown note store: %s" store))))
+
+(defun my/workflow-project-storage-directory (store)
+  "Return STORE's project directory."
+  (pcase store
+    ("shared" my/workflow-project-storage-root)
+    ("private" my/workflow-private-project-storage-root)
+    (_ (user-error "Unknown project store: %s" store))))
+
+(defun my/work-store-read ()
+  "Choose the store for an explicit cross-store command."
+  (completing-read "Store: " '("shared" "private") nil t nil nil "shared"))
+
+(defun my/work-store-for-file (file)
+  "Return the store owning FILE, or nil for a file outside both stores."
+  (when file
+    (seq-find
+     (lambda (store)
+       (seq-some
+        (lambda (directory)
+          (or (string-prefix-p (file-name-as-directory (expand-file-name directory))
+                               (expand-file-name file))
+              (and (file-directory-p directory)
+                   (file-in-directory-p file directory))))
+        (list (my/work-store-directory store)
+              (my/workflow-project-storage-directory store))))
+     '("shared" "private"))))
+
+(defun my/workflow-current-store ()
+  "Return the file or tab task's store, giving private context precedence."
+  (let* ((file-store (my/work-store-for-file (buffer-file-name)))
+         (task-id (my/tab-current-property 'my/work-task-id))
+         (task-store (when task-id
+                       (plist-get (my/workflow-find-task task-id) :store))))
+    (if (or (equal file-store "private") (equal task-store "private"))
+        "private"
+      (or file-store task-store "shared"))))
+
+(defun my/workflow-journal-file (&optional store time)
+  "Return STORE's annual journal for TIME, defaulting to the current context."
+  (expand-file-name
+   (format-time-string "logs/%Y/journal.org" time)
+   (my/work-store-directory (or store (my/workflow-current-store)))))
+
+(defun my/workflow-journal-capture-file ()
+  "Return the context's annual journal, creating its parent directory."
+  (let ((file (my/workflow-journal-file)))
+    (make-directory (file-name-directory file) t)
+    file))
+
+(defun my/workflow-reflections-capture-file ()
+  "Return the context's annual reflections file, creating its directory."
+  (let ((file (expand-file-name
+               (format-time-string "logs/%Y/reflections.org")
+               (my/work-store-directory (my/workflow-current-store)))))
+    (make-directory (file-name-directory file) t)
+    file))
 
 (defun my/workflow-life-capture-file ()
   "Return the life capture file, creating its required headings when absent.
@@ -252,14 +320,16 @@ Signal `user-error' before composing any project storage path otherwise."
       (user-error "Project key must be one nonempty directory component"))
     project-key))
 
-(defun my/workflow-project-index-file (project-key)
-  "Return PROJECT-KEY's sole canonical project index path."
+(defun my/workflow-project-index-file (project-key &optional store)
+  "Return PROJECT-KEY's canonical index in STORE, which defaults to shared."
   (let ((project-key (my/workflow-validate-project-key project-key)))
+    (when (and (equal store "private") (equal project-key "imported"))
+      (user-error "The imported directory is reserved for legacy private notes"))
     (expand-file-name
      "index.org"
      (expand-file-name
       (file-name-as-directory project-key)
-      my/workflow-project-storage-root))))
+      (my/workflow-project-storage-directory (or store "shared"))))))
 
 (defun my/workflow-heading-children (position)
   "Return direct headline children below POSITION as (TITLE . POSITION) pairs."
@@ -324,6 +394,7 @@ and project log."
                               (member "ARCHIVE" (org-get-tags nil t))
                               project-id project-key project-root)
                          (list :buffer buffer
+                               :store (my/work-store-for-file (buffer-file-name))
                                :project project-position
                                :docs (cdr docs)
                                :tasks (cdr tasks)
@@ -334,20 +405,34 @@ and project log."
                                :key project-key
                                :root project-root))))))))))))))
 
-(defun my/workflow-discover-project-indexes ()
-  "Return existing, schema-valid immediate-child project indexes only."
+(defun my/workflow-discover-project-indexes (&optional store)
+  "Return schema-valid indexes in STORE, or both stores when omitted."
   (let (result)
-    (when (file-directory-p my/workflow-project-storage-root)
-      (dolist (entry (directory-files my/workflow-project-storage-root t
-                                      directory-files-no-dot-files-regexp))
-        (when (file-directory-p entry)
-          (let* ((project-key (file-name-nondirectory (directory-file-name entry)))
-                 (index (expand-file-name "index.org" entry)))
-            (when (file-regular-p index)
-              (let ((schema (my/workflow-project-schema (find-file-noselect index))))
-                (when (and schema (equal (plist-get schema :key) project-key))
-                  (push index result))))))))
+    (dolist (store (if store (list store) '("shared" "private")))
+      (let ((root (my/workflow-project-storage-directory store)))
+        (when (file-directory-p root)
+          (dolist (entry (directory-files root t directory-files-no-dot-files-regexp))
+            (when (file-directory-p entry)
+              (let* ((project-key (file-name-nondirectory (directory-file-name entry)))
+                     (index (expand-file-name "index.org" entry)))
+                (when (file-regular-p index)
+                  (let ((schema (my/workflow-project-schema (find-file-noselect index))))
+                    (when (and schema (equal (plist-get schema :key) project-key))
+                      (push index result))))))))))
     (sort result #'string-lessp)))
+
+(defun my/workflow-project-choices (&optional store)
+  "Return store-qualified existing project directory names in STORE or both."
+  (let (choices)
+    (dolist (store (if store (list store) '("shared" "private")))
+      (let ((root (my/workflow-project-storage-directory store)))
+        (when (file-directory-p root)
+          (dolist (directory (directory-files root t directory-files-no-dot-files-regexp))
+            (when (and (file-directory-p directory)
+                       (not (and (equal store "private")
+                                 (equal (file-name-nondirectory directory) "imported"))))
+              (push (concat store "/" (file-name-nondirectory directory)) choices))))))
+    (sort choices #'string-lessp)))
 
 (defun my/workflow-refresh-agenda ()
   "Set `org-agenda-files' from existing life and canonical project indexes."
@@ -368,25 +453,35 @@ and project log."
          (fallback (file-name-nondirectory (directory-file-name root))))
     (or name fallback "project")))
 
-(defun my/workflow-read-project-key (root)
+(defun my/workflow-read-project-key (root &optional store)
   "Read a project key for ROOT from safe existing choices or a new key."
   (let* ((default (my/workflow-project-key-for-root root))
-         (choices
-          (mapcar (lambda (index)
-                    (file-name-nondirectory
-                     (directory-file-name (file-name-directory index))))
-                  (my/workflow-discover-project-indexes)))
+         (choices (mapcar (lambda (choice) (substring choice (1+ (length (or store "shared")))))
+                          (my/workflow-project-choices (or store "shared"))))
          (project-key (completing-read "Project key: " choices nil nil default)))
     (my/workflow-validate-project-key project-key)))
 
-(defun my/workflow-prepare-project (project-key root &optional confirm-reuse)
+(defun my/workflow-read-project-selection (&optional root store existing-only)
+  "Return a (STORE . KEY) selection, optionally requiring an existing project."
+  (let* ((default (when root
+                    (concat (or store (my/workflow-current-store)) "/"
+                            (my/workflow-project-key-for-root root))))
+         (choice (completing-read "Project (store/key): "
+                                  (my/workflow-project-choices store) nil existing-only
+                                  default)))
+    (unless (string-match "\\`\\(shared\\|private\\)/\\(.+\\)\\'" choice)
+      (user-error "Select a project as shared/key or private/key"))
+    (cons (match-string 1 choice)
+          (my/workflow-validate-project-key (match-string 2 choice)))))
+
+(defun my/workflow-prepare-project (project-key root &optional confirm-reuse store)
   "Validate PROJECT-KEY and ROOT without creating a project.
 
 Return an existing schema, or nil when the canonical project does not yet
 exist.  Existing collisions and declined reuse fail before any mutation."
   (let* ((project-key (my/workflow-validate-project-key project-key))
          (root (my/workspace-canonical-directory root))
-         (index (my/workflow-project-index-file project-key))
+         (index (my/workflow-project-index-file project-key store))
          (directory (file-name-directory index))
          schema)
     (cond
@@ -412,7 +507,7 @@ exist.  Existing collisions and declined reuse fail before any mutation."
       (user-error "Project index has unsaved contents for %s" project-key)))
     schema))
 
-(defun my/workflow-ensure-project (project-key root &optional confirm-reuse)
+(defun my/workflow-ensure-project (project-key root &optional confirm-reuse store)
   "Return PROJECT-KEY's canonical schema, creating it for ROOT when needed.
 
 Existing ordinary project files are preserved when adding a missing index.
@@ -421,9 +516,9 @@ When CONFIRM-REUSE is non-nil, a project first recorded at another root needs
 explicit confirmation before reuse."
   (let* ((project-key (my/workflow-validate-project-key project-key))
          (root (my/workspace-canonical-directory root))
-         (index (my/workflow-project-index-file project-key))
+         (index (my/workflow-project-index-file project-key store))
          (directory (file-name-directory index))
-         (schema (my/workflow-prepare-project project-key root confirm-reuse)))
+         (schema (my/workflow-prepare-project project-key root confirm-reuse store)))
     (unless schema
       (make-directory directory t)
       (let ((buffer (find-file-noselect index)))
@@ -448,29 +543,23 @@ explicit confirmation before reuse."
     (my/workflow-register-agenda-index index)
     schema))
 
-(defun my/work-project-open (&optional project-key workspace)
+(defun my/work-project-open (&optional project-key workspace store)
   "Open PROJECT-KEY at Docs, or browse its notes directory without an index.
 
 With WORKSPACE non-nil, select its stable workspace tab and show the index.
 Opening never creates project data or changes task bindings."
   (interactive (list nil current-prefix-arg))
   (unless project-key
-    (let (choices)
-      (when (file-directory-p my/workflow-project-storage-root)
-        (dolist (directory (directory-files my/workflow-project-storage-root t
-                                            directory-files-no-dot-files-regexp))
-          (when (file-directory-p directory)
-            (push (file-name-nondirectory directory) choices))))
-      (unless choices
+    (let ((store (or store "shared")))
+      (unless (my/workflow-project-choices store)
         (user-error "No notes projects exist"))
-      (setq project-key (completing-read "Notes project: " (sort choices #'string-lessp)
-                                         nil t))))
+      (setq project-key (cdr (my/workflow-read-project-selection nil store t)))))
   (let* ((project-key (my/workflow-validate-project-key project-key))
-         (index (my/workflow-project-index-file project-key))
+         (index (my/workflow-project-index-file project-key store))
          (directory (file-name-directory index)))
     (unless (file-directory-p directory)
       (user-error "Project directory does not exist: %s" directory))
-    (let* ((schema (my/workflow-prepare-project project-key directory))
+    (let* ((schema (my/workflow-prepare-project project-key directory nil store))
            (root (if schema
                      (my/workspace-canonical-directory (plist-get schema :root))
                    directory))
@@ -500,7 +589,7 @@ Opening never creates project data or changes task bindings."
         (org-fold-show-entry))
       buffer)))
 
-(defun my/work-project-create (&optional project-key workspace-root)
+(defun my/work-project-create (&optional project-key workspace-root store)
   "Create PROJECT-KEY's empty canonical index and open Docs without a task.
 
 An omitted WORKSPACE-ROOT uses the exact notes directory.  A selected code
@@ -510,7 +599,7 @@ both the project key and selected root."
   (let* ((project-key
           (my/workflow-validate-project-key
            (or project-key (read-string "Project key: "))))
-         (directory (file-name-directory (my/workflow-project-index-file project-key)))
+         (directory (file-name-directory (my/workflow-project-index-file project-key store)))
          (workspace-root
           (or workspace-root
               (if (called-interactively-p 'interactive)
@@ -523,12 +612,192 @@ both the project key and selected root."
                  (unless (file-directory-p selected)
                    (user-error "Workspace directory does not exist: %s" selected))
                  (my/workspace-normalize-root selected)))
-         (schema (my/workflow-prepare-project project-key root)))
+         (schema (my/workflow-prepare-project project-key root nil store)))
     (when (and schema (not (equal (plist-get schema :root) root)))
       (user-error "Project root collision for %s" project-key))
-    (setq schema (my/workflow-ensure-project project-key root))
-    (my/work-project-open project-key)
+    (setq schema (my/workflow-ensure-project project-key root nil store))
+    (my/work-project-open project-key nil store)
     schema))
+
+(defun my/work-project-create-select-store ()
+  "Create a project after choosing shared or private storage."
+  (interactive)
+  (let* ((store (my/work-store-read))
+         (key (my/workflow-validate-project-key (read-string "Project key: ")))
+         (directory (file-name-directory (my/workflow-project-index-file key store))))
+    (my/work-project-create
+     key (read-directory-name "Workspace directory: " directory directory nil)
+     store)))
+
+(defun my/work-project-open-select-store ()
+  "Browse a project after choosing shared or private storage."
+  (interactive)
+  (my/work-project-open nil current-prefix-arg (my/work-store-read)))
+
+(defvar my/work-roam-store "shared"
+  "Store currently selected for Org-roam's directory and database.")
+
+(with-eval-after-load 'org-roam
+  (cl-defmethod org-roam-node-slug :around ((node org-roam-node))
+    (replace-regexp-in-string "_" "-" (cl-call-next-method))))
+
+(defun my/work-roam-select-store (store)
+  "Activate STORE's separately scoped Org-roam directory and database.
+
+Private indexing is limited to projects because the private store also
+contains legacy imports.  An unfinished capture must be finalized first."
+  (require 'org-roam)
+  (let ((directory (if (equal store "private")
+                       (my/workflow-project-storage-directory store)
+                     (my/work-store-directory store)))
+        (database (expand-file-name (format "org-roam-%s.db" store)
+                                    user-emacs-directory))
+        (exclusions (if (equal store "private")
+                        (list org-attach-id-dir "\\`imported/")
+                      (list org-attach-id-dir))))
+    (unless (file-directory-p directory)
+      (user-error "Note store directory does not exist: %s" directory))
+    (unless (and (equal org-roam-directory directory)
+                 (equal org-roam-db-location database)
+                 (equal org-roam-file-exclude-regexp exclusions))
+      (when (seq-some (lambda (buffer)
+                       (buffer-local-value 'org-capture-mode buffer))
+                     (buffer-list))
+        (user-error "Finish the active Org capture before switching note stores"))
+      (when org-roam-db-autosync-mode
+        (org-roam-db-autosync-mode -1))
+      (setq org-roam-directory directory
+            org-roam-db-location database
+            org-roam-file-exclude-regexp exclusions
+            my/work-roam-store store))
+    (if org-roam-db-autosync-mode
+        (org-roam-db-sync)
+      (org-roam-db-autosync-mode 1))))
+
+(defun my/work-roam-update-current-file ()
+  "Update a saved note only in the currently selected Org-roam store."
+  (when (and (bound-and-true-p org-roam-db-autosync-mode)
+             (buffer-file-name)
+             (org-roam-file-p (buffer-file-name)))
+    (org-roam-db-update-file)))
+
+(add-hook 'org-mode-hook
+          (lambda ()
+            (add-hook 'after-save-hook #'my/work-roam-update-current-file nil t)))
+
+(defun my/work-roam-find-shared ()
+  "Find a shared Org-roam node, capturing new titles into the shared inbox."
+  (interactive)
+  (my/work-roam-select-store "shared")
+  (let ((node (org-roam-node-read)))
+    (if (org-roam-node-file node)
+        (org-roam-node-visit node current-prefix-arg)
+      (my/work-roam-capture-note (org-roam-node-title node)
+                                (expand-file-name "inbox/" my/work-shared-directory)
+                                "shared"))))
+
+(defun my/work-roam-find-select-store ()
+  "Choose a store and find one of its Org-roam notes."
+  (interactive)
+  (let ((store (my/work-store-read)))
+    (my/work-roam-select-store store)
+    (if (equal store "shared")
+        (my/work-roam-find-shared)
+      (org-roam-node-visit (org-roam-node-read nil nil nil t) current-prefix-arg))))
+
+(defun my/work-roam-insert ()
+  "Insert a node link from the current file or task's note store."
+  (interactive)
+  (let ((store (my/workflow-current-store)))
+    (my/work-roam-select-store store)
+    (if (equal store "shared")
+        (org-roam-node-insert)
+      (let ((node (org-roam-node-read nil nil nil t)))
+        (org-insert-link nil (concat "id:" (org-roam-node-id node))
+                         (org-roam-node-title node))))))
+
+(defun my/work-roam-capture-note (title directory store)
+  "Capture TITLE as a new semantic filename in DIRECTORY inside STORE.
+
+Existing files and unsaved buffers at the destination are never reused."
+  (my/work-roam-select-store store)
+  (let* ((title (my/workflow-validate-one-line title "Note title"))
+         (node (org-roam-node-create :title title))
+         (slug (my/workflow-validate-project-key (org-roam-node-slug node)))
+         (file (expand-file-name (concat slug ".org") directory))
+         (buffer (get-file-buffer file)))
+    (when (or (file-exists-p file) (file-symlink-p file)
+              (and buffer (buffer-modified-p buffer)))
+      (user-error "Note destination already exists: %s" file))
+    (make-directory directory t)
+    (org-roam-capture-
+     :node node
+     :templates `(("n" "note" plain "%?"
+                   :target (file+head ,(file-relative-name file org-roam-directory)
+                                      "#+title: ${title}\n")
+                   :unnarrowed t))
+     :props '(:finalize find-file))))
+
+(defun my/work-inbox-note-create ()
+  "Create a shared inbox note without a timestamp in its filename."
+  (interactive)
+  (my/work-roam-capture-note (read-string "Note title: ")
+                              (expand-file-name "inbox/" my/work-shared-directory)
+                              "shared"))
+
+(defun my/work-project-note-create ()
+  "Choose a store and project, then capture a named Org-roam project note."
+  (interactive)
+  (let* ((store (my/work-store-read))
+         (key (cdr (my/workflow-read-project-selection nil store t)))
+         (directory (file-name-directory (my/workflow-project-index-file key store))))
+    (unless (file-directory-p directory)
+      (user-error "Project directory does not exist: %s" directory))
+    (my/workflow-prepare-project key directory nil store)
+    (my/work-roam-capture-note (read-string "Note title: ") directory store)))
+
+(defun my/work-note-refile ()
+  "Move the current Org note to a category or project while preserving IDs.
+
+Require a saved, ordinary Org file and reject destination collisions."
+  (interactive)
+  (let* ((source (buffer-file-name))
+         (source-store (my/work-store-for-file source)))
+    (unless (and (derived-mode-p 'org-mode) source-store
+                 (file-regular-p source) (not (file-symlink-p source)))
+      (user-error "Visit an ordinary Org note in a note store first"))
+    (when (equal (file-name-nondirectory source) "index.org")
+      (user-error "Move descriptive notes, not managed project indexes"))
+    (when (buffer-modified-p)
+      (user-error "Save the note before moving it"))
+    (let* ((store (my/work-store-read))
+           (kind (if (equal store "private") "project"
+                   (completing-read "Destination type: " '("project" "category") nil t)))
+           (directory
+            (if (equal kind "project")
+                (let ((key (cdr (my/workflow-read-project-selection nil store t))))
+                  (file-name-directory (my/workflow-project-index-file key store)))
+              (let* ((root (expand-file-name "notes/" my/work-shared-directory))
+                     (choices (when (file-directory-p root)
+                                (seq-filter
+                                 (lambda (name) (file-directory-p (expand-file-name name root)))
+                                 (directory-files root nil directory-files-no-dot-files-regexp))))
+                     (category (my/workflow-validate-project-key
+                                (completing-read "Category: " choices nil nil))))
+                (expand-file-name (file-name-as-directory category) root))))
+           (destination (expand-file-name (file-name-nondirectory source) directory))
+           (buffer (get-file-buffer destination)))
+      (when (or (file-exists-p destination) (file-symlink-p destination)
+                (and buffer (buffer-modified-p buffer)))
+        (user-error "Note destination already exists: %s" destination))
+      (make-directory directory t)
+      (my/work-roam-select-store source-store)
+      (rename-file source destination nil)
+      (set-visited-file-name destination t)
+      (org-roam-db-sync)
+      (my/work-roam-select-store store)
+      (org-id-update-id-locations (list destination) t)
+      (message "Moved note to %s" destination))))
 
 (defun my/workflow-task-at-position (schema position)
   "Return the managed task in SCHEMA at headline POSITION, or nil."
@@ -548,6 +817,7 @@ both the project key and selected root."
                 :project-id (plist-get schema :id)
                 :project-key (plist-get schema :key)
                 :project-root (plist-get schema :root)
+                :store (plist-get schema :store)
                 :file (buffer-file-name)
                 :position (copy-marker (point))))))))
 
@@ -662,17 +932,18 @@ both the project key and selected root."
 
 (defun my/workflow-journal-start-exists-p (task time)
   "Return non-nil when TASK already has today's automatic start entry."
-  (when (file-exists-p my/workflow-journal-file)
-    (with-current-buffer (find-file-noselect my/workflow-journal-file)
-      (org-mode)
-      (org-with-wide-buffer
-       (save-excursion
-         (my/workflow-work-log-heading time)
-         (let ((end (save-excursion (org-end-of-subtree t))))
-           (re-search-forward
-            (concat "\\[\\[id:" (regexp-quote (plist-get task :id))
-                    "\\]\\[[^]]+\\]\\] start:")
-            end t)))))))
+  (let ((journal (my/workflow-journal-file (plist-get task :store) time)))
+    (when (file-exists-p journal)
+      (with-current-buffer (find-file-noselect journal)
+        (org-mode)
+        (org-with-wide-buffer
+         (save-excursion
+           (my/workflow-work-log-heading time)
+           (let ((end (save-excursion (org-end-of-subtree t))))
+             (re-search-forward
+              (concat "\\[\\[id:" (regexp-quote (plist-get task :id))
+                      "\\]\\[[^]]+\\]\\] start:")
+              end t))))))))
 
 (defun my/workflow-append-journal-entry (task kind text &optional time deduplicate-start)
   "Append TASK's reviewed KIND and TEXT to the global daily Work log.
@@ -681,10 +952,14 @@ When DEDUPLICATE-START is non-nil, leave an existing automatic start entry in
 place so an interrupted post-save tab commit can be retried safely."
   (unless (memq kind my/workflow-log-kinds)
     (user-error "Unsupported work-log kind: %s" kind))
-  (let ((text (my/workflow-validate-one-line text "Work-log text"))
-        (time (or time (current-time)))
-        (buffer (find-file-noselect my/workflow-journal-file))
-        inserted)
+  (my/work-store-directory (plist-get task :store))
+  (let* ((text (my/workflow-validate-one-line text "Work-log text"))
+         (time (or time (current-time)))
+         (journal (my/workflow-journal-file (plist-get task :store) time))
+         (buffer (progn
+                   (make-directory (file-name-directory journal) t)
+                   (find-file-noselect journal)))
+         inserted)
     (with-current-buffer buffer
       (org-mode)
       (unless (and deduplicate-start
@@ -762,7 +1037,7 @@ place so an interrupted post-save tab commit can be retried safely."
       (org-back-to-heading t)
       (org-fold-show-entry))))
 
-(defun my/work-start (&optional title workspace-root project-key work-key note-file)
+(defun my/work-start (&optional title workspace-root project-key work-key note-file store)
   "Select or create local work, record its first start, and bind its task tab.
 
 TITLE may name an existing active task or create one.  WORKSPACE-ROOT,
@@ -774,16 +1049,19 @@ capture and tests; interactive use derives and prompts for the missing values."
                    current-root
                  (my/workspace-normalize-root
                   (or workspace-root default-directory))))
+         (selection
+          (when (and (not project-key) (called-interactively-p 'interactive))
+            (my/workflow-read-project-selection root store)))
+         (store (or store (car selection) "shared"))
          (project-key
           (my/workflow-validate-project-key
            (or project-key
-               (if (called-interactively-p 'interactive)
-                   (my/workflow-read-project-key root)
-                 (my/workflow-project-key-for-root root)))))
+               (cdr selection)
+               (my/workflow-project-key-for-root root))))
          (title (and title (my/workflow-validate-one-line title "Task title")))
          (work-key (and work-key (my/workflow-validate-one-line work-key "Work key")))
          (note-file (and note-file (my/workflow-valid-note-file note-file)))
-         (schema (my/workflow-prepare-project project-key root t))
+         (schema (my/workflow-prepare-project project-key root t store))
          (task
           (cond
            ((and schema work-key)
@@ -834,7 +1112,7 @@ capture and tests; interactive use derives and prompts for the missing values."
                       (plist-get task :id))))
     (unless already-bound
       (my/workflow-prepare-task-binding task root)
-      (setq schema (or schema (my/workflow-ensure-project project-key root)))
+      (setq schema (or schema (my/workflow-ensure-project project-key root nil store)))
       (unless task
         (with-current-buffer (plist-get schema :buffer)
           (save-excursion
@@ -1067,26 +1345,27 @@ switching tabs or mutating task state automatically."
                                :section 'evidence
                                :text text))))))))
          nil 'tree)))
-    (when (file-exists-p my/workflow-journal-file)
-      (with-temp-buffer
-        (insert-file-contents my/workflow-journal-file)
-        (org-mode)
-        (save-excursion
-          (my/workflow-work-log-heading (current-time))
-          (let ((start (point))
-                (end (save-excursion (org-end-of-subtree t))))
-            (dolist (line (split-string
-                           (buffer-substring-no-properties start end) "\n" t))
-              (when (and (string-match-p "^[-+][[:space:]]" line)
-                         (string-match-p task-link-regexp line))
-                (setq journal-index (1+ journal-index))
-                (setq items
-                      (append
-                       items
-                       (list
-                        (list :label (format "Journal %d: %s" journal-index line)
-                              :section 'evidence
-                              :text line))))))))))
+    (let ((journal (my/workflow-journal-file (plist-get task :store))))
+      (when (file-exists-p journal)
+        (with-temp-buffer
+          (insert-file-contents journal)
+          (org-mode)
+          (save-excursion
+            (my/workflow-work-log-heading (current-time))
+            (let ((start (point))
+                  (end (save-excursion (org-end-of-subtree t))))
+              (dolist (line (split-string
+                             (buffer-substring-no-properties start end) "\n" t))
+                (when (and (string-match-p "^[-+][[:space:]]" line)
+                           (string-match-p task-link-regexp line))
+                  (setq journal-index (1+ journal-index))
+                  (setq items
+                        (append
+                         items
+                         (list
+                          (list :label (format "Journal %d: %s" journal-index line)
+                                :section 'evidence
+                                :text line)))))))))))
     items))
 
 (defun my/work-draft-update (&optional sources)
@@ -1130,8 +1409,10 @@ current-task journal entries."
 (defun my/work-capture-target ()
   "Move Org capture to the current project's canonical Tasks/Active heading."
   (let* ((root (my/workspace-normalize-root default-directory))
-         (project-key (my/workflow-read-project-key root))
-         (schema (my/workflow-ensure-project project-key root t))
+         (selection (my/workflow-read-project-selection root))
+         (store (car selection))
+         (project-key (cdr selection))
+         (schema (my/workflow-ensure-project project-key root t store))
          (buffer (plist-get schema :buffer)))
     (set-buffer buffer)
     (goto-char (plist-get schema :active))

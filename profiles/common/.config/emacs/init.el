@@ -1482,7 +1482,7 @@ When UP is non-nil, swap with the preceding paragraph."
 	`(
     ("r" "Reflections")
     ("rw" "Weekly Reflection" entry
-    (file+datetree ,(expand-file-name "reflections.org" my/work-shared-directory))
+    (file+datetree my/workflow-reflections-capture-file)
     (file ,(expand-file-name "templates/weekly.org" my/work-shared-directory))
     :empty-lines 1
     :tree-type week
@@ -1490,7 +1490,7 @@ When UP is non-nil, swap with the preceding paragraph."
     ; :after-finalize my/remove-datetree-day-heading
     )
     ("rm" "Monthly Reflection" entry
-    (file+datetree ,(expand-file-name "reflections.org" my/work-shared-directory))
+    (file+datetree my/workflow-reflections-capture-file)
     (file ,(expand-file-name "templates/monthly.org" my/work-shared-directory))
     :empty-lines 1
     :tree-type month
@@ -1498,15 +1498,15 @@ When UP is non-nil, swap with the preceding paragraph."
     )
 
     ;; journal
-	  ("m" "Meeting" entry (file+datetree ,my/workflow-journal-file)
+	  ("m" "Meeting" entry (file+datetree my/workflow-journal-capture-file)
 	   "* %T %? :meeting:work:" :empty-lines 1)
-	  ("l" "Log" entry (file+datetree ,my/workflow-journal-file)
+	  ("l" "Log" entry (file+datetree my/workflow-journal-capture-file)
 	   "* %T %? :log:" :empty-lines 1)
-	  ("t" "Add Task" entry (file+datetree ,my/workflow-journal-file)
+	  ("t" "Add Task" entry (file+datetree my/workflow-journal-capture-file)
 	   "* TODO %? \n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
 	  ("T" "Add Work Task" entry (function my/work-capture-target)
 	   "* TODO %?\n:PROPERTIES:\n:ID: %(org-id-new)\n:END:" :empty-lines 1)
-	  ("j" "Journal Entry" entry (file+datetree ,my/workflow-journal-file)
+	  ("j" "Journal Entry" entry (file+datetree my/workflow-journal-capture-file)
 	   "* %t :journal:\n%?" :empty-lines 1)
 
     ;; life
@@ -1618,11 +1618,12 @@ When UP is non-nil, swap with the preceding paragraph."
   :custom
   (org-roam-directory my/work-shared-directory)
   (org-roam-capture-templates
-   '(("d" "default" plain "%?"
-      :target (file+head "notes/%<%Y%m%d%H%M%S>-${slug}.org"
+   '(("d" "shared inbox" plain "%?"
+      :target (file+head "inbox/${slug}.org"
                          "#+title: ${title}\n")
       :unnarrowed t)))
-  (org-roam-db-location "~/.org-roam.db")
+  (org-roam-db-location (expand-file-name "org-roam-shared.db" user-emacs-directory))
+  (org-roam-extract-new-file-path "inbox/${slug}.org")
   (org-roam-display-template
    (concat "${title:*} " (propertize "${tags:*}" 'face 'org-tag))))
 
@@ -1667,7 +1668,7 @@ When UP is non-nil, swap with the preceding paragraph."
   "Refile the current Org subtree into the journal datetree."
   (interactive)
   (save-excursion
-    (my/org-refile-to-datetree my/workflow-journal-file)))
+    (my/org-refile-to-datetree (my/workflow-journal-capture-file))))
 
 ;; Terminal and execution workflows
 
@@ -2075,12 +2076,18 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("r v" . my/annotations-show)
        ("o a" . org-agenda)
        ("o c" . org-capture)
-       ("o n" . org-roam-node-find)
-       ("o i" . org-roam-node-insert)
+       ("o n" . my/work-roam-find-shared)
+       ("o i" . my/work-roam-insert)
+       ("o I" . my/work-inbox-note-create)
+       ("o N" . my/work-project-note-create)
+       ("o F" . my/work-roam-find-select-store)
        ("o t" . org-set-tags-command)
        ("o r" . org-table-recalculate-buffer-tables)
        ("o p" . my/work-project-open)
-       ("o P" . my/work-project-create)
+       ("o S" . my/work-project-create)
+       ("o P" . my/work-project-create-select-store)
+       ("o B" . my/work-project-open-select-store)
+       ("o R" . my/work-note-refile)
        ("o w" . my/work-start)
        ("o v" . markdown-table-wrap-pretty-toggle)
        ("o l" . my/work-log)
@@ -2258,7 +2265,14 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "h" "help"
     "o" "org"
     "o p" "open notes project"
-    "o P" "create notes project"
+    "o n" "find shared note"
+    "o I" "create shared inbox note"
+    "o S" "create shared project"
+    "o N" "create project note (choose store)"
+    "o P" "create project (choose store)"
+    "o F" "find note (choose store)"
+    "o B" "open project (choose store)"
+    "o R" "move Org note"
     "o w" "start work"
     "o v" "toggle Markdown table view"
     "o l" "work log"
