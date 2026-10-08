@@ -494,7 +494,24 @@
 
 (use-package embark
   :demand t
-  :bind ("C-c ." . embark-act))
+  :bind ("C-c ." . embark-act)
+  :config
+  (defvar-keymap my/embark-project-map
+    "f" #'project-forget-project)
+  (add-to-list 'embark-keymap-alist
+               '(project my/embark-project-map))
+  (keymap-set embark-collect-mode-map "m" #'embark-select))
+
+(defun my/select-remembered-projects ()
+  "Switch to a remembered project."
+  (interactive)
+  (project-switch-project
+   (completing-read
+    "Select remembered project: "
+    (completion-table-with-metadata
+     (project-known-project-roots)
+     '((category . project)))
+    nil t)))
 
 (use-package embark-consult
   :after (consult embark))
