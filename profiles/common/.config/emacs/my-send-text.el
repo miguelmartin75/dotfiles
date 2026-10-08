@@ -54,10 +54,13 @@ When REQUIRE-EXISTING is non-nil, reject names that are not running sessions."
          (process-live-p process))))
 
 (defvar my/cwd-terminal-targets nil
-  "Persistent zmx target descriptors cached by exact directories.")
+  "Persistent zmx target descriptors cached by normalized directories.")
 
 (defvar my/project-ghostel-id-sequences nil
   "Next Ghostel terminal ID by project-root and workspace-label pair.")
+
+(defvar my/project-ghostel-targets nil
+  "Ghostel targets cached by project-root and workspace-label pair.")
 
 (defun my/cwd-terminal-directory ()
   "Return the project root or current buffer directory for a terminal."
@@ -72,74 +75,96 @@ When REQUIRE-EXISTING is non-nil, reject names that are not running sessions."
          (label (string-trim label "-+" "-+")))
     (if (string-empty-p label) "default" label)))
 
-(defun my/cwd-terminal-name (directory kind id)
+(defun my/cwd-terminal-name (directory kind id &optional workspace-label)
   "Return a readable terminal name for DIRECTORY of KIND and ID."
   (let* ((project (file-name-nondirectory (directory-file-name directory)))
          (project (replace-regexp-in-string "[^[:alnum:]_.-]+" "-" project))
          (project (string-trim project "-+" "-+"))
          (project (if (string-empty-p project) "root" project))
          (hash (substring (secure-hash 'sha1 directory) 0 8))
-         (label (my/cwd-terminal-workspace-label)))
+         (label (or workspace-label (my/cwd-terminal-workspace-label))))
     (format "%s--%s--%s-%s-%d" project hash kind label id)))
 
-(defun my/next-project-ghostel-id (directory)
-  "Return the next Ghostel ID for DIRECTORY in the current workspace."
-  (let* ((key (cons directory (my/cwd-terminal-workspace-label)))
+(defun my/next-project-ghostel-id (directory workspace-label)
+  "Return the next Ghostel ID for DIRECTORY and WORKSPACE-LABEL."
+  (let* ((key (cons directory workspace-label))
          (id (1+ (or (alist-get key my/project-ghostel-id-sequences nil nil #'equal)
                      0))))
     (setf (alist-get key my/project-ghostel-id-sequences nil nil #'equal) id)
     id))
 
-(defun my/open-cwd-terminal ()
-  "Toggle the persistent zmx terminal for the current project or directory."
-  (interactive)
+(defun my/toggle-project-terminal (cache-symbol key create target-live-p)
+  "Toggle the terminal in CACHE-SYMBOL selected by KEY.
+
+CREATE receives KEY and returns its target descriptor.  TARGET-LIVE-P receives
+a target descriptor and returns non-nil when its backing terminal is live."
   (let* ((entry
           (cl-find-if
            (lambda (candidate)
              (eq (plist-get (cdr candidate) :buffer) (current-buffer)))
-           my/cwd-terminal-targets))
-         (directory (if entry (car entry) (my/cwd-terminal-directory)))
+           (symbol-value cache-symbol)))
+         (key (if entry (car entry) key))
          (target (if entry
                      (cdr entry)
-                   (alist-get directory my/cwd-terminal-targets nil nil #'equal)))
+                   (alist-get key (symbol-value cache-symbol) nil nil #'equal)))
          (buffer (plist-get target :buffer))
-         (live (buffer-live-p buffer))
-         (window (and live
-                      (get-buffer-window (plist-get target :buffer)
-                                         (selected-frame)))))
+         (live (funcall target-live-p target))
+         (window (and live (get-buffer-window buffer (selected-frame)))))
     (if window
         (quit-window nil window)
-      (with-temp-message (unless live
-                           (format "Opening terminal in %s..." directory))
+      (with-temp-message (unless live (format "Opening terminal in %s..." key))
         (unless live (redisplay))
         (unless live
-          (let* ((name (my/cwd-terminal-name directory "z" 1))
-                 (default-directory directory)
-                 (descriptor (list :type 'zmx
-                                   :name name
-                                   :directory directory
-                                   :cwd (or (file-remote-p directory 'localname)
-                                            directory)))
-                 (display-buffer-overriding-action my/right-split-action))
-            (term-sessions-open descriptor nil)
-            (setq buffer (current-buffer)
-                  target (plist-put descriptor :buffer buffer))
-            (unless (buffer-live-p buffer)
-              (user-error "Opened zmx terminal did not return a live buffer"))
-            (setf (alist-get directory my/cwd-terminal-targets nil nil #'equal)
-                  target)))
+          (setq target (funcall create key)
+                buffer (plist-get target :buffer))
+          (setf (alist-get key (symbol-value cache-symbol) nil nil #'equal) target))
         (pop-to-buffer buffer)
         (with-current-buffer buffer
           (my/ghostel-enter-terminal-input))))
     (my/send-text-save-last-target target)))
 
-(defun my/open-project-ghostel ()
-  "Create a Ghostel terminal for the current project or directory."
+(defun my/create-cwd-zmx-terminal (directory)
+  "Create the persistent zmx terminal for DIRECTORY."
+  (let* ((name (my/cwd-terminal-name directory "z" 1))
+         (default-directory directory)
+         (descriptor (list :type 'zmx
+                           :name name
+                           :directory directory
+                           :cwd (or (file-remote-p directory 'localname)
+                                    directory)))
+         (display-buffer-overriding-action my/right-split-action))
+    (term-sessions-open descriptor nil)
+    (let ((buffer (current-buffer)))
+      (unless (buffer-live-p buffer)
+        (user-error "Opened zmx terminal did not return a live buffer"))
+      (plist-put descriptor :buffer buffer))))
+
+(defun my/open-cwd-terminal ()
+  "Toggle the persistent zmx terminal for the current project or directory."
   (interactive)
-  (let* ((directory (my/cwd-terminal-directory))
-         (id (my/next-project-ghostel-id directory))
-         (name (my/cwd-terminal-name directory "g" id)))
+  (my/toggle-project-terminal
+   'my/cwd-terminal-targets
+   (my/cwd-terminal-directory)
+   #'my/create-cwd-zmx-terminal
+   (lambda (target) (buffer-live-p (plist-get target :buffer)))))
+
+(defun my/create-project-ghostel (key)
+  "Create the Ghostel terminal selected by project/workspace KEY."
+  (let* ((directory (car key))
+         (label (cdr key))
+         (id (my/next-project-ghostel-id directory label))
+         (name (my/cwd-terminal-name directory "g" id label)))
     (my/create-ghostel-terminal-in-split name directory my/right-split-action)))
+
+(defun my/open-project-ghostel ()
+  "Toggle the Ghostel terminal for the current project or directory."
+  (interactive)
+  (require 'ghostel)
+  (my/toggle-project-terminal
+   'my/project-ghostel-targets
+   (cons (my/cwd-terminal-directory) (my/cwd-terminal-workspace-label))
+   #'my/create-project-ghostel
+   #'my/ghostel-target-live-p))
 
 (defun my/send-text-deliver (target text replay)
   "Deliver TEXT to TARGET, clearing stale object targets during REPLAY."
