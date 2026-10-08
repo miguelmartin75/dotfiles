@@ -9,6 +9,7 @@
 ;;; Code:
 
 (require 'calendar)
+(require 'dired)
 (require 'org)
 (require 'org-datetree)
 (require 'org-element)
@@ -22,20 +23,47 @@
   "Project-partitioned local Org work items."
   :group 'org)
 
+(defcustom my/work-shared-directory
+  (expand-file-name "~/morg/shared/")
+  "Shared personal Org and Markdown store."
+  :type 'directory)
+
 (defcustom my/workflow-project-storage-root
-  (expand-file-name "~/org/work/projects/")
+  (expand-file-name "projects/" my/work-shared-directory)
   "Directory containing one canonical index for each project."
   :type 'directory)
 
 (defcustom my/workflow-journal-file
-  (expand-file-name "~/org/journal.org")
+  (expand-file-name "journal.org" my/work-shared-directory)
   "Global journal file used for concise daily work logs."
   :type 'file)
 
 (defcustom my/workflow-life-file
-  (expand-file-name "~/org/life.org")
+  (expand-file-name "life.org" my/work-shared-directory)
   "Optional non-work Org file included in the agenda when it exists."
   :type 'file)
+
+(defun my/workflow-life-capture-file ()
+  "Return the life capture file, creating its required headings when absent.
+
+Existing files are preserved.  Unsaved visiting buffers and creation failures
+stop capture before an existing destination can be overwritten."
+  (unless (file-exists-p my/workflow-life-file)
+    (let ((buffer (get-file-buffer my/workflow-life-file)))
+      (when (and buffer (buffer-modified-p buffer))
+        (user-error "Life capture file has unsaved contents"))
+      (make-directory (file-name-directory my/workflow-life-file) t)
+      (with-temp-buffer
+        (insert "* Backlog\n** Inbox\n\n"
+                "* Areas\n** Ideas\n** Writing Ideas\n"
+                "** Startup Ideas\n** Research Ideas\n")
+        (write-region (point-min) (point-max) my/workflow-life-file
+                      nil 'silent nil 'excl))
+      (when buffer
+        (with-current-buffer buffer
+          (revert-buffer t t)))
+      (my/workflow-refresh-agenda)))
+  my/workflow-life-file)
 
 (defcustom my/workspace-configurations nil
   "Named workspace configurations keyed by stable string IDs.
@@ -218,6 +246,7 @@ Signal `user-error' before composing any project storage path otherwise."
   (let ((project-key (my/workflow-validate-one-line project-key "Project key")))
     (unless (and
                (not (file-name-absolute-p project-key))
+               (not (string-prefix-p "~" project-key))
                (not (member project-key '("." "..")))
                (not (string-match-p "[\\\\/]" project-key)))
       (user-error "Project key must be one nonempty directory component"))
@@ -356,32 +385,42 @@ and project log."
 Return an existing schema, or nil when the canonical project does not yet
 exist.  Existing collisions and declined reuse fail before any mutation."
   (let* ((project-key (my/workflow-validate-project-key project-key))
-         (root (my/workspace-normalize-root root))
+         (root (my/workspace-canonical-directory root))
          (index (my/workflow-project-index-file project-key))
          (directory (file-name-directory index))
          schema)
     (cond
-     ((file-exists-p index)
+     ((or (file-exists-p index) (file-symlink-p index))
+      (unless (file-regular-p index)
+        (user-error "Project index collision for %s" project-key))
       (setq schema (my/workflow-project-schema (find-file-noselect index)))
-      (unless (and schema (equal (plist-get schema :key) project-key))
+      (unless (and schema
+                   (equal (plist-get schema :key) project-key)
+                   (file-name-absolute-p (plist-get schema :root))
+                   (not (string-match-p "[\r\n]" (plist-get schema :root))))
         (user-error "Project index collision for %s" project-key))
       (when (and confirm-reuse
                  (not (equal (plist-get schema :root) root))
                  (not (y-or-n-p
                        (format "Reuse project %s for %s? " project-key root))))
         (user-error "Choose a different project key")))
-     ((file-exists-p directory)
-      (user-error "Project directory %s exists without its canonical index" directory)))
+     ((and (or (file-exists-p directory) (file-symlink-p directory))
+           (not (file-directory-p directory)))
+      (user-error "Project directory collision for %s" project-key))
+     ((let ((buffer (get-file-buffer index)))
+        (and buffer (buffer-modified-p buffer)))
+      (user-error "Project index has unsaved contents for %s" project-key)))
     schema))
 
 (defun my/workflow-ensure-project (project-key root &optional confirm-reuse)
   "Return PROJECT-KEY's canonical schema, creating it for ROOT when needed.
 
-An existing noncanonical directory is a collision and is never overwritten.
+Existing ordinary project files are preserved when adding a missing index.
+Malformed indexes and non-directory destinations are never overwritten.
 When CONFIRM-REUSE is non-nil, a project first recorded at another root needs
 explicit confirmation before reuse."
   (let* ((project-key (my/workflow-validate-project-key project-key))
-         (root (my/workspace-normalize-root root))
+         (root (my/workspace-canonical-directory root))
          (index (my/workflow-project-index-file project-key))
          (directory (file-name-directory index))
          (schema (my/workflow-prepare-project project-key root confirm-reuse)))
@@ -407,6 +446,88 @@ explicit confirmation before reuse."
           (save-buffer))
         (setq schema (my/workflow-project-schema buffer))))
     (my/workflow-register-agenda-index index)
+    schema))
+
+(defun my/work-project-open (&optional project-key workspace)
+  "Open PROJECT-KEY at Docs, or browse its notes directory without an index.
+
+With WORKSPACE non-nil, select its stable workspace tab and show the index.
+Opening never creates project data or changes task bindings."
+  (interactive (list nil current-prefix-arg))
+  (unless project-key
+    (let (choices)
+      (when (file-directory-p my/workflow-project-storage-root)
+        (dolist (directory (directory-files my/workflow-project-storage-root t
+                                            directory-files-no-dot-files-regexp))
+          (when (file-directory-p directory)
+            (push (file-name-nondirectory directory) choices))))
+      (unless choices
+        (user-error "No notes projects exist"))
+      (setq project-key (completing-read "Notes project: " (sort choices #'string-lessp)
+                                         nil t))))
+  (let* ((project-key (my/workflow-validate-project-key project-key))
+         (index (my/workflow-project-index-file project-key))
+         (directory (file-name-directory index)))
+    (unless (file-directory-p directory)
+      (user-error "Project directory does not exist: %s" directory))
+    (let* ((schema (my/workflow-prepare-project project-key directory))
+           (root (if schema
+                     (my/workspace-canonical-directory (plist-get schema :root))
+                   directory))
+           (buffer (if schema (plist-get schema :buffer) (dired-noselect directory))))
+      (if workspace
+          (progn
+            (require 'my-window-layouts)
+            (unless (file-directory-p root)
+              (user-error "Workspace root does not exist: %s" root))
+            (let ((tabs (copy-tree (tab-bar-tabs)))
+                  (windows (current-window-configuration)))
+              (condition-case error-data
+                  (progn
+                    (my/workspace-select-or-create-tab
+                     root (my/workspace-default-id root) project-key)
+                    (my/tab-set-current-property 'my/layout-edit-buffer buffer)
+                    (my/layout-render buffer nil)
+                    (my/tab-set-current-property 'my/layout-current 'focus))
+                (t
+                 (set-window-configuration windows)
+                 (tab-bar-tabs-set tabs)
+                 (signal (car error-data) (cdr error-data))))))
+        (pop-to-buffer buffer))
+      (when schema
+        (widen)
+        (goto-char (plist-get schema :docs))
+        (org-fold-show-entry))
+      buffer)))
+
+(defun my/work-project-create (&optional project-key workspace-root)
+  "Create PROJECT-KEY's empty canonical index and open Docs without a task.
+
+An omitted WORKSPACE-ROOT uses the exact notes directory.  A selected code
+workspace uses normal project-root discovery.  Existing indexes must match
+both the project key and selected root."
+  (interactive)
+  (let* ((project-key
+          (my/workflow-validate-project-key
+           (or project-key (read-string "Project key: "))))
+         (directory (file-name-directory (my/workflow-project-index-file project-key)))
+         (workspace-root
+          (or workspace-root
+              (if (called-interactively-p 'interactive)
+                  (read-directory-name "Workspace directory: " directory directory nil)
+                directory)))
+         (selected (my/workspace-canonical-directory
+                    (my/workflow-validate-one-line workspace-root "Workspace root")))
+         (root (if (equal selected directory)
+                   directory
+                 (unless (file-directory-p selected)
+                   (user-error "Workspace directory does not exist: %s" selected))
+                 (my/workspace-normalize-root selected)))
+         (schema (my/workflow-prepare-project project-key root)))
+    (when (and schema (not (equal (plist-get schema :root) root)))
+      (user-error "Project root collision for %s" project-key))
+    (setq schema (my/workflow-ensure-project project-key root))
+    (my/work-project-open project-key)
     schema))
 
 (defun my/workflow-task-at-position (schema position)

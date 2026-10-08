@@ -654,10 +654,26 @@ when KIND is `project'."
     (user-error "Current buffer is not visiting a file"))
   (my/find-file-recursive (file-name-directory buffer-file-name)))
 
-(defun my/find-file-sshx ()
-  "Open a remote file hierarchically with an SSH host prompt."
+(defun my/connect-remote ()
+  "Choose an SSH destination, then browse its home directory.
+Offer configured TRAMP candidates and accept an alias, hostname, or user@host."
   (interactive)
-  (my/find-file default-directory "/sshx:"))
+  (let (candidates)
+    (dolist (source (tramp-get-completion-function "sshx"))
+      (dolist (destination (funcall (car source) (cadr source)))
+        (when (cadr destination)
+          (push (if (car destination)
+                    (concat (car destination) "@" (cadr destination))
+                  (cadr destination))
+                candidates))))
+    (let ((destination
+           (completing-read "Remote machine: "
+                            (delete-dups (nreverse candidates)) nil nil)))
+      (unless (string-match-p
+               "\\`\\(?:[[:alnum:]_.-]+@\\)?[[:alnum:]_][[:alnum:]_.-]*\\'"
+               destination)
+        (user-error "Enter an SSH alias, hostname, or user@host"))
+      (my/find-file (concat "/sshx:" destination ":~/")))))
 
 (provide 'my-file-picker)
 

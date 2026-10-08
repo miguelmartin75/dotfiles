@@ -75,40 +75,43 @@ When REQUIRE-EXISTING is non-nil, reject names that are not running sessions."
                                          (selected-frame)))))
     (if window
         (quit-window nil window)
-      (unless live
-        (let* ((directory-name
-                (file-name-nondirectory
-                 (directory-file-name (expand-file-name directory))))
-               (readable-name
-                (replace-regexp-in-string
-                 "[^[:alnum:]_.-]+" "-"
-                 (if (string-empty-p directory-name) "root" directory-name)))
-               (workspace-id
-                (or (my/tab-current-property 'my/workspace-id)
-                    (my/workspace-default-id directory)))
-               (name (format "emacs-%s-shell-%s"
-                             readable-name
-                             (substring
-                              (secure-hash 'sha1
-                                           (concat workspace-id "\0" directory))
-                              0 10)))
-               (default-directory directory)
-               (descriptor (list :type 'zmx
-                                 :name name
-                                 :directory directory
-                                 :cwd (or (file-remote-p directory 'localname)
-                                          directory)))
-               (display-buffer-overriding-action my/right-split-action))
-          (term-sessions-open descriptor nil)
-          (setq buffer (current-buffer)
-                target (plist-put descriptor :buffer buffer))
-          (unless (buffer-live-p buffer)
-            (user-error "Opened zmx terminal did not return a live buffer"))
-          (setf (alist-get directory my/cwd-terminal-targets nil nil #'equal)
-                target)))
-      (pop-to-buffer buffer)
-      (with-current-buffer buffer
-        (my/ghostel-enter-terminal-input)))
+      (with-temp-message (unless live
+                           (format "Opening terminal in %s..." directory))
+        (unless live (redisplay))
+        (unless live
+          (let* ((directory-name
+                  (file-name-nondirectory
+                   (directory-file-name (expand-file-name directory))))
+                 (readable-name
+                  (replace-regexp-in-string
+                   "[^[:alnum:]_.-]+" "-"
+                   (if (string-empty-p directory-name) "root" directory-name)))
+                 (workspace-id
+                  (or (my/tab-current-property 'my/workspace-id)
+                      (my/workspace-default-id directory)))
+                 (name (format "emacs-%s-shell-%s"
+                               readable-name
+                               (substring
+                                (secure-hash 'sha1
+                                             (concat workspace-id "\0" directory))
+                                0 10)))
+                 (default-directory directory)
+                 (descriptor (list :type 'zmx
+                                   :name name
+                                   :directory directory
+                                   :cwd (or (file-remote-p directory 'localname)
+                                            directory)))
+                 (display-buffer-overriding-action my/right-split-action))
+            (term-sessions-open descriptor nil)
+            (setq buffer (current-buffer)
+                  target (plist-put descriptor :buffer buffer))
+            (unless (buffer-live-p buffer)
+              (user-error "Opened zmx terminal did not return a live buffer"))
+            (setf (alist-get directory my/cwd-terminal-targets nil nil #'equal)
+                  target)))
+        (pop-to-buffer buffer)
+        (with-current-buffer buffer
+          (my/ghostel-enter-terminal-input))))
     (my/send-text-save-last-target target)))
 
 (defun my/send-text-deliver (target text replay)

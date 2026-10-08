@@ -130,9 +130,12 @@
 (require 'tramp)
 
 (dolist (method '("ssh" "sshx"))
+  ;; The bundled TRAMP parser does not follow SSH Include directives.
   (tramp-set-completion-function method
-    '((tramp-parse-sconfig "/etc/ssh_config")
-      (tramp-parse-sconfig "~/.ssh/config"))))
+    (append '((tramp-parse-sconfig "/etc/ssh_config")
+              (tramp-parse-sconfig "~/.ssh/config"))
+            (mapcar (lambda (file) (list #'tramp-parse-sconfig file))
+                    (file-expand-wildcards "~/.ssh/omnistation_config")))))
 
 (setq tramp-message-show-message nil)
 (add-to-list 'tramp-remote-path 'tramp-own-remote-path)
@@ -1465,56 +1468,60 @@ When UP is non-nil, swap with the preceding paragraph."
               (org-insert-item checkbox))))
       (call-interactively #'org-return))))
 
+(require 'my-workflow
+         (expand-file-name "my-workflow.el" my/config-directory))
+
 (use-package org
     :config
   (keymap-set org-mode-map "RET" #'my/org-return)
   (setq org-todo-keywords
 	'((sequence "PROJ(P!)" "TODO(t!)" "REVIEW(r!)" "POST(p!)" "DOING(d!)" "BLOCKED(b!)" "|" "DONE(f!)" "CANCELED(c!@)"))
   )
+  (setq org-directory my/work-shared-directory)
   (setq org-capture-templates
-	'(
+	`(
     ("r" "Reflections")
     ("rw" "Weekly Reflection" entry
-    (file+datetree "~/org/reflections.org")
-    (file "~/org/templates/weekly.org")
+    (file+datetree ,(expand-file-name "reflections.org" my/work-shared-directory))
+    (file ,(expand-file-name "templates/weekly.org" my/work-shared-directory))
     :empty-lines 1
     :tree-type week
     :clock-in t :clock-resume t
     ; :after-finalize my/remove-datetree-day-heading
     )
     ("rm" "Monthly Reflection" entry
-    (file+datetree "~/org/reflections.org")
-    (file "~/org/templates/monthly.org")
+    (file+datetree ,(expand-file-name "reflections.org" my/work-shared-directory))
+    (file ,(expand-file-name "templates/monthly.org" my/work-shared-directory))
     :empty-lines 1
     :tree-type month
     :clock-in t :clock-resume t
     )
 
     ;; journal
-	  ("m" "Meeting" entry (file+datetree "~/org/journal.org")
+	  ("m" "Meeting" entry (file+datetree ,my/workflow-journal-file)
 	   "* %T %? :meeting:work:" :empty-lines 1)
-	  ("l" "Log" entry (file+datetree "~/org/journal.org")
+	  ("l" "Log" entry (file+datetree ,my/workflow-journal-file)
 	   "* %T %? :log:" :empty-lines 1)
-	  ("t" "Add Task" entry (file+datetree "~/org/journal.org")
+	  ("t" "Add Task" entry (file+datetree ,my/workflow-journal-file)
 	   "* TODO %? \n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
 	  ("T" "Add Work Task" entry (function my/work-capture-target)
 	   "* TODO %?\n:PROPERTIES:\n:ID: %(org-id-new)\n:END:" :empty-lines 1)
-	  ("j" "Journal Entry" entry (file+datetree "~/org/journal.org")
+	  ("j" "Journal Entry" entry (file+datetree ,my/workflow-journal-file)
 	   "* %t :journal:\n%?" :empty-lines 1)
 
     ;; life
-	  ("b" "Task: Backlog" entry (file+olp "~/org/life.org" "Backlog" "Inbox")
+	  ("b" "Task: Backlog" entry (file+olp my/workflow-life-capture-file "Backlog" "Inbox")
 	   "* TODO %? :backlog:\n:LOGBOOK:\n- State \"TODO\" from  %U\n:END:" :empty-lines 1)
-	  ("n" "Note" entry (file+olp "~/org/life.org" "Backlog" "Inbox")
+	  ("n" "Note" entry (file+olp my/workflow-life-capture-file "Backlog" "Inbox")
 	   "* %T %? :note:" :empty-lines 1)
 
-	  ("i" "Idea" entry (file+olp "~/org/life.org" "Areas" "Ideas")
+	  ("i" "Idea" entry (file+olp my/workflow-life-capture-file "Areas" "Ideas")
 	   "* %? :inbox:idea:\nAdded: %U" :empty-lines 1)
-	  ("w" "Writing Idea" entry (file+olp "~/org/life.org" "Areas" "Writing Ideas")
+	  ("w" "Writing Idea" entry (file+olp my/workflow-life-capture-file "Areas" "Writing Ideas")
 	   "* %? :writing:idea:\nAdded: %U" :empty-lines 1)
-	  ("s" "Startup Idea" entry (file+olp "~/org/life.org" "Areas" "Startup Ideas")
+	  ("s" "Startup Idea" entry (file+olp my/workflow-life-capture-file "Areas" "Startup Ideas")
 	   "* %? :startup:idea:\nAdded: %U" :empty-lines 1)
-	  ("R" "Research Idea" entry (file+olp "~/org/life.org" "Areas" "Research Ideas")
+	  ("R" "Research Idea" entry (file+olp my/workflow-life-capture-file "Areas" "Research Ideas")
 	   "* %? :research:idea:\nAdded: %U" :empty-lines 1)
     )
   )
@@ -1609,7 +1616,12 @@ When UP is non-nil, swap with the preceding paragraph."
   :commands (org-roam-node-find org-roam-node-insert)
   :hook (after-init . org-roam-db-autosync-mode)
   :custom
-  (org-roam-directory (file-truename "~/org/"))
+  (org-roam-directory my/work-shared-directory)
+  (org-roam-capture-templates
+   '(("d" "default" plain "%?"
+      :target (file+head "notes/%<%Y%m%d%H%M%S>-${slug}.org"
+                         "#+title: ${title}\n")
+      :unnarrowed t)))
   (org-roam-db-location "~/.org-roam.db")
   (org-roam-display-template
    (concat "${title:*} " (propertize "${tags:*}" 'face 'org-tag))))
@@ -1643,8 +1655,6 @@ When UP is non-nil, swap with the preceding paragraph."
 
 (require 'my-org-datetree
          (expand-file-name "my-org-datetree.el" my/config-directory))
-(require 'my-workflow
-         (expand-file-name "my-workflow.el" my/config-directory))
 (my/workflow-refresh-agenda)
 (require 'my-agent-events
          (expand-file-name "my-agent-events.el" my/config-directory))
@@ -1657,7 +1667,7 @@ When UP is non-nil, swap with the preceding paragraph."
   "Refile the current Org subtree into the journal datetree."
   (interactive)
   (save-excursion
-    (my/org-refile-to-datetree "~/org/journal.org")))
+    (my/org-refile-to-datetree my/workflow-journal-file)))
 
 ;; Terminal and execution workflows
 
@@ -1966,7 +1976,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("f y" . copy-current-file-path)
        ("f r" . my/set-default-directory-to-project-root)
        ("f d" . my/set-default-directory-to-current-file)
-       ("f R" . my/find-file-sshx)
+       ("f R" . my/connect-remote)
        ("f o" . my/select-recent-file)
        ("b b" . my/select-buffer)
        ("b B" . my/search-buffer-menu)
@@ -2056,6 +2066,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("o i" . org-roam-node-insert)
        ("o t" . org-set-tags-command)
        ("o r" . org-table-recalculate-buffer-tables)
+       ("o p" . my/work-project-open)
+       ("o P" . my/work-project-create)
        ("o w" . my/work-start)
        ("o W" . markdown-table-wrap-pretty-toggle)
        ("o l" . my/work-log)
@@ -2183,6 +2195,10 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (evil-define-key 'normal magit-mode-map (kbd "SPC") my/normal-leader-map)
 (evil-define-key 'visual magit-mode-map (kbd "SPC") my/visual-leader-map)
 
+(defvar dired-mode-map)
+(evil-define-key 'normal dired-mode-map (kbd "SPC") my/normal-leader-map)
+(evil-define-key 'visual dired-mode-map (kbd "SPC") my/visual-leader-map)
+
 (evil-define-key '(normal visual) 'global
   (kbd "C-p") #'my/find-file-recursive-configured
   (kbd "M-p") #'my/file-picker-fzf-menu)
@@ -2219,6 +2235,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "f" "files"
     "f p" "find file recursively"
     "f P" "configure recursive files"
+    "f R" "connect to remote machine"
     "b B" "buffer options menu"
     "g" "git"
     "g p" "preview hunk"
@@ -2227,6 +2244,8 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "g a" "annotate hunk"
     "h" "help"
     "o" "org"
+    "o p" "open notes project"
+    "o P" "create notes project"
     "o w" "start work"
     "o W" "toggle Markdown table wrap"
     "o l" "work log"
