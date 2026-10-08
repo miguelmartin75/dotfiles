@@ -122,3 +122,5 @@ elif (( $+commands[fzf] )); then
     fi
     unset fzf_setup
 fi
+
+[[ -f ~/.zshrc-work ]] && source ~/.zshrc-work
