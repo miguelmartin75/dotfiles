@@ -432,6 +432,11 @@
   :config
   (evil-collection-init))
 
+(use-package dired-subtree
+  :after dired
+  :demand t
+  :bind (:map dired-mode-map
+              ("TAB" . dired-subtree-toggle)))
 
 (use-package evil-better-visual-line
   :config
@@ -1743,6 +1748,7 @@ When UP is non-nil, swap with the preceding paragraph."
               #'my/ghostel-enter-emacs-mode)
   (dolist (map (list ghostel-semi-char-mode-map ghostel-char-mode-map))
     (keymap-set map "s-j" #'my/open-cwd-terminal)
+    (keymap-set map "s-J" #'my/open-project-ghostel)
     (keymap-set map "s-a" #'my/work-codex-and-select-agent))
   (evil-define-key 'insert evil-ghostel-mode-map
     (kbd "s-<escape>") #'my/ghostel-enter-emacs-mode)
@@ -1884,6 +1890,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (global-set-key (kbd "s-v") #'yank)
 (global-set-key (kbd "s-s") #'save-buffer)
 (global-set-key (kbd "s-j") #'my/open-cwd-terminal)
+(global-set-key (kbd "s-J") #'my/open-project-ghostel)
 (global-set-key (kbd "s-a") #'my/work-codex-and-select-agent)
 (global-set-key (kbd "C-x C-f") #'my/find-file)
 (global-set-key (kbd "C-=") #'my/increase-font-size)

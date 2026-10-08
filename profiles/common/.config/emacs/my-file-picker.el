@@ -46,6 +46,10 @@
   tail
   candidates
   minibuffer
+  origin-buffer
+  origin-window
+  origin-window-start
+  origin-point
   active
   export-buffer)
 
@@ -73,6 +77,7 @@
 (defvar my/file-picker-ivy-fzf-map
   (let ((map (make-sparse-keymap)))
     (keymap-set map "C-c C-r" #'my/file-picker-toggle)
+    (keymap-set map "C-c p" #'my/file-picker-fzf-project)
     (keymap-set map "C-q" #'my/file-picker-fzf-export)
     (keymap-set map "C-c C-o" #'my/file-picker-fzf-export)
     map)
@@ -440,6 +445,53 @@ When REMOTE is non-nil, prefer remote fd and use portable find otherwise."
   (ignore ignored)
   (my/file-picker-start-fzf-generation session args query))
 
+(defun my/file-picker-fzf-preview ()
+  "Preview the current fzf candidate in the launching window."
+  (let* ((session my/file-picker-active-ivy-fzf-session)
+         (candidate (and (boundp 'ivy-last)
+                         ivy-last
+                         (ivy-state-current ivy-last))))
+    (when (and session
+               (my/file-picker-ivy-fzf-session-active session)
+               (stringp candidate)
+               (not (string-empty-p candidate)))
+      (let ((file (expand-file-name
+                   candidate
+                   (my/file-picker-ivy-fzf-session-root session))))
+        (when (file-regular-p file)
+          (with-ivy-window
+            (find-file file)))))))
+
+(defun my/file-picker-fzf-restore-preview (session)
+  "Restore SESSION's launching window after a cancelled preview."
+  (let ((window (my/file-picker-ivy-fzf-session-origin-window session))
+        (buffer (my/file-picker-ivy-fzf-session-origin-buffer session)))
+    (when (and (window-live-p window) (buffer-live-p buffer))
+      (with-selected-window window
+        (switch-to-buffer buffer)
+        (goto-char (my/file-picker-ivy-fzf-session-origin-point session))
+        (set-window-start
+         window
+         (my/file-picker-ivy-fzf-session-origin-window-start session)
+         t)))))
+
+(defun my/file-picker-fzf-project ()
+  "Restrict the active fzf session to the current project root."
+  (interactive)
+  (let ((project (project-current t)))
+    (unless project
+      (user-error "Current directory is not in a project"))
+    (let* ((session my/file-picker-active-ivy-fzf-session)
+           (root (file-name-as-directory (project-root project)))
+           (args (transient-args 'my/file-picker-fzf-menu))
+           (query (minibuffer-contents-no-properties)))
+      (unless (and session
+                   (my/file-picker-ivy-fzf-session-active session))
+        (user-error "No safe fzf file session is active"))
+      (setf (my/file-picker-ivy-fzf-session-root session) root)
+      (setq-local my/file-picker-root root)
+      (my/file-picker-start-fzf-generation session args query))))
+
 (defun my/file-picker-fzf-export ()
   "Exit Ivy and open a Dired snapshot of the active safe fzf candidates."
   (interactive)
@@ -470,7 +522,11 @@ When REMOTE is non-nil, prefer remote fd and use portable find otherwise."
   (require 'ivy)
   (let* ((session
           (make-my/file-picker-ivy-fzf-session
-           :root root :generation 0 :tail "" :active t))
+           :root root :generation 0 :tail "" :active t
+           :origin-buffer (current-buffer)
+           :origin-window (selected-window)
+           :origin-window-start (window-start)
+           :origin-point (point)))
          (my/file-picker-active-ivy-fzf-session session)
          (my/file-picker-result nil)
          selected
@@ -497,6 +553,7 @@ When REMOTE is non-nil, prefer remote fd and use portable find otherwise."
                        :initial-input initial
                        :keymap my/file-picker-ivy-fzf-map
                        :sort nil
+                       :update-fn #'my/file-picker-fzf-preview
                        :caller 'my/file-picker-ivy-fzf)))
             (quit
              (setq result (or my/file-picker-result '(cancel)))))
@@ -506,9 +563,15 @@ When REMOTE is non-nil, prefer remote fd and use portable find otherwise."
                        (my/file-picker-ivy-fzf-session-export-buffer session))
                       '(cancel)
                     (if (stringp selected)
-                        (list 'selected (expand-file-name selected root))
+                        (list
+                         'selected
+                         (expand-file-name
+                          selected
+                          (my/file-picker-ivy-fzf-session-root session)))
                       '(cancel)))))
           result)
+      (unless (and (listp result) (eq (car result) 'selected))
+        (my/file-picker-fzf-restore-preview session))
       (my/file-picker-close-fzf-session session))))
 
 (defun my/file-picker-recursive-session (root initial &optional literal-initial)

@@ -56,15 +56,49 @@ When REQUIRE-EXISTING is non-nil, reject names that are not running sessions."
 (defvar my/cwd-terminal-targets nil
   "Persistent zmx target descriptors cached by exact directories.")
 
+(defvar my/project-ghostel-id-sequences nil
+  "Next Ghostel terminal ID by project-root and workspace-label pair.")
+
+(defun my/cwd-terminal-directory ()
+  "Return the project root or current buffer directory for a terminal."
+  (my/workspace-normalize-root
+   (or (and buffer-file-name (file-name-directory buffer-file-name))
+       default-directory)))
+
+(defun my/cwd-terminal-workspace-label ()
+  "Return the current tab name in a form safe for terminal names."
+  (let* ((name (or (my/tab-current-property 'name) "default"))
+         (label (replace-regexp-in-string "[^[:alnum:]_.-]+" "-" name))
+         (label (string-trim label "-+" "-+")))
+    (if (string-empty-p label) "default" label)))
+
+(defun my/cwd-terminal-name (directory kind id)
+  "Return a readable terminal name for DIRECTORY of KIND and ID."
+  (let* ((project (file-name-nondirectory (directory-file-name directory)))
+         (project (replace-regexp-in-string "[^[:alnum:]_.-]+" "-" project))
+         (project (string-trim project "-+" "-+"))
+         (project (if (string-empty-p project) "root" project))
+         (hash (substring (secure-hash 'sha1 directory) 0 8))
+         (label (my/cwd-terminal-workspace-label)))
+    (format "%s--%s--%s-%s-%d" project hash kind label id)))
+
+(defun my/next-project-ghostel-id (directory)
+  "Return the next Ghostel ID for DIRECTORY in the current workspace."
+  (let* ((key (cons directory (my/cwd-terminal-workspace-label)))
+         (id (1+ (or (alist-get key my/project-ghostel-id-sequences nil nil #'equal)
+                     0))))
+    (setf (alist-get key my/project-ghostel-id-sequences nil nil #'equal) id)
+    id))
+
 (defun my/open-cwd-terminal ()
-  "Toggle the persistent zmx terminal for the exact current directory."
+  "Toggle the persistent zmx terminal for the current project or directory."
   (interactive)
   (let* ((entry
           (cl-find-if
            (lambda (candidate)
              (eq (plist-get (cdr candidate) :buffer) (current-buffer)))
            my/cwd-terminal-targets))
-         (directory (if entry (car entry) default-directory))
+         (directory (if entry (car entry) (my/cwd-terminal-directory)))
          (target (if entry
                      (cdr entry)
                    (alist-get directory my/cwd-terminal-targets nil nil #'equal)))
@@ -79,22 +113,7 @@ When REQUIRE-EXISTING is non-nil, reject names that are not running sessions."
                            (format "Opening terminal in %s..." directory))
         (unless live (redisplay))
         (unless live
-          (let* ((directory-name
-                  (file-name-nondirectory
-                   (directory-file-name (expand-file-name directory))))
-                 (readable-name
-                  (replace-regexp-in-string
-                   "[^[:alnum:]_.-]+" "-"
-                   (if (string-empty-p directory-name) "root" directory-name)))
-                 (workspace-id
-                  (or (my/tab-current-property 'my/workspace-id)
-                      (my/workspace-default-id directory)))
-                 (name (format "emacs-%s-shell-%s"
-                               readable-name
-                               (substring
-                                (secure-hash 'sha1
-                                             (concat workspace-id "\0" directory))
-                                0 10)))
+          (let* ((name (my/cwd-terminal-name directory "z" 1))
                  (default-directory directory)
                  (descriptor (list :type 'zmx
                                    :name name
@@ -113,6 +132,14 @@ When REQUIRE-EXISTING is non-nil, reject names that are not running sessions."
         (with-current-buffer buffer
           (my/ghostel-enter-terminal-input))))
     (my/send-text-save-last-target target)))
+
+(defun my/open-project-ghostel ()
+  "Create a Ghostel terminal for the current project or directory."
+  (interactive)
+  (let* ((directory (my/cwd-terminal-directory))
+         (id (my/next-project-ghostel-id directory))
+         (name (my/cwd-terminal-name directory "g" id)))
+    (my/create-ghostel-terminal-in-split name directory my/right-split-action)))
 
 (defun my/send-text-deliver (target text replay)
   "Deliver TEXT to TARGET, clearing stale object targets during REPLAY."
