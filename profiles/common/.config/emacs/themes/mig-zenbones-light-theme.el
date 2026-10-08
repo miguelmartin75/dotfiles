@@ -584,11 +584,11 @@
  `(markdown-ts-link-destination ((t (:foreground ,comment :underline t))))
  `(markdown-ts-block-quote ((t (:foreground ,fg-constant :slant italic))))
  `(markdown-ts-code-block
-   ((t (:inherit fixed-pitch :foreground ,type :background ,inlay-bg :extend t))))
+   ((t (:inherit fixed-pitch :background ,inlay-bg :extend t))))
  `(markdown-ts-indented-code-block
-   ((t (:inherit fixed-pitch :foreground ,type :background ,inlay-bg :extend t))))
+   ((t (:inherit fixed-pitch :background ,inlay-bg :extend t))))
  `(markdown-ts-in-code-block
-   ((t (:inherit fixed-pitch :foreground ,type :background ,inlay-bg :extend t))))
+   ((t (:inherit fixed-pitch :background ,inlay-bg :extend t))))
  '(markdown-ts-code-span
    ((t (:inherit (markdown-ts-code-block font-lock-constant-face)
         :extend nil :height 1.0))))

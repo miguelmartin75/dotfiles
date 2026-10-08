@@ -1948,6 +1948,18 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (evil-define-key '(normal visual insert) 'global
   (kbd "C-s") #'my/search-incremental)
 
+(defun my/toggle-search-highlighting ()
+  "Toggle persistent Evil search highlighting."
+  (interactive)
+  (setq evil-ex-search-persistent-highlight
+        (not evil-ex-search-persistent-highlight))
+  (if evil-ex-search-persistent-highlight
+      (when evil-ex-search-pattern
+        (evil-ex-search-activate-highlight evil-ex-search-pattern))
+    (evil-ex-nohighlight))
+  (message "Search highlighting %s"
+           (if evil-ex-search-persistent-highlight "enabled" "disabled")))
+
 (defvar my/leader-map nil
   "Leader map shared by Evil normal and visual states.")
 
@@ -1959,6 +1971,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 (dolist
     (binding
      '(("," . my/select-buffer)
+       ("RET" . my/toggle-search-highlighting)
        ("/" . my/search-line)
        ("?" . my/select-isearch-history)
        ("m" . evil-show-marks)
@@ -2069,7 +2082,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("o p" . my/work-project-open)
        ("o P" . my/work-project-create)
        ("o w" . my/work-start)
-       ("o W" . markdown-table-wrap-pretty-toggle)
+       ("o v" . markdown-table-wrap-pretty-toggle)
        ("o l" . my/work-log)
        ("o u" . my/work-draft-update)
        ("o RET" . org-babel-execute-src-block)
@@ -2247,7 +2260,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "o p" "open notes project"
     "o P" "create notes project"
     "o w" "start work"
-    "o W" "toggle Markdown table wrap"
+    "o v" "toggle Markdown table view"
     "o l" "work log"
     "o u" "draft work update"
     "r" "review"

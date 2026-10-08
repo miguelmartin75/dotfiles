@@ -171,7 +171,22 @@ Snacks.setup({
             return opts
         end,
     },
-    zen = {},
+    zen = {
+        win = {
+            backdrop = {
+                transparent = false,
+                blend = 0,
+                win = {
+                    wo = {
+                        winhighlight = "Normal:Normal",
+                    },
+                },
+            },
+            wo = {
+                cursorline = false,
+            },
+        },
+    },
 })
 
 local which_key = require("which-key")
@@ -641,7 +656,7 @@ vim.keymap.set({ "n", "x" }, "<leader>w=", "<C-W>=", { desc = "Equalize windows"
 vim.keymap.set({ "n", "x" }, "<leader>w|", "<C-W>|", { desc = "Maximize window width" })
 vim.keymap.set({ "n", "x" }, "<leader>wz", "<cmd>only<cr>", { desc = "Focus window" })
 vim.keymap.set("n", "<leader>z", function()
-    Snacks.zen()
+    Snacks.zen({ toggles = {} })
 end, { desc = "Toggle Zen mode" })
 vim.keymap.set({ "n", "x" }, "<leader>wtq", "<cmd>tabclose<cr>", { desc = "Close tab" })
 vim.keymap.set({ "n", "x" }, "<leader>wtc", "<cmd>tabnew<cr>", { desc = "Create tab" })
@@ -782,9 +797,10 @@ end, { desc = "Help tags" })
 vim.keymap.set("n", "<leader>hm", function()
     Snacks.picker.man()
 end, { desc = "Man pages" })
-vim.keymap.set({ "n", "x" }, "<leader>hl", function()
-    vim.wo.number = not vim.wo.number
-    vim.wo.relativenumber = not vim.wo.relativenumber
+vim.keymap.set("n", "<leader>l", function()
+    local show = not (vim.wo.number or vim.wo.relativenumber)
+    vim.wo.number = show
+    vim.wo.relativenumber = show
 end, { desc = "Toggle line numbers" })
 vim.keymap.set("n", "<leader>hk", function()
     Snacks.picker.keymaps()

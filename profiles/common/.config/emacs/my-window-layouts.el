@@ -469,7 +469,11 @@ retain the configuration-scoped name."
         (setq result
               (if new-p
                   (term-sessions-open target (my/layout-agent-command entry root))
-                (term-sessions-open-with-frontend target nil 'ghostel nil)))))
+                (term-sessions-open-with-frontend target nil 'ghostel nil)))
+        ;; The Ghostel frontend selects its terminal buffer but returns its
+        ;; renamed buffer name rather than the buffer itself.
+        (unless (buffer-live-p result)
+          (setq result (current-buffer)))))
     (unless (buffer-live-p result)
       (user-error "Terminal-agent provider did not return a live buffer"))
     (setq my/layout-provider-agent-target target
