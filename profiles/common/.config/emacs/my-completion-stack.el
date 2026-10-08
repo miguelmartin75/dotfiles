@@ -96,6 +96,10 @@
 (with-eval-after-load 'counsel
   (my/configure-counsel))
 
+(with-eval-after-load 'swiper
+  (keymap-set swiper-map "C-q" #'ivy-occur)
+  (keymap-set swiper-all-map "C-q" #'ivy-occur))
+
 (defun my/set-completion-stack (stack)
   "Apply completion STACK without changing in-buffer completion.
 
