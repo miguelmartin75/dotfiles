@@ -31,7 +31,7 @@
 
 (defcustom my/window-layouts
   '((focus
-     :key "e"
+     :key "E"
      :label "Focus edit")
     (terminal
      :key "T"

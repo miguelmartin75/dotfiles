@@ -1994,7 +1994,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
 
 (setq my/leader-map (make-sparse-keymap))
 
-(dolist (prefix '("a" "b" "c" "d" "f" "g" "h" "o" "r" "s" "t" "w" "w t"))
+(dolist (prefix '("a" "b" "c" "d" "f" "g" "h" "o" "q" "r" "s" "w" "w t"))
   (keymap-set my/leader-map prefix (make-sparse-keymap)))
 
 (dolist
@@ -2006,6 +2006,12 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("m" . evil-show-marks)
        ("j" . evil-show-jumps)
        ("l" . display-line-numbers-mode)
+       ("t" . org-todo)
+       ("x" . org-capture)
+       ("n" . org-narrow-to-subtree)
+       ("N" . widen)
+       ("e" . org-set-effort)
+       ("i" . my/work-roam-insert)
        ("Z" . my/write-mode)
        ("z" . my/write-mode-no-zoom)
        ("v" . my/default-mode)
@@ -2090,17 +2096,19 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("g s" . diff-hl-stage-current-hunk)
        ("g r" . diff-hl-revert-hunk)
        ("g a" . my/annotate-current-hunk)
+       ("g h" . diff-hl-mode)
+       ("g H" . global-diff-hl-mode)
        ("a s" . gptel-send)
-       ("t p" . ghostel-project)
-       ("t t" . term-sessions-open)
-       ("t l" . term-sessions-list)
-       ("t h" . term-sessions-history)
-       ("t o" . term-sessions-store-org-link)
-       ("t c" . my/project-run-command)
-       ("t r" . my/send-region-or-buffer-to-last-target)
-       ("t R" . my/send-region-or-buffer)
-       ("t g" . my/create-ghostel-terminal-in-split)
-       ("t z" . my/open-or-create-zmx-session-in-split)
+       ("q p" . ghostel-project)
+       ("q t" . term-sessions-open)
+       ("q l" . term-sessions-list)
+       ("q h" . term-sessions-history)
+       ("q o" . term-sessions-store-org-link)
+       ("q c" . my/project-run-command)
+       ("q r" . my/send-region-or-buffer-to-last-target)
+       ("q R" . my/send-region-or-buffer)
+       ("q g" . my/create-ghostel-terminal-in-split)
+       ("q z" . my/open-or-create-zmx-session-in-split)
        ("r s" . my/annotate-send-all)
        ("r v" . my/annotations-show)
        ("o a" . org-agenda)
@@ -2291,7 +2299,14 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "g s" "stage hunk"
     "g r" "revert hunk (confirm)"
     "g a" "annotate hunk"
+    "g h" "toggle gutter markers"
+    "g H" "toggle gutter markers globally"
     "h" "help"
+    "q" "terminals"
+    "q r" "replay region/buffer, or choose target"
+    "q R" "choose target for region/buffer"
+    "q g" "create Ghostel split target"
+    "q z" "open/create zmx split target"
     "o" "org"
     "o p" "open notes project"
     "o n" "find shared note"
@@ -2313,11 +2328,6 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
     "s B" "multi-buffer line search options menu"
     "s G" "ripgrep options menu"
     "s W" "ripgrep options menu"
-    "t" "terminals"
-    "t r" "replay region/buffer, or choose target"
-    "t R" "choose target for region/buffer"
-    "t g" "create Ghostel split target"
-    "t z" "open/create zmx split target"
     "p" "select workspace"
     "P" "select named workspace"
     "Z" "zen mode"
