@@ -607,10 +607,14 @@
 (keymap-set completion-in-region-mode-map "M-g M-c"
             #'switch-to-completions)
 (keymap-set completion-in-region-mode-map "C-q" #'my/completion-collect)
+(evil-define-key 'insert 'completion-in-region-mode
+  (kbd "C-q") #'my/completion-collect)
 
 (keymap-set completion-list-mode-map "C-n" #'next-completion)
 (keymap-set completion-list-mode-map "C-p" #'previous-completion)
 (keymap-set completion-list-mode-map "C-q" #'my/completion-collect)
+(evil-define-key 'normal completion-list-mode-map
+  (kbd "C-q") #'my/completion-collect)
 
 (keymap-set minibuffer-local-completion-map "C-n"
             #'minibuffer-next-completion)
@@ -2053,6 +2057,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("s c" . my/select-command)
        ("s k" . my/select-kill-ring)
        ("s s" . my/select-imenu)
+       ("s p" . completion-preview-mode)
        ("s v" . my/toggle-completion-stack)
        ("s V" . my/completion-stack-menu)
        ("s S" . xref-find-apropos)

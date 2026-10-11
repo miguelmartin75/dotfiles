@@ -174,7 +174,18 @@
             (when missing-packages
               (package-refresh-contents))
             (dolist (package missing-packages)
-              (package-install package)))
+              (package-install package))
+
+            ;; `package-install' does not upgrade an already installed
+            ;; dependency.  Refresh Magit-Section whenever packages are
+            ;; provisioned so a partial archive upgrade cannot leave Magit
+            ;; calling an incompatible Magit-Section API.
+            (when (package-installed-p 'magit)
+              (unless missing-packages
+                (package-refresh-contents))
+              (if (package-installed-p 'magit-section)
+                  (package-upgrade 'magit-section)
+                (package-install 'magit-section))))
 
           (dolist (entry vc-packages)
             (let* ((name (car entry))
