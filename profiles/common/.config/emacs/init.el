@@ -1989,6 +1989,13 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
   (message "Search highlighting %s"
            (if evil-ex-search-persistent-highlight "enabled" "disabled")))
 
+(defun my/org-toggle-subtree-narrowing ()
+  "Narrow to the current Org subtree, or widen the buffer."
+  (interactive)
+  (if (buffer-narrowed-p)
+      (widen)
+    (org-narrow-to-subtree)))
+
 (defvar my/leader-map nil
   "Leader map shared by Evil normal and visual states.")
 
@@ -2008,8 +2015,7 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
        ("l" . display-line-numbers-mode)
        ("t" . org-todo)
        ("x" . org-capture)
-       ("n" . org-narrow-to-subtree)
-       ("N" . widen)
+       ("n" . my/org-toggle-subtree-narrowing)
        ("e" . org-set-effort)
        ("i" . my/work-roam-insert)
        ("Z" . my/write-mode)
