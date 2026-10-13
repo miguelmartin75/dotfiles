@@ -124,3 +124,7 @@ elif (( $+commands[fzf] )); then
 fi
 
 [[ -f ~/.zshrc-work ]] && source ~/.zshrc-work
+
+autoload -U edit-command-line
+zle -N edit-command-line
+bindkey '^X^e' edit-command-line
