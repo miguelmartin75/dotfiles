@@ -543,6 +543,23 @@ require("treesitter-context").setup({
 vim.keymap.set("i", "<C-Space>", function()
     vim.lsp.completion.get()
 end, { desc = "Complete with LSP" })
+
+vim.g.completion_auto_popup = true
+
+vim.api.nvim_create_autocmd("InsertCharPre", {
+    group = vim.api.nvim_create_augroup("CompletionAutoPopup", { clear = true }),
+    callback = function()
+        if vim.g.completion_auto_popup then
+            vim.lsp.completion.get()
+        end
+    end,
+})
+
+vim.keymap.set("n", "<leader>tc", function()
+    vim.g.completion_auto_popup = not vim.g.completion_auto_popup
+    vim.notify("Completion auto-popup: " .. (vim.g.completion_auto_popup and "on" or "off"))
+end, { desc = "Toggle completion auto-popup" })
+
 vim.keymap.set("i", "<Tab>", function()
     if vim.fn.pumvisible() == 1 then
         return "<C-n>"
