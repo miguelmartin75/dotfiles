@@ -7,6 +7,20 @@
 - Do not create a pull request or merge request without authorization. Prefer making the required changes locally.
 - Always export symbols publicly.
 
+## Collaboration
+
+- Follow the user's stated approach, knowledge, and accepted tradeoffs in
+  planning and implementation. Do not investigate or verify their premises
+  unless asked. Before adding complexity, trace the actual end-to-end data flow
+  and identify a concrete, reachable failure that the simplest invariant does
+  not already cover. If known evidence proves a blocker, explain it directly;
+  do not silently expand the requirements.
+- The user is an expert programmer with more than a decade of experience.
+  Treat their code snippets, whether pseudocode or real code, as expressions of
+  intended invariants and control flow. Preserve that logic and structure
+  unless you can simplify it further without losing those invariants or
+  readability.
+
 ## Work in Small Steps
 
 Use this process for code, plans, research, reports, and tutorials. It governs how to develop the result; the final answer or artifact does not need to show every intermediate step.
@@ -31,6 +45,7 @@ Working in small steps must not reduce the final scope. Before declaring complet
 - Implement the requested behavior and required failure handling. Do not add speculative edge-case handling.
 - Validate external or untrusted input at system boundaries. Trust data whose internal contract guarantees that it is valid.
 - Do not add or modify tests unless explicitly requested. Existing tests may be run; report any limits in what was validated.
+- Reuse abstractions already present in the codebase or introduced during the current work when their contracts fit the affected cases.
 - When several in-scope cases are involved, use Muratori to derive shared code from the concrete cases. If an existing abstraction hides the affected behavior, use Inverse Muratori first.
 - Prefer built-in language features, the standard library, and platform APIs over dependencies or indirection.
 - Prefer normal control flow over excessive early returns. Use early returns for genuine guards, invalid input, empty cases, or terminating searches.
@@ -79,8 +94,8 @@ Honor explicit requests to use sub-agents. Use the requested number and roles, i
 
 Without an explicit request, delegate only bounded, independent work that can run in parallel with other useful main-session work or keep unnecessary details out of the main-session context. Do not delegate mechanically. Prefer read-only investigation when multiple agents would otherwise edit overlapping code.
 
-- By default, use `gpt-5.6-terra` at `xhigh` for code investigation and implementation.
-- By default, use `gpt-5.6-sol` at `medium` for written plans, descriptions, and review.
+- By default, use `gpt-6.1-sol` at `low` for code investigation and implementation.
+- By default, use `gpt-6.1-sol` at `medium` for written plans, descriptions, and review.
 - By default, use a fresh, read-only sub-agent for each review.
 - Give each sub-agent fresh, task-specific context. Do not reuse agents for unrelated work, and stop agents that are no longer needed.
 
@@ -90,7 +105,11 @@ Match the length, structure, and explanation to the task, audience, and complexi
 
 Make reports, tutorials, plans, and other standalone artifacts understandable without prior conversation. Include the objective, relevant scope and assumptions, conclusion, and any background or meaningful alternatives the reader needs. Do not add detail or sections that are not needed to understand or use the result.
 
-- Prefer plain language. Use technical terms when they improve precision, and define unfamiliar or project-specific terms when first used.
+- Preserve the existing author's direct, informal voice. Correct grammar and
+  clarity without rewriting it into generic documentation prose.
+- Use simple, precise language. Reuse established terminology instead of inventing new jargon. Write for programmers without over-explaining basic concepts. Define unfamiliar or project-specific terms when first used.
+- Keep documentation sparse and concrete. For commands, give the pattern and
+  a small set of representative examples in a list rather than a table.
 - For research, answer the exact question first. Add additional sources, comparisons, or related topics only when the available information is missing, conflicts, or cannot support the answer.
 - In reports, lead with the main finding, order findings by importance, distinguish facts, inferences, and recommendations, and place evidence near each claim.
 - Group material by what makes the result easiest to understand, not by the order in which the work was done.
@@ -149,5 +168,8 @@ Keep work that must be implemented and checked together in one phase. Add anothe
 
 ## Formatting
 
+- Use blank lines to separate logical steps and control-flow blocks, keeping
+  closely related statements and branches together. Separate the final return
+  from preceding work.
 - Use ASCII punctuation in prose, source text, and comments. Natural-language and user-visible UI or CLI text may use Unicode when appropriate.
 - Use LF line endings and spaces for indentation. Do not use tabs or decorative Unicode.
