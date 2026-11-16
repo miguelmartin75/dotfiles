@@ -11,9 +11,9 @@
 ;; order:
 ;; emacs --batch -Q -l ~/.config/emacs/install-packages.el
 ;; emacs --batch -Q -l ~/.config/emacs/install-tree-sitter-grammars.el
-;; Then install Ghostel's native module with `M-x ghostel-download-module' or,
-;; with Zig available, `M-x ghostel-module-compile'.  Normal startup and the
-;; first terminal use remain offline and never install software implicitly.
+;; Package provisioning also installs Ghostel's required native module.
+;; Normal startup and the first terminal use remain offline and never install
+;; software implicitly.
 
 (require 'package)
 
@@ -1701,8 +1701,8 @@ When UP is non-nil, swap with the preceding paragraph."
 (use-package ghostel
   :commands ghostel-project
   :init
-  ;; Install the native module explicitly with `ghostel-download-module' or
-  ;; `ghostel-module-compile'; terminal use never installs it implicitly.
+  ;; install-packages.el provisions the native module; terminal use never
+  ;; installs it implicitly.
   (setq ghostel-module-directory
         (expand-file-name "ghostel/" user-emacs-directory)
         ghostel-module-auto-install nil)

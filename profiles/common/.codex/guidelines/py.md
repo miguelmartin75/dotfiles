@@ -96,6 +96,90 @@ def normalize_slug(slug: str) -> str:
 - Do not introduce a temporary variable only to immediately return it unchanged.
 - In small callbacks, lambdas, comparators, or key functions, direct returns are fine.
 - When a value is assembled across several steps, use a local variable and one final `return`.
+- Preserve failure information required by the return contract.
+- Catch only exceptions the operation is intended and able to handle. Let other failures propagate.
+- When branches only select argument values for the same operation, select those values first and perform the operation once.
+- When `None` represents absence, test with `is None` or `is not None` so valid falsey values retain their meaning.
+
+For example, this parser must return both parsed numbers and rejected input strings.
+
+```py
+# Don't: the return contract loses rejected inputs.
+def parse_numbers(values: list[str]) -> tuple[list[int], list[str]]:
+    numbers: list[int] = []
+    for value in values:
+        try:
+            numbers.append(int(value))
+        except ValueError:
+            pass
+
+    return numbers, []
+```
+
+```py
+# Do
+def parse_numbers(values: list[str]) -> tuple[list[int], list[str]]:
+    numbers: list[int] = []
+    rejected: list[str] = []
+    for value in values:
+        try:
+            numbers.append(int(value))
+        except ValueError:
+            rejected.append(value)
+
+    return numbers, rejected
+```
+
+For example, this reader returns `None` for invalid integer text and lets file-read failures propagate.
+
+```py
+# Don't: file-read failures are also converted to None.
+from pathlib import Path
+
+
+def read_count(path: Path) -> int | None:
+    try:
+        return int(path.read_text())
+    except Exception:
+        return None
+```
+
+```py
+# Do
+from pathlib import Path
+
+
+def read_count(path: Path) -> int | None:
+    text = path.read_text()
+    try:
+        return int(text)
+    except ValueError:
+        return None
+```
+
+For example, select the format specification before formatting the number.
+
+```py
+# Don't: both branches perform the same operation.
+def format_number(value: int, hexadecimal: bool) -> str:
+    if hexadecimal:
+        result = format(value, "x")
+    else:
+        result = format(value, "d")
+
+    return result
+```
+
+```py
+# Do
+def format_number(value: int, hexadecimal: bool) -> str:
+    if hexadecimal:
+        spec = "x"
+    else:
+        spec = "d"
+
+    return format(value, spec)
+```
 
 ## Data Shapes
 
@@ -107,43 +191,100 @@ def normalize_slug(slug: str) -> str:
   - local temporary values,
   - return values that are immediately unpacked,
   - short-lived data used only at a small number of nearby call sites.
-- For stable structured data in Python: prefer `dataclass`.
+- Use named types for stable internal records; prefer `dataclass` in Python. Dataclasses themselves do not validate external input.
+- Reuse existing types and parsing or serialization APIs when their contracts fit.
+- Use dictionaries for lookups where keys identify entries, such as email addresses mapped to contacts. Use named records for defined fields describing one value, such as a contact's name and email.
+- Compute cheap derived values from their current source instead of storing duplicate state that must be kept in sync.
 - Do not convert a small local tuple-like result into a heavier named structure just for style clean-up if the caller immediately unpacks it.
     - When in doubt, keep the smaller, more local data shape.
+
+A contact is a stable internal record shared between functions.
+
+```py
+# Don't
+def format_contact(contact: dict[str, str]) -> str:
+    return f"{contact['name']} <{contact['email']}>"
+```
 
 ```py
 # Do
 from dataclasses import dataclass
-from datetime import datetime
 
-def split_md_and_yaml(data: str) -> tuple[str, SimpleYaml]:
-    return data, SimpleYaml()
-
-md, yaml = split_md_and_yaml(src)
 
 @dataclass
-class RouteInfo:
-    title: str
-    dt: datetime
-    uri: str
+class Contact:
+    name: str
+    email: str
 
-routes.sort(key=lambda route: route.dt)
-for route in routes:
-    print(route.title, "->", route.uri)
 
+def format_contact(contact: Contact) -> str:
+    return f"{contact.name} <{contact.email}>"
+```
+
+```py
+contact = Contact(name="Ada", email="ada@example.com")
+contacts_by_email: dict[str, Contact] = {contact.email: contact}
+```
+
+A small tuple is enough when the result is immediately unpacked.
+
+```py
+def split_title_and_body(source: str) -> tuple[str, str]:
+    title, separator, body = source.partition("\n")
+
+    return title, body
+
+
+title, body = split_title_and_body("Title\nBody")
+```
+
+A rectangle's area is cheap to derive. Storing it separately leaves it stale
+when the width changes.
+
+```py
 # Don't
-@dataclass
-class ParsedMarkdown:
-    md: str
-    yaml: SimpleYaml
+from dataclasses import dataclass, field
 
-def split_md_and_yaml_bad(data: str) -> ParsedMarkdown:
-    return ParsedMarkdown(md=data, yaml=SimpleYaml())
+
+@dataclass
+class Rectangle:
+    width: int
+    height: int
+    area: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.area = self.width * self.height
+
+
+rect = Rectangle(width=2, height=3)
+rect.width = 4
+print(rect.area)  # 6: stale after changing width.
+```
+
+```py
+# Do
+from dataclasses import dataclass
+
+
+@dataclass
+class Rectangle:
+    width: int
+    height: int
+
+    @property
+    def area(self) -> int:
+        return self.width * self.height
+
+
+rect = Rectangle(width=2, height=3)
+rect.width = 4
+print(rect.area)  # 12: derived from the current dimensions.
 ```
 
 ## Naming
 
 - Treat acronyms like normal words.
+- Avoid vague prefixes and words that merely repeat context supplied by the enclosing module or type. Keep words that distinguish domain meanings or roles.
 - Prefer standard abbreviations such as `dir`, `msg`, `arg`, `param`, `cfg`, `env`, `url`, `rect`, `coord`, `sym`, `lit`, `err`, and `opts`.
 - Prefer subject-verb names, e.g. `file_exists`, `fileExists`, not `exists_file` or `existsFile`.
 - For booleans, prefer names such as `is_ready`, `isReady`, `has_items`, `hasItems`, `can_write`, `canWrite`, and `should_retry`, `shouldRetry`.
@@ -187,6 +328,33 @@ class route_error(Exception):
 def new_route(title: str) -> Route: ...
 ```
 
+The `Job` type already supplies the job context. Keep `input` and `output`
+because they distinguish the paths' roles.
+
+```py
+# Don't
+from dataclasses import dataclass
+
+
+@dataclass
+class Job:
+    job_name: str
+    job_input_path: str
+    job_output_path: str
+```
+
+```py
+# Do
+from dataclasses import dataclass
+
+
+@dataclass
+class Job:
+    name: str
+    input_path: str
+    output_path: str
+```
+
 ## Formatting
 
 - Let the formatter handle mechanical spacing, but do not use formatting to hide control flow or overly dense code.
@@ -195,6 +363,13 @@ def new_route(title: str) -> Route: ...
 - Follow language-specific indentation and syntax-spacing conventions.
 - Use 4 spaces for indentation.
 - Write slices without spaces around the colon, e.g. `data[:count]` and `data[i:-3]`.
+- A `None` slice stop means through the end: `xs[idx:None]` is equivalent to `xs[idx:]`.
+
+```py
+xs = [10, 20, 30, 40]
+xs[1:None]  # [20, 30, 40]
+xs[1:]  # [20, 30, 40]
+```
 
 ```py
 # Do

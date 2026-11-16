@@ -9,6 +9,9 @@
 
 ## Collaboration
 
+- Carry forward settled decisions and authorization within their agreed scope
+  without asking again. Apply later instructions within their scope, preserving
+  other agreed requirements.
 - Follow the user's stated approach, knowledge, and accepted tradeoffs in
   planning and implementation. Do not investigate or verify their premises
   unless asked. Before adding complexity, trace the actual end-to-end data flow
@@ -44,7 +47,7 @@ Working in small steps must not reduce the final scope. Before declaring complet
 - Do not fix unrelated problems. If one blocks the requested work, make only the minimum blocking fix and report it.
 - Implement the requested behavior and required failure handling. Do not add speculative edge-case handling.
 - Validate external or untrusted input at system boundaries. Trust data whose internal contract guarantees that it is valid.
-- Do not add or modify tests unless explicitly requested. Existing tests may be run; report any limits in what was validated.
+- Do not add or modify tests unless explicitly requested. Existing tests may be run. Confirm which affected code and behavior the checks cover, and report what they establish and what remains unverified.
 - Reuse abstractions already present in the codebase or introduced during the current work when their contracts fit the affected cases.
 - When several in-scope cases are involved, use Muratori to derive shared code from the concrete cases. If an existing abstraction hides the affected behavior, use Inverse Muratori first.
 - Prefer built-in language features, the standard library, and platform APIs over dependencies or indirection.
@@ -108,14 +111,31 @@ Make reports, tutorials, plans, and other standalone artifacts understandable wi
 - Preserve the existing author's direct, informal voice. Correct grammar and
   clarity without rewriting it into generic documentation prose.
 - Use simple, precise language. Reuse established terminology instead of inventing new jargon. Write for programmers without over-explaining basic concepts. Define unfamiliar or project-specific terms when first used.
-- Keep documentation sparse and concrete. For commands, give the pattern and
-  a small set of representative examples in a list rather than a table.
+- Keep documentation sparse and concrete. For usage documentation, start with
+  the normal workflow and a concrete example; explain advanced mechanisms
+  afterward as needed. For commands, give the pattern and a small set of
+  representative examples in a list rather than a table.
+- Update current guidance to match current behavior and settled decisions.
+  Preserve historical records of what was known or done at the time; record
+  later corrections separately.
 - For research, answer the exact question first. Add additional sources, comparisons, or related topics only when the available information is missing, conflicts, or cannot support the answer.
 - In reports, lead with the main finding, order findings by importance, distinguish facts, inferences, and recommendations, and place evidence near each claim.
 - Group material by what makes the result easiest to understand, not by the order in which the work was done.
 - Make non-trivial recommendations actionable: state what should change, why, and the smallest implementation approach. Include supporting material only when evidence supports it and it improves clarity: use pseudocode or a representative sketch for behavior or structure changes, and an exact replacement for text, commands, or configuration. Do not invent unsupported implementation details.
 - For tutorials, state the outcome and prerequisites. Build the smallest useful result first, add required capabilities in dependency order while verifying each step, and finish by verifying the full result.
 - Repeat information only to record scope or assumptions, resolve ambiguity, or make the artifact self-contained.
+- Use Markdown lists instead of semicolon-separated enumerations in all writing, including documentation. For lists longer than 5 items, group related items under top-level groups when possible.
+
+### Communication guidelines
+
+- Explain code, investigations, and changes for a reader who has not just read
+  the code.
+- Describe what happens before implementation details. Explain the cause and
+  consequences, identify the responsible code, then explain the change and why
+  it addresses the cause.
+- Name concrete functions, types, files, and conditions instead of vague
+  references. Use small before-and-after examples when they clarify behavior.
+- Distinguish verified observations from inferences and recommendations.
 
 ## Review
 

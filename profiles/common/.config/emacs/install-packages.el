@@ -206,6 +206,23 @@
                 (error "%s was not installed at reviewed revision %s"
                        name revision))))
 
+          (require 'ghostel-module-install)
+          (let* ((module-directory
+                  (expand-file-name "ghostel/" user-emacs-directory))
+                 (module-file
+                  (expand-file-name
+                   (concat "ghostel-module" module-file-suffix)
+                   module-directory))
+                 (module-version
+                  (ghostel--read-module-sidecar-version module-directory)))
+            (unless (and (file-exists-p module-file)
+                         module-version
+                         (not (version< module-version
+                                        ghostel--minimum-module-version)))
+              (unless (ghostel--download-module module-directory)
+                (error "Failed to provision Ghostel native module >= %s"
+                       ghostel--minimum-module-version))))
+
           (princ "PACKAGES_INSTALLED\n"))
       (delete-file custom-state-file))))
 
