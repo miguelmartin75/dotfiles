@@ -25,7 +25,7 @@
 
 (defconst my/file-picker-fd-base-args
   '("fd" "--full-path" "--color=never" "--type" "f" "--exclude" ".git")
-  "Base fd arguments shared by Consult and the local fzf adapter.")
+  "Base fd arguments shared by Consult and the fzf adapter.")
 
 (defconst my/file-picker-remote-find-args
   '("find" "." "-type" "d" "-name" ".git" "-prune" "-name" ""
@@ -388,7 +388,8 @@ When REMOTE is non-nil, prefer remote fd and use portable find otherwise."
   (let* ((generation (my/file-picker-ivy-fzf-session-generation session))
          (fd-buffer (generate-new-buffer " *file-picker-fd*"))
          (fzf-buffer (generate-new-buffer " *file-picker-fzf*"))
-         (default-directory (my/file-picker-ivy-fzf-session-root session)))
+         (default-directory (my/file-picker-ivy-fzf-session-root session))
+         (remote (file-remote-p default-directory)))
     (setf (my/file-picker-ivy-fzf-session-tail session) ""
           (my/file-picker-ivy-fzf-session-candidates session) nil
           (my/file-picker-ivy-fzf-session-minibuffer session)
@@ -403,7 +404,30 @@ When REMOTE is non-nil, prefer remote fd and use portable find otherwise."
             :name (format "file-picker-fzf-%d" generation)
             :buffer fzf-buffer
             :stderr fzf-buffer
-            :command (my/file-picker-fzf-arguments query args)
+            :command
+            (if remote
+                (let ((discovery
+                       (if (executable-find "fd" t)
+                           (append (my/file-picker-fd-arguments args)
+                                   '("--print0"))
+                         (append
+                          (if (member "--follow" args)
+                              (append '("find" "-L")
+                                      (cdr my/file-picker-remote-find-args))
+                            my/file-picker-remote-find-args)
+                          '("-print0")))))
+                  (list
+                   "bash" "-c"
+                   (concat
+                    (mapconcat #'shell-quote-argument discovery " ")
+                    " | "
+                    (mapconcat #'shell-quote-argument
+                               (my/file-picker-fzf-arguments query args) " ")
+                    "; statuses=(\"${PIPESTATUS[@]}\"); "
+                    "if (( statuses[0] != 0 )); then exit 2; "
+                    "else exit \"${statuses[1]}\"; fi")))
+              (my/file-picker-fzf-arguments query args))
+            :file-handler (and remote t)
             :coding (or file-name-coding-system
                         default-file-name-coding-system
                         'utf-8-unix)
@@ -416,25 +440,26 @@ When REMOTE is non-nil, prefer remote fd and use portable find otherwise."
             :sentinel
             (lambda (process _event)
               (my/file-picker-fzf-sentinel session generation process))))
-          (setf
-           (my/file-picker-ivy-fzf-session-fd-process session)
-           (make-process
-            :name (format "file-picker-fd-%d" generation)
-            :buffer fd-buffer
-            :stderr fd-buffer
-            :command (append (my/file-picker-fd-arguments args)
-                             '("--print0"))
-            :coding (or file-name-coding-system
-                        default-file-name-coding-system
-                        'utf-8-unix)
-            :connection-type 'pipe
-            :noquery t
-            :filter
-            (lambda (process output)
-              (my/file-picker-fd-filter session generation process output))
-            :sentinel
-            (lambda (process _event)
-              (my/file-picker-fd-sentinel session generation process))))
+          (unless remote
+            (setf
+             (my/file-picker-ivy-fzf-session-fd-process session)
+             (make-process
+              :name (format "file-picker-fd-%d" generation)
+              :buffer fd-buffer
+              :stderr fd-buffer
+              :command (append (my/file-picker-fd-arguments args)
+                               '("--print0"))
+              :coding (or file-name-coding-system
+                          default-file-name-coding-system
+                          'utf-8-unix)
+              :connection-type 'pipe
+              :noquery t
+              :filter
+              (lambda (process output)
+                (my/file-picker-fd-filter session generation process output))
+              :sentinel
+              (lambda (process _event)
+                (my/file-picker-fd-sentinel session generation process)))))
           0)
       ((error quit)
        (my/file-picker-stop-fzf-processes session)
@@ -514,11 +539,12 @@ When REMOTE is non-nil, prefer remote fd and use portable find otherwise."
            result))))))
 
 (defun my/file-picker-ivy-fzf-session (root initial args)
-  "Run one safe local Ivy fzf prompt below ROOT with INITIAL and saved ARGS."
-  (unless (executable-find "fd")
-    (user-error "Required program \"fd\" not found in your path"))
-  (unless (executable-find "fzf")
-    (user-error "Required program \"fzf\" not found in your path"))
+  "Run one safe Ivy fzf prompt below ROOT with INITIAL and saved ARGS."
+  (let ((default-directory root))
+    (unless (or (file-remote-p root) (executable-find "fd" t))
+      (user-error "Required program \"fd\" not found in your path"))
+    (unless (executable-find "fzf" t)
+      (user-error "Required program \"fzf\" not found in your path")))
   (require 'ivy)
   (let* ((session
           (make-my/file-picker-ivy-fzf-session
@@ -585,21 +611,11 @@ unchanged to the safe Ivy fzf reader."
                               (regexp-quote initial)
                             initial))
          result)
-    (cond
-     (remote
-      (setq result
-            (if (eq my/completion-stack 'ivy-counsel)
-                (my/call-with-native-completion
-                 #'my/file-picker-consult-recursive-session
-                 root consult-initial args t)
-              (my/file-picker-consult-recursive-session
-               root consult-initial args t))))
-     ((eq my/completion-stack 'ivy-counsel)
-      (setq result (my/file-picker-ivy-fzf-session root initial args)))
-     (t
+    (if (eq my/completion-stack 'ivy-counsel)
+        (setq result (my/file-picker-ivy-fzf-session root initial args))
       (setq result
             (my/file-picker-consult-recursive-session
-             root consult-initial args nil))))
+             root consult-initial args remote)))
     result))
 
 (defun my/file-picker-run (kind root initial &optional project)
@@ -645,8 +661,7 @@ when KIND is `project'."
                          literal-initial t)))
                 (`(toggle-hierarchical ,query)
                  (setq current-initial
-                       (if (or (file-remote-p current-root)
-                               (eq my/completion-stack 'native-consult))
+                       (if (eq my/completion-stack 'native-consult)
                            (my/file-picker-literal-query query)
                          query)
                        current-kind 'hierarchical

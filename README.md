@@ -27,14 +27,14 @@ Set up the local machine, including an optional provisioner:
 Preview and apply the local profile without provisioning:
 
 ```bash
-./run.py push --profile local --os macos --diff
-./run.py push --profile local --os macos
+./run.py push --os macos --diff
+./run.py push --os macos
 ```
 
 Push a profile to an SSH target:
 
 ```bash
-./run.py push user@host --profile work/example/server --os ubuntu
+./run.py push user@host --profile server --os ubuntu
 ```
 
 Remote targets need only SSH and `rsync`. They do not need this repository,
@@ -45,37 +45,33 @@ Python, or uv.
 Profile directories mirror paths below the destination home:
 
 ```text
-profiles/
-|-- common/                    # optional files for every profile
-|-- platform/
-|   |-- macos/                 # optional shared macOS files
-|   `-- linux/                 # optional shared Linux files
-`-- local/
-    `-- macos/                 # local macOS profile
+common/                       # optional files for every overlay
+platform/
+|-- macos/                    # optional shared macOS files
+`-- linux/                    # optional shared Linux files
+server/
+`-- ubuntu/                   # optional selected target profile
 ```
 
-Public profiles use a cluster name such as `local`. Optional private profiles
-use `<namespace>/<bundle>/<cluster>` and live under:
+Without `--profile`, the overlay contains `common` followed by the platform
+layer. `--profile server --os ubuntu` adds `server/ubuntu` last and requires
+that directory. Later layers replace earlier files at the same home-relative
+path. Files are not merged.
 
-```text
-.private/<namespace>/<bundle>/profiles/
-```
-
-`.private/` is ignored by Git. Clone private bundles manually.
-
-For a selected profile, later layers replace earlier files at the same
-home-relative path:
-
-1. Public `common`
-2. Public platform
-3. Public profile
-4. Private `common`
-5. Private platform
-6. Private profile
+`private/` is ignored by Git. Work controllers such as `private/nv/run.py`
+import the public `dotfiles.py` engine and compose public and work layers.
+Public commands only select public layers.
 
 Only regular files are managed. Symlinks, special files, and file-directory
-collisions are rejected. The `common` and `platform` cluster names are
+collisions are rejected. The `common` and `platform` profile names are
 reserved.
+
+### Codex agent files
+
+The common profile installs global Codex instructions, language-specific
+guidelines, and personal skills under `~/.codex/`. Language guidance is selected
+by the installed `~/.codex/AGENTS.md`. Codex hooks are intentionally not
+installed.
 
 ## Commands
 
@@ -84,9 +80,9 @@ reserved.
 Copy the effective overlay to the current home or an SSH target:
 
 ```bash
-./run.py push --profile local --os macos
-./run.py push user@host --profile work/example/server --os ubuntu
-./run.py push user@host --profile work/example/server --os ubuntu --remote_home /home/user
+./run.py push --os macos
+./run.py push user@host --profile server --os ubuntu
+./run.py push user@host --profile server --os ubuntu --remote_home /home/user
 ```
 
 `push` never uses `rsync --delete`, so unrelated destination files remain.
@@ -98,15 +94,15 @@ actions. These options cannot be combined.
 Copy managed files from a home directory back into profile layers:
 
 ```bash
-./run.py pull --profile local --os macos
-./run.py pull --path .config/nvim .vimrc --profile local --os macos
-./run.py pull user@host --path .vimrc --profile work/example/server --os ubuntu
+./run.py pull --os macos
+./run.py pull --path .config/nvim .vimrc --os macos
+./run.py pull user@host --path .vimrc --profile server --os ubuntu
 ```
 
 With no `--path`, `pull` selects the current mapping. Put all path selections
 after one `--path` flag. The default `--layer owner` updates the layer that
 provides each effective file. New files require `--layer common`, `--layer
-platform`, or `--layer profile`.
+platform`, or `--layer profile`. The profile destination requires `--profile`.
 
 Paths may be home-relative, partial managed paths, or absolute paths below the
 home directory. Remote absolute paths require an absolute `--remote_home`.
@@ -120,8 +116,8 @@ actions. A remote diff reads the target. A remote dry run does not contact it.
 Remove files in the current effective mapping from the local home:
 
 ```bash
-./run.py clean --profile local --os macos --dry_run
-./run.py clean --profile local --os macos
+./run.py clean --os macos --dry_run
+./run.py clean --os macos
 ```
 
 `clean` leaves directories and unrelated files in place. Files removed from a
@@ -132,7 +128,7 @@ profile are no longer in the mapping, so earlier copies are not removed.
 Write the effective overlay to a directory:
 
 ```bash
-./run.py render /tmp/dotfiles-overlay --profile local --os macos
+./run.py render /tmp/dotfiles-overlay --os macos
 ```
 
 `render` requires `--os`, overwrites managed paths, and preserves unrelated
@@ -143,21 +139,22 @@ output files. Use an empty directory when an exact artifact is required.
 Run a profile provisioner directly:
 
 ```bash
-./run.py provision macos --profile local
-./run.py provision ubuntu --profile work/example/server -- --extra-argument
+./run.py provision macos
+./run.py provision ubuntu --profile server -- --extra-argument
 ```
 
 `provision` does not apply dotfiles. `setup` optionally runs the matching
 provisioner on the controller, then pushes the profile:
 
 ```bash
-./run.py setup --profile local --os macos
-./run.py setup --target user@host --profile work/example/server --os ubuntu
+./run.py setup --os macos
+./run.py setup --target user@host --profile server --os ubuntu
 ```
 
-Local setup accepts only a profile whose cluster is `local`. Arguments after
-`--` go only to the provisioner. `setup`, `push`, `pull`, and `clean` support
-`--dry_run`.
+Base provisioning selects `provision/<os>`. A selected profile uses
+`provision/<profile>/<os>`. Setup skips an absent provisioner; explicit
+`provision` requires it. Arguments after `--` go only to the provisioner.
+`setup`, `push`, `pull`, and `clean` support `--dry_run`.
 
 ## Safety and secrets
 
