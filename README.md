@@ -12,10 +12,6 @@ Run commands from the repository root.
 - Install `rsync` locally.
 - For remote commands, install `rsync` on the target and configure SSH access.
 
-Local `setup`, `push`, `pull`, and `clean` detect macOS or the Linux
-distribution ID. Use `--os` to override detection. Remote `setup`, `push`, and
-`pull` require `--os`.
-
 ## Quick start
 
 Set up the local machine, including an optional provisioner:
@@ -24,14 +20,19 @@ Set up the local machine, including an optional provisioner:
 ./run.py setup
 ```
 
+Local `setup`, `push`, `pull`, and `clean` detect `macos` on macOS or the
+distribution `ID` from `/etc/os-release` on Linux. `--os` is an optional
+override, for example `./run.py push --os macos`.
+
 Preview and apply the local overlay without provisioning:
 
 ```bash
-./run.py push --os macos --diff
-./run.py push --os macos
+./run.py push --diff
+./run.py push
 ```
 
-Push an overlay to an SSH target:
+Remote `setup`, `push`, and `pull` require `--os`. Push an overlay to an SSH
+target:
 
 ```bash
 ./run.py push user@host --profile server --os ubuntu
@@ -85,7 +86,7 @@ installed.
 Copy the effective overlay to the current home or an SSH target:
 
 ```bash
-./run.py push --os macos
+./run.py push
 ./run.py push user@host --profile server --os ubuntu
 ./run.py push user@host --profile server --os ubuntu --remote_home /home/user
 ```
@@ -99,8 +100,8 @@ actions. These options cannot be combined.
 Copy managed files from a home directory back into config layers:
 
 ```bash
-./run.py pull --os macos
-./run.py pull --path .config/nvim .vimrc --os macos
+./run.py pull
+./run.py pull --path .config/nvim .vimrc
 ./run.py pull user@host --path .vimrc --profile server --os ubuntu
 ```
 
@@ -130,8 +131,8 @@ actions. A remote diff reads the target. A remote dry run does not contact it.
 Remove files in the current effective mapping from the local home:
 
 ```bash
-./run.py clean --os macos --dry_run
-./run.py clean --os macos
+./run.py clean --dry_run
+./run.py clean
 ```
 
 `clean` leaves directories and unrelated files in place. Files removed from a
@@ -161,7 +162,7 @@ Run a profile provisioner directly:
 recipe on the controller, then pushes the overlay:
 
 ```bash
-./run.py setup --os macos
+./run.py setup
 ./run.py setup --target user@host --profile server --os ubuntu
 ```
 
