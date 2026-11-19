@@ -1,4 +1,4 @@
 .DS_Store
 refs/
-/.private/
+/private/
 __pycache__/

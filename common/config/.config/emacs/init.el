@@ -2266,9 +2266,9 @@ Define at least `Compile' and `Test' in the project's .dir-locals.el.")
   (kbd "C-p") #'my/find-file-recursive-configured
   (kbd "M-p") #'my/file-picker-fzf-menu)
 (evil-define-key 'visual 'global
-  (kbd "C-c C-c") #'my/send-region-or-buffer)
+  (kbd "C-c C-c") #'my/send-region-or-buffer-to-last-target)
 (evil-define-key 'visual 'global
-  (kbd "C-c C-r") #'my/send-region-or-buffer-to-last-target)
+  (kbd "C-c C-r") #'my/send-region-or-buffer)
 
 (with-eval-after-load 'which-key
   (which-key-add-keymap-based-replacements

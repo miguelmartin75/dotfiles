@@ -83,7 +83,7 @@
                 "Reviewed completion VC package validation failed:\n"
                 (mapconcat #'identity (nreverse validation-errors) "\n")
                 "\nCorrect the listed VC installations, then rerun "
-                "emacs --batch -l profiles/common/.config/emacs/install-packages.el"))
+                "emacs --batch -l common/config/.config/emacs/install-packages.el"))
       (dolist (package (nreverse accepted-packages))
         (princ (format "PACKAGE_VC_ACCEPTED %s %s\n"
                        (nth 0 package) (nth 1 package)))))))
