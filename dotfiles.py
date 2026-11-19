@@ -51,17 +51,20 @@ def find_invalid_ancestor(
 def resolve_layers(
     root: Path,
     operating_system: str,
-    profile: str | None = None,
+    platform: str | None = None,
+    host: str | None = None,
     trusted_root: Path = REPO_ROOT,
 ) -> tuple[list[ProfileLayer], list[str]]:
-    """Resolve ordered layer destinations, including absent optional layers."""
+    """Resolve ordered destinations; absent config directories are valid."""
     errors: list[str] = []
     layers: list[ProfileLayer] = []
-    for label, value in (("operating system", operating_system), ("profile", profile)):
+    for label, value in (
+        ("operating system", operating_system),
+        ("platform", platform),
+        ("host", host),
+    ):
         if value is not None and COMPONENT_PATTERN.fullmatch(value) is None:
             errors.append(f"invalid {label} component: {value!r}")
-    if profile in {"common", "platform"}:
-        errors.append(f"{profile!r} is reserved and cannot be a profile")
     if root.is_symlink():
         errors.append(f"layer root must not be a symlink: {root}")
     elif not root.is_dir():
@@ -79,13 +82,17 @@ def resolve_layers(
     if errors:
         return layers, errors
 
-    platform_name = "macos" if operating_system == "macos" else "linux"
-    candidates = [
-        ProfileLayer("common", root / "common"),
-        ProfileLayer("platform", root / "platform" / platform_name),
-    ]
-    if profile is not None:
-        candidates.append(ProfileLayer("profile", root / profile / operating_system))
+    candidates = [ProfileLayer("common", root / "common" / "config")]
+    if operating_system not in {"macos", "linux"}:
+        candidates.append(ProfileLayer("family", root / "os/linux/config"))
+    os_root = root / "os" / operating_system
+    candidates.append(ProfileLayer("os", os_root / "config"))
+    if platform is not None:
+        candidates.append(
+            ProfileLayer("platform", os_root / "platforms" / platform / "config")
+        )
+    if host is not None:
+        candidates.append(ProfileLayer("host", os_root / "hosts" / host / "config"))
     for layer in candidates:
         invalid_ancestor = find_invalid_ancestor(
             trusted_root, layer.root.relative_to(trusted_root)
@@ -95,13 +102,73 @@ def resolve_layers(
                 f"{layer.name} layer contains an invalid path component: "
                 f"{invalid_ancestor[0]}"
             )
-        elif layer.root.exists() and not layer.root.is_dir():
-            errors.append(f"{layer.name} layer must be a directory: {layer.root}")
-        elif layer.name == "profile" and not layer.root.exists():
-            errors.append(f"missing required {layer.name} layer: {layer.root}")
         else:
             layers.append(layer)
     return layers, errors
+
+
+def resolve_setup(
+    root: Path,
+    operating_system: str,
+    platform: str | None = None,
+    host: str | None = None,
+    setup_platform: str | None = None,
+    trusted_root: Path = REPO_ROOT,
+) -> tuple[Path | None, list[str]]:
+    """Select one recipe. An invalid present candidate stops selection."""
+    errors: list[str] = []
+    for label, value in (
+        ("operating system", operating_system),
+        ("platform", platform),
+        ("host", host),
+        ("setup platform", setup_platform),
+    ):
+        if value is not None and COMPONENT_PATTERN.fullmatch(value) is None:
+            errors.append(f"invalid {label} component: {value!r}")
+    try:
+        relative_root = root.relative_to(trusted_root)
+    except ValueError:
+        errors.append(f"setup root must be below the public checkout: {root}")
+    else:
+        invalid_ancestor = find_invalid_ancestor(trusted_root, relative_root)
+        if invalid_ancestor is not None:
+            errors.append(
+                f"setup root contains an invalid path component: {invalid_ancestor[0]}"
+            )
+    if root.is_symlink() or not root.is_dir():
+        errors.append(f"setup root must be a real directory: {root}")
+    if errors:
+        return None, errors
+
+    os_root = root / "os" / operating_system
+    candidates: list[Path] = []
+    if host is not None:
+        candidates.append(os_root / "hosts" / host / "setup")
+    if platform is not None:
+        candidates.append(os_root / "platforms" / platform / "setup")
+    if setup_platform is not None and setup_platform != platform:
+        candidates.append(os_root / "platforms" / setup_platform / "setup")
+    candidates.append(os_root / "setup")
+    for candidate in candidates:
+        invalid_ancestor = find_invalid_ancestor(
+            trusted_root, candidate.relative_to(trusted_root).parent
+        )
+        if invalid_ancestor is not None:
+            return None, [
+                "setup entry point contains an invalid path component: "
+                f"{invalid_ancestor[0]}"
+            ]
+        elif candidate.is_symlink():
+            return None, [f"setup entry point must not be a symlink: {candidate}"]
+        elif candidate.exists():
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return candidate, []
+            else:
+                return None, [
+                    f"setup entry point must be a regular executable file: {candidate}"
+                ]
+
+    return None, []
 
 
 def build_effective_mapping(
@@ -510,7 +577,7 @@ def prepare_pull_targets(
                 )
             if destination_layer is None:
                 result.append(
-                    "new path requires --layer common, platform, or profile: "
+                    "new path requires --layer common, os, platform, or host: "
                     f"{relative_path}"
                 )
             elif not collision_paths and owner is not None:

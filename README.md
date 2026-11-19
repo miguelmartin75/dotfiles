@@ -1,6 +1,6 @@
 # dotfiles
 
-`run.py` applies deterministic dotfile profile overlays with `rsync`. It copies
+`run.py` applies deterministic dotfile overlays with `rsync`. It copies
 literal files. It does not manage templates, packages, secrets, or persistent
 state.
 
@@ -24,14 +24,14 @@ Set up the local machine, including an optional provisioner:
 ./run.py setup
 ```
 
-Preview and apply the local profile without provisioning:
+Preview and apply the local overlay without provisioning:
 
 ```bash
 ./run.py push --os macos --diff
 ./run.py push --os macos
 ```
 
-Push a profile to an SSH target:
+Push an overlay to an SSH target:
 
 ```bash
 ./run.py push user@host --profile server --os ubuntu
@@ -40,31 +40,36 @@ Push a profile to an SSH target:
 Remote targets need only SSH and `rsync`. They do not need this repository,
 Python, or uv.
 
-## Profiles
+## Configuration layers
 
-Profile directories mirror paths below the destination home:
+Configuration directories mirror paths below the destination home:
 
 ```text
-common/                       # optional files for every overlay
-platform/
-|-- macos/                    # optional shared macOS files
-`-- linux/                    # optional shared Linux files
-server/
-`-- ubuntu/                   # optional selected target profile
+common/config/                         # files for every overlay
+os/linux/config/                       # Linux-family defaults
+os/macos/config/                       # exact OS files
+os/ubuntu/config/                      # exact distribution files
+os/ubuntu/platforms/server/config/     # selected platform files
+os/ubuntu/hosts/my-pod/config/          # selected host files
 ```
 
-Without `--profile`, the overlay contains `common` followed by the platform
-layer. `--profile server --os ubuntu` adds `server/ubuntu` last and requires
-that directory. Later layers replace earlier files at the same home-relative
-path. Files are not merged.
+Within each repository, the overlay applies common, Linux-family (for Linux
+distributions), exact OS, selected platform, then selected host files. For
+`--os linux`, the Linux directory is the exact OS layer and appears once.
+Later layers replace whole files at the same home-relative path.
+
+`--profile server --os ubuntu` selects the platform context
+`os/ubuntu/platforms/server/`. `--host my-pod` selects
+`os/ubuntu/hosts/my-pod/`. Explicit selectors require existing public context
+directories, but their `config/` children may be absent for setup-only contexts.
+The host selector is independent of an SSH destination.
 
 `private/` is ignored by Git. Work controllers such as `private/nv/run.py`
-import the public `dotfiles.py` engine and compose public and work layers.
-Public commands only select public layers.
+import the public `dotfiles.py` engine and apply all public layers before all
+work layers. Public commands only select public layers.
 
-Only regular files are managed. Symlinks, special files, and file-directory
-collisions are rejected. The `common` and `platform` profile names are
-reserved.
+Only regular files under `config/` are managed. Symlinks, special files, and
+file-directory collisions are rejected. Setup executables are outside config.
 
 ### Codex agent files
 
@@ -91,7 +96,7 @@ actions. These options cannot be combined.
 
 ### Pull
 
-Copy managed files from a home directory back into profile layers:
+Copy managed files from a home directory back into config layers:
 
 ```bash
 ./run.py pull --os macos
@@ -101,8 +106,17 @@ Copy managed files from a home directory back into profile layers:
 
 With no `--path`, `pull` selects the current mapping. Put all path selections
 after one `--path` flag. The default `--layer owner` updates the layer that
-provides each effective file. New files require `--layer common`, `--layer
-platform`, or `--layer profile`. The profile destination requires `--profile`.
+provides each effective file. New files require an explicit destination:
+
+- `--layer common`: `common/config/`.
+- `--layer os`: exact `os/<os>/config/`.
+- `--layer platform`: the platform config, requiring `--profile`.
+- `--layer host`: the host config, requiring `--host`.
+
+For example, `./run.py pull --os macos --layer os --path .zshrc` updates the
+macOS file. Earlier destinations hidden by a later supplying layer are rejected.
+The old `profile` destination is removed. `platform` now means the selected
+environment; use `os` for exact OS files.
 
 Paths may be home-relative, partial managed paths, or absolute paths below the
 home directory. Remote absolute paths require an absolute `--remote_home`.
@@ -144,16 +158,24 @@ Run a profile provisioner directly:
 ```
 
 `provision` does not apply dotfiles. `setup` optionally runs the matching
-provisioner on the controller, then pushes the profile:
+recipe on the controller, then pushes the overlay:
 
 ```bash
 ./run.py setup --os macos
 ./run.py setup --target user@host --profile server --os ubuntu
 ```
 
-Base provisioning selects `provision/<os>`. A selected profile uses
-`provision/<profile>/<os>`. Setup skips an absent provisioner; explicit
-`provision` requires it. Arguments after `--` go only to the provisioner.
+Setup selects one executable in this order:
+
+- `os/<os>/hosts/<host>/setup`, when `--host` is selected.
+- `os/<os>/platforms/<profile>/setup`, when `--profile` is selected.
+- `os/<os>/setup`.
+
+Setup skips an absent recipe; explicit `provision` requires one. An invalid
+present candidate or a failed recipe stops the command without fallback.
+For macOS, the default recipe is `os/macos/setup`. Arguments after `--` go
+only to the selected recipe. Both commands execute it on the controller from
+its parent directory, including when dotfiles will be pushed remotely.
 `setup`, `push`, `pull`, and `clean` support `--dry_run`.
 
 ## Safety and secrets

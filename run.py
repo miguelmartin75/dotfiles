@@ -5,7 +5,6 @@
 # dependencies = ["msup"]
 # ///
 
-import os
 import platform
 from pathlib import Path, PurePosixPath
 from typing import Annotated
@@ -25,7 +24,9 @@ from dotfiles import (
     pull_remote,
     push_remote,
     resolve_layers,
+    resolve_setup,
     run,
+    validate_projection,
 )
 
 LOCAL_CLUSTER_NAME = "local"
@@ -79,6 +80,7 @@ def resolve_os(requested_os: str | None) -> tuple[str | None, list[str]]:
 def resolve_mapping(
     profile: str | None,
     requested_os: str | None,
+    host: str | None = None,
     require_explicit_os: bool = False,
 ) -> tuple[list[ManagedFile], list[str]]:
     errors: list[str] = []
@@ -89,7 +91,7 @@ def resolve_mapping(
         operating_system, errors = resolve_os(requested_os)
     mapping: list[ManagedFile] = []
     if operating_system is not None:
-        layers, layer_errors = resolve_layers(REPO_ROOT, operating_system, profile)
+        layers, layer_errors = resolve_context_layers(operating_system, profile, host)
         errors.extend(layer_errors)
         if not layer_errors:
             mapping, mapping_errors = build_effective_mapping(layers)
@@ -97,47 +99,23 @@ def resolve_mapping(
     return mapping, errors
 
 
-def resolve_provisioner(
-    profile: str | None,
+def resolve_context_layers(
     operating_system: str,
-) -> tuple[Path | None, Path, list[str]]:
-    if profile is not None and (
-        COMPONENT_PATTERN.fullmatch(profile) is None
-        or profile in {"common", "platform"}
-    ):
-        return None, REPO_ROOT / "provision", [f"invalid profile: {profile!r}"]
-    entry_point = REPO_ROOT / "provision"
-    if profile is not None:
-        entry_point /= profile
-    entry_point /= operating_system
-    result: Path | None = None
-    errors: list[str] = []
-    invalid_ancestor = find_invalid_ancestor(
-        REPO_ROOT, entry_point.relative_to(REPO_ROOT).parent
-    )
-    if invalid_ancestor is not None:
-        ancestor_path, is_symlink = invalid_ancestor
-        if is_symlink:
-            errors.append(
-                "provision entry point contains a symlinked path component: "
-                f"{ancestor_path}"
-            )
-        else:
-            errors.append(
-                f"provision entry point parent must be a directory: {ancestor_path}"
-            )
-    elif entry_point.is_symlink():
-        errors.append(f"provision entry point must not be a symlink: {entry_point}")
-    elif entry_point.exists():
-        if entry_point.is_file() and os.access(entry_point, os.X_OK):
-            result = entry_point
-        else:
-            errors.append(
-                "provision entry point must be a regular executable file: "
-                f"{entry_point}"
-            )
-
-    return result, entry_point, errors
+    profile: str | None,
+    host: str | None,
+) -> tuple[list[ProfileLayer], list[str]]:
+    layers, errors = resolve_layers(REPO_ROOT, operating_system, profile, host)
+    if not errors:
+        os_root = REPO_ROOT / "os" / operating_system
+        for label, selector, directory in (
+            ("profile", profile, "platforms"),
+            ("host", host, "hosts"),
+        ):
+            if selector is not None:
+                context = os_root / directory / selector
+                if not context.is_dir():
+                    errors.append(f"missing required {label} context: {context}")
+    return layers, errors
 
 
 def run_provisioner(
@@ -187,7 +165,8 @@ def push(
     target: Annotated[
         str | None, CliArg(pos=True, opt=False, help="optional raw SSH target")
     ] = None,
-    profile: Annotated[str | None, CliArg(help="optional target profile")] = None,
+    profile: Annotated[str | None, CliArg(help="optional platform selector")] = None,
+    host: Annotated[str | None, CliArg(help="optional logical host selector")] = None,
     os: Annotated[str | None, CliArg(help="operating system override")] = None,
     remote_home: Annotated[
         str | None, CliArg(help="remote home, as an absolute POSIX path")
@@ -200,7 +179,7 @@ def push(
     ] = False,
 ) -> None:
     mapping, errors = resolve_mapping(
-        profile, os, require_explicit_os=target is not None
+        profile, os, host, require_explicit_os=target is not None
     )
     effective_remote_home, remote_home_errors = resolve_remote_home(target, remote_home)
     errors.extend(remote_home_errors)
@@ -222,10 +201,11 @@ def render(
     output_directory: Annotated[
         str, CliArg(pos=True, opt=False, help="output directory for the overlay")
     ],
-    profile: Annotated[str | None, CliArg(help="optional target profile")] = None,
+    profile: Annotated[str | None, CliArg(help="optional platform selector")] = None,
+    host: Annotated[str | None, CliArg(help="optional logical host selector")] = None,
     os: Annotated[str | None, CliArg(help="operating system override")] = None,
 ) -> None:
-    mapping, errors = resolve_mapping(profile, os, require_explicit_os=True)
+    mapping, errors = resolve_mapping(profile, os, host, require_explicit_os=True)
     if errors:
         exit_on_errors(errors)
     errors = project_mapping(
@@ -240,13 +220,14 @@ def render(
 
 
 def clean(
-    profile: Annotated[str | None, CliArg(help="optional target profile")] = None,
+    profile: Annotated[str | None, CliArg(help="optional platform selector")] = None,
+    host: Annotated[str | None, CliArg(help="optional logical host selector")] = None,
     os: Annotated[str | None, CliArg(help="operating system override")] = None,
     dry_run: Annotated[
         bool, CliArg(help="report removals without changing files")
     ] = False,
 ) -> None:
-    mapping, errors = resolve_mapping(profile, os)
+    mapping, errors = resolve_mapping(profile, os, host)
     if errors:
         exit_on_errors(errors)
 
@@ -294,13 +275,14 @@ def pull(
         list[str] | None,
         CliArg(help="home-relative, partial, or absolute files or directories"),
     ] = None,
-    profile: Annotated[str | None, CliArg(help="optional target profile")] = None,
+    profile: Annotated[str | None, CliArg(help="optional platform selector")] = None,
+    host: Annotated[str | None, CliArg(help="optional logical host selector")] = None,
     os: Annotated[str | None, CliArg(help="operating system override")] = None,
     remote_home: Annotated[
         str | None, CliArg(help="remote home, as an absolute POSIX path")
     ] = None,
     layer: Annotated[
-        str, CliArg(help="destination layer: owner, common, platform, or profile")
+        str, CliArg(help="destination layer: owner, common, os, platform, or host")
     ] = "owner",
     dry_run: Annotated[
         bool, CliArg(help="report copies without writing files")
@@ -310,10 +292,12 @@ def pull(
     ] = False,
 ) -> None:
     errors: list[str] = []
-    if layer not in {"owner", "common", "platform", "profile"}:
-        errors.append("layer must be one of: owner, common, platform, profile")
-    if layer == "profile" and profile is None:
-        errors.append("--layer profile requires --profile")
+    if layer not in {"owner", "common", "os", "platform", "host"}:
+        errors.append("layer must be one of: owner, common, os, platform, host")
+    if layer == "platform" and profile is None:
+        errors.append("--layer platform requires --profile")
+    if layer == "host" and host is None:
+        errors.append("--layer host requires --host")
     operating_system = None
     if target is not None and os is None:
         errors.append("--os is required for render and remote targets")
@@ -328,7 +312,7 @@ def pull(
     layers: list[ProfileLayer] = []
     destination_layer = None
     if operating_system is not None:
-        layers, layer_errors = resolve_layers(REPO_ROOT, operating_system, profile)
+        layers, layer_errors = resolve_context_layers(operating_system, profile, host)
         errors.extend(layer_errors)
         if not layer_errors:
             mapping, mapping_errors = build_effective_mapping(layers)
@@ -367,7 +351,8 @@ def pull(
 
 def provision(
     os: Annotated[str, CliArg(pos=True, opt=False, help="target operating system")],
-    profile: Annotated[str | None, CliArg(help="optional target profile")] = None,
+    profile: Annotated[str | None, CliArg(help="optional platform selector")] = None,
+    host: Annotated[str | None, CliArg(help="optional logical host selector")] = None,
     provision_args: Annotated[
         list[str] | None, CliArg(pos=True, help="arguments for the provisioner")
     ] = None,
@@ -377,16 +362,17 @@ def provision(
     operating_system, os_errors = resolve_os(os)
     errors.extend(os_errors)
     entry_point: Path | None = None
-    expected_entry_point: Path | None = None
     if operating_system is not None:
-        entry_point, expected_entry_point, provision_errors = resolve_provisioner(
-            profile_value, operating_system
+        layers, layer_errors = resolve_context_layers(
+            operating_system, profile_value, host
+        )
+        errors.extend(layer_errors)
+        entry_point, provision_errors = resolve_setup(
+            REPO_ROOT, operating_system, profile_value, host
         )
         errors.extend(provision_errors)
         if entry_point is None and not provision_errors:
-            errors.append(
-                f"missing required provision entry point: {expected_entry_point}"
-            )
+            errors.append(f"missing required setup entry point for {operating_system}")
     if errors:
         exit_on_errors(errors)
     if entry_point is not None and operating_system is not None:
@@ -402,7 +388,8 @@ def setup(
     target: Annotated[
         str, CliArg(help="local or a raw SSH target")
     ] = LOCAL_CLUSTER_NAME,
-    profile: Annotated[str | None, CliArg(help="optional target profile")] = None,
+    profile: Annotated[str | None, CliArg(help="optional platform selector")] = None,
+    host: Annotated[str | None, CliArg(help="optional logical host selector")] = None,
     os: Annotated[str | None, CliArg(help="operating system override")] = None,
     remote_home: Annotated[
         str | None, CliArg(help="remote home, as an absolute POSIX path")
@@ -430,25 +417,26 @@ def setup(
 
     mapping: list[ManagedFile] = []
     entry_point: Path | None = None
-    expected_entry_point: Path | None = None
     if operating_system is not None:
-        layers, layer_errors = resolve_layers(
-            REPO_ROOT, operating_system, profile_value
+        layers, layer_errors = resolve_context_layers(
+            operating_system, profile_value, host
         )
         errors.extend(layer_errors)
         if not layer_errors:
             mapping, mapping_errors = build_effective_mapping(layers)
             errors.extend(mapping_errors)
-        entry_point, expected_entry_point, provision_errors = resolve_provisioner(
-            profile_value, operating_system
+        entry_point, provision_errors = resolve_setup(
+            REPO_ROOT, operating_system, profile_value, host
         )
         errors.extend(provision_errors)
 
+    if is_local and not errors:
+        errors.extend(validate_projection(mapping, Path.home()))
     if errors:
         exit_on_errors(errors)
     if operating_system is not None:
         if entry_point is None:
-            print(f"setup: provisioning skipped: {expected_entry_point}")
+            print(f"setup: provisioning skipped for {operating_system}")
         else:
             print(f"setup: provisioning {'would run' if dry_run else 'running'}")
             run_provisioner(
@@ -471,11 +459,10 @@ if __name__ == "__main__":
     cli(
         {
             setup: "optionally provision, then push locally or to an SSH target",
-            push: "copy the selected profile overlay locally or to an SSH target",
-            pull: "copy selected local or remote home files back to profile layers",
+            push: "copy the selected overlay locally or to an SSH target",
+            pull: "copy selected local or remote home files back to config layers",
             clean: (
-                "remove only files in the current mapping; "
-                "removed source paths remain"
+                "remove only files in the current mapping; removed source paths remain"
             ),
             render: "project the selected overlay to an explicit output directory",
             provision: "run one selected provisioning entry point",
